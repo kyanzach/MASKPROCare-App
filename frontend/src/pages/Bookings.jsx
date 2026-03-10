@@ -2,18 +2,19 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import api from '../api/client';
 
-const SERVICE_TYPES = [
-  'Nano Ceramic Coating',
-  'Nano Ceramic Tint',
-  'Paint Protection Film (PPF)',
-  'Auto Paint',
-  'Full Detailing',
-  'Interior Detailing',
-  'Exterior Detailing',
-  'Paint Correction',
-  'Headlight Restoration',
-  'Other'
-];
+// Maps raw DB service names → friendly display labels
+const SERVICE_LABEL_MAP = {
+  'Nano Ceramic Coating': 'Nano Ceramic Coating',
+  'Nano Ceramic Tint': 'Nano Ceramic Tint',
+  'PPF': 'Paint Protection Film (PPF)',
+  'Paint Protection Film': 'Paint Protection Film (PPF)',
+  'Auto Paint & Repair': 'Auto Paint & Repair',
+  'Go & Clean': 'Detailing',
+  'Nano Fix (Maintenance)': 'Maintenance (NanoFix)',
+  'NanoFix': 'Maintenance (NanoFix)',
+};
+
+const getServiceLabel = (dbName) => SERVICE_LABEL_MAP[dbName] || dbName || 'N/A';
 
 const TIME_SLOTS = [
   { time: '08:00', label: '8:00 AM' },
@@ -37,9 +38,10 @@ export default function Bookings() {
   // New booking modal state
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [vehicles, setVehicles] = useState([]);
+  const [serviceTypes, setServiceTypes] = useState([]); // from API
   const [bookingForm, setBookingForm] = useState({
     vehicle_id: '',
-    service_type: '',
+    service_type: '', // this holds the api_name (DB value)
     booking_date: '',
     booking_time: '',
     notes: '',
@@ -65,14 +67,16 @@ export default function Bookings() {
 
   const loadData = async () => {
     try {
-      const [bookingsRes, vehiclesRes] = await Promise.all([
+      const [bookingsRes, vehiclesRes, servicesRes] = await Promise.all([
         api.get('/bookings/list'),
         api.get('/vehicles/list'),
+        api.get('/services/list'),
       ]);
       const data = bookingsRes.data.data;
       setBookings(data?.bookings || []);
       setPendingRequests(data?.pending_requests || []);
       setVehicles(vehiclesRes.data.data?.vehicles || []);
+      setServiceTypes(servicesRes.data.data?.service_types || []);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   };
@@ -284,7 +288,7 @@ export default function Bookings() {
                             <div style={{ fontWeight: 600, fontSize: '14px' }}>{b.make} {b.model}</div>
                             <div style={{ color: '#94a3b8', fontSize: '12px' }}>{b.plate_no}</div>
                           </td>
-                          <td style={{ fontSize: '14px' }}>{b.formatted_services || b.service || 'N/A'}</td>
+                          <td style={{ fontSize: '14px' }}>{b.formatted_services || getServiceLabel(b.latest_service) || 'N/A'}</td>
                           <td>{getStatusBadge(b.status)}</td>
                           <td>
                             {!isCancelled && !isPast && (
@@ -354,7 +358,7 @@ export default function Bookings() {
                         {new Date(r.booking_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </span>
                       <span><i className="fas fa-wrench" style={{ marginRight: '6px' }}></i>
-                        {r.formatted_services || r.latest_service || 'Service'}
+                        {r.service_names ? r.service_names.split(', ').map(s => getServiceLabel(s)).join(', ') : getServiceLabel(r.latest_service) || 'Service'}
                       </span>
                     </div>
                   </div>
@@ -406,7 +410,7 @@ export default function Bookings() {
                   <label className="form-label"><i className="fas fa-wrench" style={{ marginRight: '6px', color: '#3b82f6' }}></i>Select Service *</label>
                   <select className="form-select" value={bookingForm.service_type} onChange={e => handleServiceChange(e.target.value)} required>
                     <option value="">Choose a service...</option>
-                    {SERVICE_TYPES.map(s => <option key={s} value={s}>{s}</option>)}
+                    {serviceTypes.map(s => <option key={s.api_name} value={s.api_name}>{s.label}</option>)}
                   </select>
                 </div>
 
@@ -539,7 +543,7 @@ export default function Bookings() {
                     <h4 style={{ fontSize: '14px', fontWeight: 700, color: '#1f2937', marginBottom: '12px' }}><i className="fas fa-clipboard-check" style={{ marginRight: '6px', color: '#3b82f6' }}></i>Booking Summary</h4>
                     <div style={{ display: 'grid', gap: '8px', fontSize: '13px' }}>
                       <div><span style={{ color: '#64748b' }}>Vehicle:</span> <strong>{vehicles.find(v => v.id == bookingForm.vehicle_id)?.make} {vehicles.find(v => v.id == bookingForm.vehicle_id)?.model}</strong></div>
-                      <div><span style={{ color: '#64748b' }}>Service:</span> <strong>{bookingForm.service_type}</strong></div>
+                      <div><span style={{ color: '#64748b' }}>Service:</span> <strong>{getServiceLabel(bookingForm.service_type)}</strong></div>
                       <div><span style={{ color: '#64748b' }}>Date:</span> <strong>{new Date(bookingForm.booking_date + 'T00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</strong></div>
                       <div><span style={{ color: '#64748b' }}>Time:</span> <strong>{TIME_SLOTS.find(t => t.time === bookingForm.booking_time)?.label || bookingForm.booking_time}</strong></div>
                     </div>

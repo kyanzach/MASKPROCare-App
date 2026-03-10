@@ -275,7 +275,7 @@ export default function Layout() {
 
           {/* Services Dropdown */}
           <div className="nav-heading">Services</div>
-          {['Nano Ceramic Coating', 'Nano Ceramic Tint', 'Paint Protection Film', 'Auto Paint', 'Full Detailing'].map(s => (
+          {['Nano Ceramic Coating', 'Nano Ceramic Tint', 'Paint Protection Film (PPF)', 'Auto Paint & Repair', 'Detailing'].map(s => (
             <div className="nav-item" key={s}>
               <span className="nav-link" style={{ cursor: 'default', opacity: 0.6, fontSize: '13px', paddingLeft: '28px' }}>
                 <i className="bi bi-chevron-right" style={{ fontSize: '10px' }}></i>

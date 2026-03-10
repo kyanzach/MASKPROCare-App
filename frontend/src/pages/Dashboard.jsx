@@ -3,6 +3,19 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
 
+// Maps raw DB service names → friendly display labels
+const SERVICE_LABEL_MAP = {
+  'Nano Ceramic Coating': 'Nano Ceramic Coating',
+  'Nano Ceramic Tint': 'Nano Ceramic Tint',
+  'PPF': 'Paint Protection Film (PPF)',
+  'Paint Protection Film': 'Paint Protection Film (PPF)',
+  'Auto Paint & Repair': 'Auto Paint & Repair',
+  'Go & Clean': 'Detailing',
+  'Nano Fix (Maintenance)': 'Maintenance (NanoFix)',
+  'NanoFix': 'Maintenance (NanoFix)',
+};
+const getServiceLabel = (dbName) => SERVICE_LABEL_MAP[dbName] || dbName || 'N/A';
+
 // Vehicle icon mapping (matching legacy index.php lines 17-61)
 const VEHICLE_ICONS = {
   toyota: { icon: 'fas fa-car', bg: 'linear-gradient(135deg, #e53e3e, #c53030)' },
@@ -213,7 +226,7 @@ export default function Dashboard() {
                             </div>
                           </div>
                         </td>
-                        <td style={{ fontSize: '14px', fontWeight: 500 }}>{b.formatted_services || b.service || 'Service'}</td>
+                        <td style={{ fontSize: '14px', fontWeight: 500 }}>{b.formatted_services || getServiceLabel(b.latest_service)}</td>
                         <td><span className="badge badge-success">Scheduled</span></td>
                       </tr>
                     );
