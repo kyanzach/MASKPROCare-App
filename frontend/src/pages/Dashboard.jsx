@@ -104,7 +104,7 @@ export default function Dashboard() {
           <div className="stats-card-inner">
             <div>
               <div className="stats-card-label">Total Vehicles</div>
-              <div className="stats-card-value">{stats?.total_vehicles ?? vehicles.length}</div>
+              <div className="stats-card-value">{stats?.stats?.total_vehicles ?? vehicles.length}</div>
             </div>
             <div className="stats-icon stats-icon-blue">
               <i className="fas fa-car"></i>
@@ -120,7 +120,7 @@ export default function Dashboard() {
           <div className="stats-card-inner">
             <div>
               <div className="stats-card-label">Needs Service</div>
-              <div className="stats-card-value">{stats?.needs_service ?? 0}</div>
+              <div className="stats-card-value">{stats?.stats?.vehicles_needing_service ?? 0}</div>
             </div>
             <div className="stats-icon stats-icon-amber">
               <i className="fas fa-spray-can"></i>
@@ -136,7 +136,7 @@ export default function Dashboard() {
           <div className="stats-card-inner">
             <div>
               <div className="stats-card-label">Upcoming</div>
-              <div className="stats-card-value">{stats?.upcoming_bookings ?? upcomingBookings.length}</div>
+              <div className="stats-card-value">{stats?.stats?.upcoming_bookings ?? upcomingBookings.length}</div>
             </div>
             <div className="stats-icon stats-icon-cyan">
               <i className="fas fa-calendar-check"></i>
@@ -152,7 +152,7 @@ export default function Dashboard() {
           <div className="stats-card-inner">
             <div>
               <div className="stats-card-label">Pending Requests</div>
-              <div className="stats-card-value">{stats?.pending_requests ?? 0}</div>
+              <div className="stats-card-value">{stats?.stats?.pending_requests ?? 0}</div>
             </div>
             <div className="stats-icon stats-icon-yellow">
               <i className="fas fa-hourglass-half"></i>

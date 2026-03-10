@@ -17,10 +17,18 @@ api.interceptors.request.use((config) => {
 });
 
 // Handle 401 responses (expired token)
+let isRedirecting = false;
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    if (error.response?.status === 401 && !isRedirecting) {
+      // Skip redirect for background polling calls (notifications)
+      const url = error.config?.url || '';
+      if (url.includes('/notifications/')) {
+        // Silent fail for notification polling — don't nuke the session
+        return Promise.reject(error);
+      }
+      isRedirecting = true;
       localStorage.removeItem('mpc_token');
       localStorage.removeItem('mpc_customer');
       window.location.href = '/login';
