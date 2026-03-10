@@ -1,0 +1,26 @@
+<svg width="400" height="225" viewBox="0 0 400 225" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="400" height="225" rx="8" fill="#F5F5F7"/>
+  
+  <!-- Car Body -->
+  <path d="M300 140H100C95 140 90 135 90 130L100 100C100 95 105 90 110 90H290C295 90 300 95 300 100L310 130C310 135 305 140 300 140Z" fill="#E2E2E7" stroke="#ADADB8" stroke-width="2"/>
+  
+  <!-- Car Top -->
+  <path d="M260 90H140L150 60H250L260 90Z" fill="#E2E2E7" stroke="#ADADB8" stroke-width="2"/>
+  
+  <!-- Windows -->
+  <path d="M250 85H150L158 65H242L250 85Z" fill="#D1D1DB"/>
+  
+  <!-- Wheels -->
+  <circle cx="130" cy="140" r="25" fill="#ADADB8" stroke="#8F8F99" stroke-width="2"/>
+  <circle cx="130" cy="140" r="15" fill="#8F8F99"/>
+  <circle cx="270" cy="140" r="25" fill="#ADADB8" stroke="#8F8F99" stroke-width="2"/>
+  <circle cx="270" cy="140" r="15" fill="#8F8F99"/>
+  
+  <!-- Headlights -->
+  <rect x="95" y="105" width="10" height="10" rx="5" fill="#FFCC66"/>
+  <rect x="295" y="105" width="10" height="10" rx="5" fill="#FF6666"/>
+  
+  <!-- Text -->
+  <text x="200" y="180" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="#8F8F99">Vehicle Image</text>
+</svg>

@@ -1,0 +1,8 @@
+{
+    "name": "maskpro/care-app",
+    "description": "MaskPro Care App - Customer-facing vehicle maintenance API",
+    "type": "project",
+    "require": {
+        "firebase/php-jwt": "^7.0"
+    }
+}

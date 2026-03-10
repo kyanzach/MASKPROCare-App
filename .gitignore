@@ -1,0 +1,33 @@
+# Dependencies
+vendor/
+node_modules/
+frontend/node_modules/
+
+# Composer
+composer.phar
+composer.lock
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+Thumbs.db
+
+# Logs
+logfiles/
+*.log
+
+# Backup files
+*.backup
+*.php.backup
+backups/
+
+# Environment
+.env
+.env.*
+
+# Build output
+frontend/dist/

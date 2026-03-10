@@ -1,0 +1,85 @@
+# NanoFix Maintenance App .htaccess
+
+# Enable URL rewriting
+RewriteEngine On
+
+# Pass Authorization header through to PHP (XAMPP/Apache strips it by default)
+RewriteCond %{HTTP:Authorization} .
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# Set the base directory based on environment
+RewriteCond %{HTTP_HOST} ^app\.maskpro\.ph$ [OR]
+RewriteCond %{HTTP_HOST} maskpro\.ph$
+RewriteRule .* - [E=PRODUCTION:1]
+
+# Set RewriteBase based on environment
+RewriteCond %{ENV:PRODUCTION} 1
+RewriteBase /maskprocare-app/
+
+RewriteCond %{ENV:PRODUCTION} !1
+RewriteBase /unify.maskpro.ph/maskprocare-app/
+
+# Prevent directory listing
+Options -Indexes
+
+# Protect .htaccess file
+<Files .htaccess>
+Order Allow,Deny
+Deny from all
+</Files>
+
+# Protect config files
+<FilesMatch "^(db_connect\.php|config\.php)$">
+Order Allow,Deny
+Deny from all
+</FilesMatch>
+
+# API v2 routing is handled by api/v2/.htaccess (front-controller pattern)
+
+# Handle legacy API requests (old api.php — kept for backward compatibility)
+RewriteCond %{REQUEST_URI} !/api/v2
+RewriteRule ^api/([a-zA-Z0-9_-]+)/?$ api.php?endpoint=$1 [QSA,L]
+
+# Protect vendor directory and composer files
+<FilesMatch "^composer\.(json|lock)$">
+Order Allow,Deny
+Deny from all
+</FilesMatch>
+RewriteRule ^vendor/ - [F,L]
+
+# Set default character set
+AddDefaultCharset UTF-8
+
+# Set default timezone
+php_value date.timezone "Asia/Manila"
+
+# Enable compression
+<IfModule mod_deflate.c>
+AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/x-javascript application/json
+</IfModule>
+
+# Set caching headers for static files
+<IfModule mod_expires.c>
+ExpiresActive On
+ExpiresByType image/jpg "access plus 1 year"
+ExpiresByType image/jpeg "access plus 1 year"
+ExpiresByType image/gif "access plus 1 year"
+ExpiresByType image/png "access plus 1 year"
+ExpiresByType image/svg+xml "access plus 1 year"
+ExpiresByType text/css "access plus 1 month"
+ExpiresByType application/pdf "access plus 1 month"
+ExpiresByType text/javascript "access plus 1 month"
+ExpiresByType application/javascript "access plus 1 month"
+ExpiresByType application/x-javascript "access plus 1 month"
+ExpiresByType application/x-shockwave-flash "access plus 1 month"
+ExpiresByType image/x-icon "access plus 1 year"
+ExpiresDefault "access plus 2 days"
+</IfModule>
+
+# Security headers
+<IfModule mod_headers.c>
+Header set X-Content-Type-Options "nosniff"
+Header set X-XSS-Protection "1; mode=block"
+Header set X-Frame-Options "SAMEORIGIN"
+Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>

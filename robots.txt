@@ -1,0 +1,13 @@
+# robots.txt for NanoFix Maintenance App
+
+User-agent: *
+Disallow: /api/
+Disallow: /includes/
+Disallow: /assets/js/
+Disallow: /assets/css/
+Disallow: /db_connect.php
+Disallow: /config.php
+Disallow: /functions.php
+Disallow: /.htaccess
+
+Sitemap: https://app.maskpro.ph/nanofix-maintenance/sitemap.xml
