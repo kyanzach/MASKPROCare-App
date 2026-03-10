@@ -49,7 +49,8 @@ if (strtotime($bookingDatetime) <= time()) {
 }
 
 // Check capacity
-$availableSlots = getAvailableSlots($conn, $bookingDate, $serviceType);
+// Check capacity (branch-specific)
+$availableSlots = getAvailableSlots($conn, $bookingDate, $serviceType, $branchId);
 if ($availableSlots <= 0) {
     api_error(
         htmlspecialchars($serviceType) . ' is fully booked on ' . date('M d, Y', strtotime($bookingDate)) . '. Please select another date.',

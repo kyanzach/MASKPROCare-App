@@ -3,7 +3,9 @@
  * POST /api/v2/bookings/availability
  * 
  * Check booking availability for a given service and date.
- * Ported from api/check_availability.php with JWT auth.
+ * Mirrors Unify app's bookings_create.php logic:
+ *   - Capacity from branch_booking_capacity WHERE branch_id = ?
+ *   - Booking counts from bookings WHERE branch_id = ?
  * 
  * Request body: 
  *   { "action": "get_available_dates", "service": "Nano Ceramic Coating" }
@@ -13,35 +15,38 @@
 require_once __DIR__ . '/../middleware/auth.php';
 require_method('POST');
 
-// Default service capacity limits (fallback if no DB record)
-$defaultCapacity = [
-    'Nano Ceramic Coating' => 4,
-    'Nano Ceramic Tint' => 4,
-    'Nano Fix (Maintenance)' => 5,
-    'Go & Clean' => 2,
-    'PPF' => 1,
-    'Auto Paint & Repair' => 1
-];
+// Get the customer's branch_id from their profile (not just JWT — confirm from DB)
+$customerBranchId = $authBranchId; // from JWT
+try {
+    $stmt = $conn->prepare("SELECT branch_id FROM customers WHERE id = ?");
+    $stmt->bind_param("i", $authCustomerId);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    if ($row && $row['branch_id']) {
+        $customerBranchId = (int) $row['branch_id'];
+    }
+} catch (\Throwable $e) {
+    // Fall through to JWT branch_id
+}
 
-// Load branch-specific capacity from database
-function loadServiceCapacity($conn, $branchId, $defaults) {
-    $capacity = $defaults;
-    if ($branchId > 0) {
-        $stmt = $conn->prepare("SELECT service_name, max_capacity FROM branch_booking_capacity WHERE branch_id = ?");
-        if ($stmt) {
-            $stmt->bind_param("i", $branchId);
-            $stmt->execute();
-            $result = $stmt->get_result();
-            while ($row = $result->fetch_assoc()) {
-                $capacity[$row['service_name']] = (int) $row['max_capacity'];
-            }
-            $stmt->close();
+// Load branch-specific capacity from database (same as Unify app)
+function loadBranchCapacity($conn, $branchId) {
+    $capacity = [];
+    $stmt = $conn->prepare("SELECT service_name, max_capacity FROM branch_booking_capacity WHERE branch_id = ?");
+    if ($stmt) {
+        $stmt->bind_param("i", $branchId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        while ($row = $result->fetch_assoc()) {
+            $capacity[$row['service_name']] = (int) $row['max_capacity'];
         }
+        $stmt->close();
     }
     return $capacity;
 }
 
-$serviceCapacity = loadServiceCapacity($conn, $authBranchId, $defaultCapacity);
+$serviceCapacity = loadBranchCapacity($conn, $customerBranchId);
 
 // Time slots (8 AM to 3 PM)
 $timeSlots = [
@@ -69,22 +74,33 @@ try {
         $startDate = new DateTime();
         $endDate = new DateTime("+{$days} days");
 
+        // Get all booking counts for this branch/service in the date range (bulk query like Unify)
+        $monthStart = $startDate->format('Y-m-d');
+        $monthEnd = $endDate->format('Y-m-d');
+        
+        $bookingCounts = getBookingCountsByDate($conn, $service, $monthStart, $monthEnd, $customerBranchId);
+        $pendingCounts = getPendingCountsByDate($conn, $service, $monthStart, $monthEnd, $customerBranchId);
+
         while ($startDate <= $endDate) {
             $dateStr = $startDate->format('Y-m-d');
 
-            // Skip Sundays (day 7)
+            // Skip Sundays (day 7 in ISO, 0 in PHP)
             if ($startDate->format('N') == 7) {
                 $startDate->add(new DateInterval('P1D'));
                 continue;
             }
 
-            $isAvailable = checkDateAvail($conn, $service, $dateStr, $serviceCapacity);
+            $booked = ($bookingCounts[$dateStr] ?? 0) + ($pendingCounts[$dateStr] ?? 0);
+            $max = $serviceCapacity[$service] ?? 0;
+            $isAvailable = $max > 0 ? ($booked < $max) : true;
 
             $availableDates[] = [
                 'date' => $dateStr,
                 'formatted' => $startDate->format('M j, Y'),
                 'day' => $startDate->format('l'),
-                'available' => $isAvailable
+                'available' => $isAvailable,
+                'booked' => $booked,
+                'capacity' => $max,
             ];
 
             $startDate->add(new DateInterval('P1D'));
@@ -92,7 +108,8 @@ try {
 
         api_success([
             'dates' => $availableDates,
-            'capacity' => $serviceCapacity[$service] ?? 0
+            'capacity' => $serviceCapacity[$service] ?? 0,
+            'branch_id' => $customerBranchId,
         ], 'Available dates retrieved');
 
     } elseif ($action === 'get_available_times') {
@@ -103,7 +120,7 @@ try {
 
         $availableTimes = [];
         foreach ($timeSlots as $time => $label) {
-            $isAvailable = checkTimeAvail($conn, $service, $date, $time, $serviceCapacity);
+            $isAvailable = checkTimeAvail($conn, $service, $date, $time, $serviceCapacity, $customerBranchId);
             $availableTimes[] = [
                 'time' => $time,
                 'label' => $label,
@@ -123,54 +140,84 @@ try {
     api_error('Server error checking availability', 500);
 }
 
-// --- Helper functions (ported from api/check_availability.php) ---
+// --- Helper functions ---
 
-function checkDateAvail($conn, $service, $date, $serviceCapacity) {
+/**
+ * Bulk-fetch booking counts per date for a service + branch
+ * Mirrors Unify's bookings_create.php lines 50-67
+ */
+function getBookingCountsByDate($conn, $service, $startDate, $endDate, $branchId) {
+    $counts = [];
     try {
-        // Count confirmed bookings
         $stmt = $conn->prepare("
-            SELECT COUNT(*) as cnt FROM bookings b 
-            LEFT JOIN bookings_service_types bst ON b.booking_id = bst.booking_id 
-            WHERE DATE(b.booking_date) = ? 
-            AND (b.latest_service = ? OR bst.service_name = ?)
-            AND NOT (b.notes LIKE '%CANCELLED:%' OR bst.status = 'Cancelled')
+            SELECT DATE(b.booking_date) as dt, COUNT(*) as cnt 
+            FROM bookings b
+            JOIN bookings_service_types bst ON bst.booking_id = b.booking_id
+            WHERE b.branch_id = ? 
+            AND b.booking_date >= ? AND b.booking_date < DATE_ADD(?, INTERVAL 1 DAY)
+            AND bst.service_name = ?
+            AND (b.notes IS NULL OR b.notes NOT LIKE '%CANCELLED:%')
+            AND (bst.status IS NULL OR bst.status != 'Cancelled')
+            GROUP BY dt
         ");
-        $stmt->bind_param("sss", $date, $service, $service);
+        $stmt->bind_param("isss", $branchId, $startDate, $endDate, $service);
         $stmt->execute();
-        $confirmed = $stmt->get_result()->fetch_assoc()['cnt'] ?? 0;
+        $result = $stmt->get_result();
+        while ($row = $result->fetch_assoc()) {
+            $counts[$row['dt']] = (int) $row['cnt'];
+        }
         $stmt->close();
-
-        // Count pending requests
-        $stmt = $conn->prepare("
-            SELECT COUNT(*) as cnt FROM booking_requests br
-            LEFT JOIN booking_request_services brs ON br.request_id = brs.request_id
-            WHERE DATE(br.booking_date) = ? 
-            AND (br.latest_service = ? OR brs.service_name = ?)
-            AND br.status = 'pending'
-        ");
-        $stmt->bind_param("sss", $date, $service, $service);
-        $stmt->execute();
-        $pending = $stmt->get_result()->fetch_assoc()['cnt'] ?? 0;
-        $stmt->close();
-
-        $max = $serviceCapacity[$service] ?? 0;
-        return ($confirmed + $pending) < $max;
-    } catch (Exception $e) {
-        return false;
+    } catch (\Throwable $e) {
+        error_log("getBookingCountsByDate error: " . $e->getMessage());
     }
+    return $counts;
 }
 
-function checkTimeAvail($conn, $service, $date, $time, $serviceCapacity) {
+/**
+ * Bulk-fetch pending request counts per date for a service + branch
+ */
+function getPendingCountsByDate($conn, $service, $startDate, $endDate, $branchId) {
+    $counts = [];
+    try {
+        $stmt = $conn->prepare("
+            SELECT DATE(br.booking_date) as dt, COUNT(*) as cnt 
+            FROM booking_requests br
+            LEFT JOIN booking_request_services brs ON br.request_id = brs.request_id
+            WHERE br.branch_id = ?
+            AND br.booking_date >= ? AND br.booking_date < DATE_ADD(?, INTERVAL 1 DAY)
+            AND (br.latest_service = ? OR brs.service_name = ?)
+            AND br.status = 'pending'
+            GROUP BY dt
+        ");
+        $stmt->bind_param("issss", $branchId, $startDate, $endDate, $service, $service);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        while ($row = $result->fetch_assoc()) {
+            $counts[$row['dt']] = (int) $row['cnt'];
+        }
+        $stmt->close();
+    } catch (\Throwable $e) {
+        // booking_requests may not have branch_id column — silently continue
+    }
+    return $counts;
+}
+
+/**
+ * Check if a specific time slot is available (branch-filtered)
+ */
+function checkTimeAvail($conn, $service, $date, $time, $serviceCapacity, $branchId) {
     try {
         $datetime = $date . ' ' . $time . ':00';
         $stmt = $conn->prepare("
             SELECT COUNT(*) as cnt FROM bookings b 
-            LEFT JOIN bookings_service_types bst ON b.booking_id = bst.booking_id 
-            WHERE b.booking_date = ? 
-            AND (b.latest_service = ? OR bst.service_name = ?)
-            AND NOT (b.notes LIKE '%CANCELLED:%' OR bst.status = 'Cancelled')
+            JOIN bookings_service_types bst ON bst.booking_id = b.booking_id
+            WHERE b.branch_id = ?
+            AND b.booking_date = ? 
+            AND bst.service_name = ?
+            AND (b.notes IS NULL OR b.notes NOT LIKE '%CANCELLED:%')
+            AND (bst.status IS NULL OR bst.status != 'Cancelled')
         ");
-        $stmt->bind_param("sss", $datetime, $service, $service);
+        $stmt->bind_param("iss", $branchId, $datetime, $service);
         $stmt->execute();
         $count = $stmt->get_result()->fetch_assoc()['cnt'] ?? 0;
         $stmt->close();

@@ -52,7 +52,7 @@ function getBranchServiceCapacity($conn, $serviceName, $branch_id = null) {
  * @param mysqli $conn Database connection
  * @param string $date Date in Y-m-d format
  * @param string $serviceName Service name
- * @param int|null $branch_id Optional branch ID for branch-specific capacity
+ * @param int|null $branch_id Branch ID for branch-specific capacity and booking counts
  * @return int Number of available slots
  */
 function getAvailableSlots($conn, $date, $serviceName, $branch_id = null) {
@@ -65,23 +65,32 @@ function getAvailableSlots($conn, $date, $serviceName, $branch_id = null) {
         $normalizedService = 'PPF';
     }
     
-    // Count existing confirmed bookings for this date and service
+    // Count existing confirmed bookings for this date, service AND branch
     $query = "SELECT COUNT(*) as count 
               FROM bookings b
               JOIN bookings_service_types bst ON b.booking_id = bst.booking_id
               WHERE DATE(b.booking_date) = ? 
               AND (bst.service_name = ? OR bst.service_name LIKE ?)
-              AND b.notes NOT LIKE '%CANCELLED:%'";
+              AND (b.notes IS NULL OR b.notes NOT LIKE '%CANCELLED:%')
+              AND (bst.status IS NULL OR bst.status != 'Cancelled')";
     
-    $stmt = $conn->prepare($query);
-    $likePattern = "%{$normalizedService}%";
-    $stmt->bind_param("sss", $date, $normalizedService, $likePattern);
+    // Add branch filter if available
+    if ($branch_id && $branch_id > 0) {
+        $query .= " AND b.branch_id = ?";
+        $stmt = $conn->prepare($query);
+        $likePattern = "%{$normalizedService}%";
+        $stmt->bind_param("sssi", $date, $normalizedService, $likePattern, $branch_id);
+    } else {
+        $stmt = $conn->prepare($query);
+        $likePattern = "%{$normalizedService}%";
+        $stmt->bind_param("sss", $date, $normalizedService, $likePattern);
+    }
     $stmt->execute();
     $result = $stmt->get_result()->fetch_assoc();
     $confirmedCount = $result['count'];
     $stmt->close();
     
-    // Count pending booking requests for this date and service
+    // Count pending booking requests for this date, service AND branch
     $requestQuery = "SELECT COUNT(*) as count 
                      FROM booking_requests br
                      JOIN booking_request_services brs ON br.request_id = brs.request_id
@@ -89,8 +98,14 @@ function getAvailableSlots($conn, $date, $serviceName, $branch_id = null) {
                      AND (brs.service_name = ? OR brs.service_name LIKE ?)
                      AND br.status = 'pending'";
     
-    $stmt = $conn->prepare($requestQuery);
-    $stmt->bind_param("sss", $date, $normalizedService, $likePattern);
+    if ($branch_id && $branch_id > 0) {
+        $requestQuery .= " AND br.branch_id = ?";
+        $stmt = $conn->prepare($requestQuery);
+        $stmt->bind_param("sssi", $date, $normalizedService, $likePattern, $branch_id);
+    } else {
+        $stmt = $conn->prepare($requestQuery);
+        $stmt->bind_param("sss", $date, $normalizedService, $likePattern);
+    }
     $stmt->execute();
     $result = $stmt->get_result()->fetch_assoc();
     $pendingCount = $result['count'];
