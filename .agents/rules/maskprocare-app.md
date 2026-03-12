@@ -36,6 +36,7 @@ description: Critical guardrails for MaskPro Care App (customer-facing vehicle m
 13. Always log new learnings to `.agents/docs/maskprocare-reference.md` with dates
 14. NEVER use native system dialogs (`alert()`, `confirm()`, `prompt()`) — use modals instead
 15. Always read `CREDENTIALS_REFERENCE.md` for SSH, MySQL, API keys, and server details — never ask for credentials
+16. **NEVER send SMS/OTP to any number except these approved test numbers:** `09992216923`, `09173333589`, `09852779777` — other numbers in the DB are REAL customers and sending OTP could alarm them
 
 ## Schema Gotchas
 - `bookings.booking_id` is PK (NOT `id`), FK is `customer_vehicle_id` (NOT `vehicle_id`)
