@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
+
+const API_BASE = 'http://localhost/unify.maskpro.ph/maskprocare-app';
 
 // Map common colors to CSS color values
 const COLOR_MAP = {
@@ -52,10 +54,10 @@ function getRenewalStatus(registrationDate) {
   const now = new Date();
   const diffDays = Math.ceil((next - now) / (1000 * 60 * 60 * 24));
 
-  if (diffDays < 0) return { label: 'Overdue', color: '#dc2626', bg: 'rgba(239,68,68,0.06)', border: 'rgba(239,68,68,0.3)', icon: 'fa-exclamation-circle' };
-  if (diffDays <= 30) return { label: `Renew in ${diffDays}d`, color: '#d97706', bg: 'rgba(245,158,11,0.06)', border: 'rgba(245,158,11,0.3)', icon: 'fa-clock' };
-  if (diffDays <= 90) return { label: `Due ${next.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`, color: '#2563eb', bg: 'rgba(37,99,235,0.06)', border: 'rgba(37,99,235,0.2)', icon: 'fa-calendar-check' };
-  return { label: `Valid until ${next.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`, color: '#059669', bg: 'transparent', border: 'rgba(16,185,129,0.3)', icon: 'fa-check-circle' };
+  if (diffDays < 0) return { label: 'LTO Registration Overdue', color: '#dc2626', bg: 'rgba(239,68,68,0.06)', border: 'rgba(239,68,68,0.3)', icon: 'fa-exclamation-circle' };
+  if (diffDays <= 30) return { label: `LTO Registration — Renew in ${diffDays}d`, color: '#d97706', bg: 'rgba(245,158,11,0.06)', border: 'rgba(245,158,11,0.3)', icon: 'fa-clock' };
+  if (diffDays <= 90) return { label: `LTO Registration — Due ${next.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`, color: '#2563eb', bg: 'rgba(37,99,235,0.06)', border: 'rgba(37,99,235,0.2)', icon: 'fa-calendar-check' };
+  return { label: `LTO Registration valid until ${next.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`, color: '#059669', bg: 'transparent', border: 'rgba(16,185,129,0.3)', icon: 'fa-check-circle' };
 }
 
 export default function Vehicles() {
@@ -68,6 +70,12 @@ export default function Vehicles() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [uploading, setUploading] = useState(null); // vehicle id being uploaded
+  const [modalPhoto, setModalPhoto] = useState(null); // file selected in modal
+  const [modalPhotoPreview, setModalPhotoPreview] = useState(null);
+  const fileInputRef = useRef(null);
+  const modalFileInputRef = useRef(null);
+  const uploadTargetRef = useRef(null); // which vehicle id to upload for
 
   useEffect(() => { loadVehicles(); }, []);
 
@@ -82,6 +90,8 @@ export default function Vehicles() {
   const openAdd = () => {
     setEditVehicle(null);
     setForm({ make: '', model: '', plate_no: '', color: '', registration_date: '' });
+    setModalPhoto(null);
+    setModalPhotoPreview(null);
     setError('');
     setShowModal(true);
   };
@@ -95,8 +105,72 @@ export default function Vehicles() {
       color: v.color || '',
       registration_date: v.registration_date || v.registration_expiry || '',
     });
+    setModalPhoto(null);
+    setModalPhotoPreview(v.photo ? `${API_BASE}/${v.photo}` : null);
     setError('');
     setShowModal(true);
+  };
+  const handleDelete = async (id) => {
+    try {
+      await api.post('/vehicles/delete', { id });
+      setSuccess('Vehicle deleted successfully!');
+      setDeleteConfirm(null);
+      setShowModal(false);
+      loadVehicles();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to delete vehicle');
+      setDeleteConfirm(null);
+    }
+  };
+
+  // Trigger delete confirm from inside edit modal
+  const handleDeleteFromModal = () => {
+    if (!editVehicle) return;
+    setShowModal(false);
+    setDeleteConfirm(editVehicle);
+  };
+
+  // Photo upload handler (for card click)
+  const handleCardPhotoUpload = (vehicleId) => {
+    uploadTargetRef.current = vehicleId;
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelected = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = ''; // reset so same file can be re-selected
+    
+    const vehicleId = uploadTargetRef.current;
+    if (!vehicleId) return;
+
+    setUploading(vehicleId);
+    try {
+      const formData = new FormData();
+      formData.append('vehicle_id', vehicleId);
+      formData.append('photo', file);
+      await api.post('/vehicles/upload-photo', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setSuccess('Photo uploaded!');
+      loadVehicles();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to upload photo');
+      setTimeout(() => setError(''), 4000);
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  // Photo upload handler for modal
+  const handleModalPhotoSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setModalPhoto(file);
+    setModalPhotoPreview(URL.createObjectURL(file));
   };
 
   const handleSubmit = async (e) => {
@@ -105,12 +179,24 @@ export default function Vehicles() {
     setSaving(true);
     setError('');
     try {
+      let vehicleId;
       if (editVehicle) {
         await api.post('/vehicles/update', { id: editVehicle.id, ...form });
+        vehicleId = editVehicle.id;
         setSuccess('Vehicle updated successfully!');
       } else {
-        await api.post('/vehicles/create', form);
+        const res = await api.post('/vehicles/create', form);
+        vehicleId = res.data?.data?.vehicle?.id;
         setSuccess('Vehicle added successfully!');
+      }
+      // Upload modal photo if one was selected
+      if (modalPhoto && vehicleId) {
+        const formData = new FormData();
+        formData.append('vehicle_id', vehicleId);
+        formData.append('photo', modalPhoto);
+        await api.post('/vehicles/upload-photo', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
       }
       setShowModal(false);
       loadVehicles();
@@ -120,17 +206,11 @@ export default function Vehicles() {
     } finally { setSaving(false); }
   };
 
-  const handleDelete = async (id) => {
-    try {
-      await api.post('/vehicles/delete', { id });
-      setSuccess('Vehicle deleted successfully!');
-      setDeleteConfirm(null);
-      loadVehicles();
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to delete vehicle');
-      setDeleteConfirm(null);
-    }
+  // Build photo URL helper
+  const getPhotoUrl = (photoPath) => {
+    if (!photoPath) return null;
+    if (photoPath.startsWith('http')) return photoPath;
+    return `${API_BASE}/${photoPath}`;
   };
 
   if (loading) {
@@ -139,6 +219,15 @@ export default function Vehicles() {
 
   return (
     <div>
+      {/* Hidden file input for card photo uploads */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        style={{ display: 'none' }}
+        accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+        onChange={handleFileSelected}
+      />
+
       {/* Breadcrumb */}
       <div className="breadcrumb">
         <Link to="/">Home</Link>
@@ -167,45 +256,71 @@ export default function Vehicles() {
           {vehicles.map((v) => {
             const regDate = v.registration_date || v.registration_expiry;
             const renewal = getRenewalStatus(regDate);
+            const photoUrl = getPhotoUrl(v.photo);
+            const isUploadingThis = uploading === v.id;
             return (
-              <div className="vehicle-card" key={v.id}>
-                {/* Photo area placeholder */}
-                <div style={{
-                  height: '140px', background: 'linear-gradient(135deg, #f1f5f9, #e2e8f0)',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                  borderRadius: '16px 16px 0 0', position: 'relative', overflow: 'hidden',
-                }}>
-                  <i className="fas fa-car-side" style={{ fontSize: '48px', color: '#cbd5e1', marginBottom: '8px' }}></i>
-                  <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 500, cursor: 'pointer' }}>
-                    <i className="fas fa-camera" style={{ marginRight: '4px', fontSize: '10px' }}></i>
-                    Snap a photo of your ride
-                  </span>
+              <div className="vehicle-card" key={v.id} style={{ position: 'relative' }}>
+                {/* Photo area — clickable to upload */}
+                <div
+                  onClick={() => !isUploadingThis && handleCardPhotoUpload(v.id)}
+                  style={{
+                    height: '160px',
+                    background: photoUrl ? `url(${photoUrl}) center/cover no-repeat` : 'linear-gradient(135deg, #f1f5f9, #e2e8f0)',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    borderRadius: '16px 16px 0 0', position: 'relative', cursor: 'pointer',
+                    transition: 'opacity 0.2s',
+                  }}
+                >
+                  {isUploadingThis && (
+                    <div style={{
+                      position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.8)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      borderRadius: '16px 16px 0 0', zIndex: 2,
+                    }}>
+                      <div className="spinner" style={{ borderColor: 'rgba(59,130,246,0.2)', borderTopColor: '#3b82f6', width: '32px', height: '32px' }}></div>
+                    </div>
+                  )}
+                  {!photoUrl && !isUploadingThis && (
+                    <>
+                      <i className="fas fa-car-side" style={{ fontSize: '48px', color: '#cbd5e1', marginBottom: '8px' }}></i>
+                      <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 500 }}>
+                        <i className="fas fa-camera" style={{ marginRight: '4px', fontSize: '10px' }}></i>
+                        Snap a photo of your ride
+                      </span>
+                    </>
+                  )}
+                  {photoUrl && !isUploadingThis && (
+                    <div style={{
+                      position: 'absolute', bottom: '8px', right: '8px',
+                      background: 'rgba(0,0,0,0.5)', borderRadius: '50%',
+                      width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <i className="fas fa-camera" style={{ fontSize: '11px', color: 'white' }}></i>
+                    </div>
+                  )}
                 </div>
 
                 <div className="vehicle-card-body">
-                  {/* Header row */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                  {/* Header row with Edit button */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                     <h3 style={{ fontSize: '17px', fontWeight: 700, color: '#1f2937', margin: 0 }}>{v.make} {v.model}</h3>
-                    <div className="dropdown">
-                      <button className="dropdown-btn" onClick={(e) => {
-                        document.querySelectorAll('.dropdown-menu').forEach(m => m.style.display = 'none');
-                        const menu = e.currentTarget.nextSibling;
-                        menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
-                      }}>
-                        <i className="fas fa-ellipsis-v"></i>
-                      </button>
-                      <div className="dropdown-menu" style={{ display: 'none' }}>
-                        <button className="dropdown-item" onClick={(e) => { e.currentTarget.parentNode.style.display = 'none'; openEdit(v); }}>
-                          <i className="fas fa-edit"></i> Edit
-                        </button>
-                        <button className="dropdown-item danger" onClick={(e) => { e.currentTarget.parentNode.style.display = 'none'; setDeleteConfirm(v); }}>
-                          <i className="fas fa-trash"></i> Delete
-                        </button>
-                      </div>
-                    </div>
+                    <button
+                      onClick={() => openEdit(v)}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '6px',
+                        padding: '6px 14px', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
+                        background: 'rgba(59,130,246,0.08)', color: '#3b82f6',
+                        border: '1px solid rgba(59,130,246,0.2)', cursor: 'pointer',
+                        transition: 'all 0.2s',
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(59,130,246,0.15)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(59,130,246,0.08)'; }}
+                    >
+                      <i className="fas fa-edit" style={{ fontSize: '12px' }}></i> Edit
+                    </button>
                   </div>
 
-                  {/* Badge row: plate + color + renewal inline */}
+                  {/* Badge row */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     {v.plate_no && (
                       <span className="badge badge-info" style={{ fontSize: '11px', padding: '4px 10px' }}>{v.plate_no}</span>
@@ -257,6 +372,49 @@ export default function Vehicles() {
             <form onSubmit={handleSubmit}>
               <div className="modal-body">
                 {error && <div className="login-alert login-alert-error"><i className="fas fa-exclamation-circle"></i> {error}</div>}
+                
+                {/* Vehicle Photo Upload in Modal */}
+                <div
+                  onClick={() => modalFileInputRef.current?.click()}
+                  style={{
+                    height: '140px',
+                    background: modalPhotoPreview
+                      ? `url(${modalPhotoPreview}) center/cover no-repeat`
+                      : 'linear-gradient(135deg, #f1f5f9, #e2e8f0)',
+                    borderRadius: '12px', cursor: 'pointer', marginBottom: '20px',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    border: '2px dashed rgba(59,130,246,0.3)',
+                    transition: 'all 0.2s',
+                    position: 'relative',
+                  }}
+                >
+                  {!modalPhotoPreview && (
+                    <>
+                      <i className="fas fa-camera" style={{ fontSize: '28px', color: '#94a3b8', marginBottom: '8px' }}></i>
+                      <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 500 }}>
+                        {editVehicle ? 'Tap to change photo' : 'Tap to add a photo'}
+                      </span>
+                      <span style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>JPEG, PNG, or WebP</span>
+                    </>
+                  )}
+                  {modalPhotoPreview && (
+                    <div style={{
+                      position: 'absolute', bottom: '8px', right: '8px',
+                      background: 'rgba(0,0,0,0.5)', borderRadius: '20px',
+                      padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px',
+                    }}>
+                      <i className="fas fa-camera" style={{ fontSize: '10px', color: 'white' }}></i>
+                      <span style={{ fontSize: '11px', color: 'white', fontWeight: 500 }}>Change</span>
+                    </div>
+                  )}
+                </div>
+                <input
+                  type="file"
+                  ref={modalFileInputRef}
+                  style={{ display: 'none' }}
+                  accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                  onChange={handleModalPhotoSelect}
+                />
                 <div className="form-group">
                   <label className="form-label">Make *</label>
                   <input className="form-input" value={form.make} onChange={e => setForm({...form, make: e.target.value})} placeholder="e.g. Toyota" required />
@@ -290,11 +448,30 @@ export default function Vehicles() {
                   <span>Enter your vehicle's registration date and we'll automatically calculate your next renewal — the first 3 years are free in the Philippines, then it's annual. We'll remind you before it's due.</span>
                 </div>
               </div>
-              <div className="modal-footer">
-                <button type="button" className="btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
-                <button type="submit" className="btn-gradient" disabled={saving}>
-                  {saving ? <span className="spinner"></span> : (editVehicle ? 'Update Vehicle' : 'Add Vehicle')}
-                </button>
+              <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                {/* Delete link — only in edit mode, far left, separated */}
+                {editVehicle ? (
+                  <button
+                    type="button"
+                    onClick={handleDeleteFromModal}
+                    style={{
+                      background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer',
+                      fontSize: '13px', fontWeight: 500, padding: '6px 0',
+                      display: 'flex', alignItems: 'center', gap: '5px',
+                      opacity: 0.7, transition: 'opacity 0.2s',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.7'; }}
+                  >
+                    <i className="fas fa-trash-alt" style={{ fontSize: '12px' }}></i> Delete Vehicle
+                  </button>
+                ) : <div />}
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button type="button" className="btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
+                  <button type="submit" className="btn-gradient" disabled={saving}>
+                    {saving ? <span className="spinner"></span> : (editVehicle ? 'Update Vehicle' : 'Add Vehicle')}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

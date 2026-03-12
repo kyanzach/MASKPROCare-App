@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.4.1] — 2026-03-13
+### Changed
+- **Vehicle cards:** Replaced 3-dot kebab menu with a clear "Edit" button for ease of use (50% older users)
+- **Edit modal footer:** Moved "Delete Vehicle" link inside the edit modal (far left, red, separated from action buttons)
+- **Delete flow:** Double-confirm modal — clicking Delete in edit modal closes it first, then shows a confirmation dialog
+
 ## [v1.4.0] — 2026-03-13
 ### Added
 - **Complete PHP → Express/Node.js API rewrite** — all 22 endpoints ported to `server/`
