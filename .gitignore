@@ -18,6 +18,7 @@ Thumbs.db
 
 # Logs
 logfiles/
+logfiles-new/
 *.log
 
 # Backup files

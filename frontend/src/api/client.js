@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-const API_BASE = 'http://localhost/unify.maskpro.ph/maskprocare-app/api/v2';
+// In production (care.maskpro.ph), Nginx proxies /api/ → Express:3004
+// In dev, Vite runs on :5173 so we need the full Express URL
+const API_BASE = import.meta.env.VITE_API_URL ||
+  (import.meta.env.PROD ? '/api' : 'http://localhost:3004/api');
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -51,6 +54,14 @@ export const vehiclesAPI = {
   create: (data) => api.post('/vehicles/create', data),
   update: (data) => api.post('/vehicles/update', data),
   delete: (id) => api.post('/vehicles/delete', { id }),
+  uploadPhoto: (vehicleId, file) => {
+    const formData = new FormData();
+    formData.append('vehicle_id', vehicleId);
+    formData.append('photo', file);
+    return api.post('/vehicles/upload-photo', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
 };
 
 // Bookings

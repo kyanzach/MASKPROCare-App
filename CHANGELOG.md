@@ -1,5 +1,33 @@
 # Changelog
 
+## [v1.4.0] — 2026-03-13
+### Added
+- **Complete PHP → Express/Node.js API rewrite** — all 22 endpoints ported to `server/`
+  - `server/routes/auth.js` — login (OTP + SMS), verify (JWT), logout
+  - `server/routes/vehicles.js` — list, detail, create, update, delete, photo upload (multer + sharp)
+  - `server/routes/bookings.js` — list, detail, create, cancel, availability, edit-request
+  - `server/routes/dashboard.js` — stats (vehicles, bookings, upcoming, completed)
+  - `server/routes/profile.js` — get, update
+  - `server/routes/notifications.js` — list, count, mark_read
+  - `server/routes/services.js` — list (conditional NanoFix based on MNCC history)
+- **Express server infrastructure:**
+  - `server/index.js` — Entry point (port 3004, CORS, JSON parsing, error handling)
+  - `server/db/connection.js` — mysql2 pool (Asia/Manila timezone)
+  - `server/middleware/auth.js` — JWT verification (same secret + payload as PHP)
+  - `server/services/sms.js` — Full port of SMS_API_settings.php (iTexMo + SMS-it with GSM sanitizer)
+  - `server/utils/mobile.js` — PH mobile number helpers
+- `.env` with all environment variables (DB, JWT, SMS keys)
+- `package.json` with Express dependencies (mysql2, jsonwebtoken, multer, sharp, cors, axios)
+- `deploy.sh` deployment documentation in reference docs
+
+### Changed
+- `frontend/src/api/client.js` — API_BASE changed from PHP path to `http://localhost:3004/api`
+- `.gitignore` — added `logfiles-new/`
+- Version bumped from v1.3.0 to v1.4.0
+
+### Fixed
+- **OTP timezone bug** — Node.js `Date.toISOString()` stored UTC time but MySQL `NOW()` uses Asia/Manila, causing all OTPs to appear expired. Fixed by using `DATE_ADD(NOW(), INTERVAL)` in SQL.
+
 ## [v1.3.0] — 2026-03-10
 ### Added
 - **Internal notification system** — bell icon with red badge count, dropdown panel
