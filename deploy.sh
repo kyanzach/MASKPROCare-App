@@ -192,47 +192,47 @@ deploy_backend() {
 setup_nginx() {
   log "Setting up Nginx for care.maskpro.ph..."
 
-  local NGINX_CONF="server {
+  # Generate config to a temp file to avoid shell escaping issues
+  local NGINX_TMP=$(mktemp)
+  cat > "$NGINX_TMP" <<'NGINXEOF'
+server {
     listen 80;
     server_name care.maskpro.ph;
 
-    # Vite frontend (static files)
-    root $APP_DIR/frontend/dist;
+    root /var/www/care/frontend/dist;
     index index.html;
 
-    # API reverse proxy → Express on port $PORT
     location /api/ {
-        proxy_pass http://127.0.0.1:$PORT;
+        proxy_pass http://127.0.0.1:3004;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade \\\$http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host \\\$host;
-        proxy_set_header X-Real-IP \\\$remote_addr;
-        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \\\$scheme;
-        proxy_cache_bypass \\\$http_upgrade;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
     }
 
-    # Uploads directory
     location /uploads/ {
-        alias $APP_DIR/uploads/;
+        alias /var/www/care/uploads/;
         expires 30d;
-        add_header Cache-Control \"public, immutable\";
+        add_header Cache-Control "public, immutable";
     }
 
-    # Static asset caching
-    location ~* \\.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|webp)$ {
+    location ~* \.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|webp)$ {
         expires 30d;
-        add_header Cache-Control \"public, immutable\";
+        add_header Cache-Control "public, immutable";
     }
 
-    # SPA fallback — all non-file routes → index.html
     location / {
-        try_files \\\$uri \\\$uri/ /index.html;
+        try_files $uri $uri/ /index.html;
     }
-}"
+}
+NGINXEOF
 
-  ssh_cmd "echo '$NGINX_CONF' > /etc/nginx/sites-available/care"
+  rsync_safe "$NGINX_TMP" "/etc/nginx/sites-available/care"
+  rm -f "$NGINX_TMP"
   ssh_cmd "ln -sf /etc/nginx/sites-available/care /etc/nginx/sites-enabled/care"
   ssh_cmd "nginx -t 2>&1" || fail "Nginx config test failed!"
   ssh_cmd "systemctl reload nginx"
