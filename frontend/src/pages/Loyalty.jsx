@@ -35,10 +35,19 @@ export default function Loyalty() {
         setCards(res.data.data?.cards || []);
         setGrouped(res.data.data?.grouped || {});
       } else {
-        setError(res.data.message || 'Failed to load loyalty cards');
+        // No cards is not an error — just show empty state
+        setCards([]);
+        setGrouped({});
       }
     } catch (err) {
-      setError('Unable to connect to loyalty service');
+      // 404 or 401 = no cards for this user, show empty state
+      const status = err.response?.status;
+      if (status === 404 || status === 401) {
+        setCards([]);
+        setGrouped({});
+      } else {
+        setError('Something went wrong. Please try again later.');
+      }
       console.error(err);
     } finally {
       setLoading(false);
@@ -305,11 +314,11 @@ export default function Loyalty() {
         }}>
           <i className="bi bi-ticket-perforated" style={{ fontSize: '56px', color: '#cbd5e1', display: 'block', marginBottom: '16px' }}></i>
           <h3 style={{ margin: '0 0 8px', fontSize: '20px', fontWeight: 700, color: '#1e293b' }}>
-            No Loyalty Cards Found
+            No loyalty cards yet
           </h3>
-          <p style={{ margin: 0, fontSize: '14px', color: '#94a3b8', maxWidth: '400px', marginInline: 'auto' }}>
-            Your loyalty cards will appear here once they're linked to your MaskPro account.
-            Visit any MaskPro branch to get started!
+          <p style={{ margin: 0, fontSize: '14px', color: '#94a3b8', maxWidth: '400px', marginInline: 'auto', lineHeight: 1.6 }}>
+            You don't have any loyalty cards at the moment.
+            Visit your nearest MaskPro branch and avail of our services to get one! 🎉
           </p>
         </div>
       )}
