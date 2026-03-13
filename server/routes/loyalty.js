@@ -1,7 +1,12 @@
 /**
  * Loyalty Routes — BoomerangMe card integration
+ * 
+ * Flow:
+ *   1. Query loyalty_cards via bookings JOIN to get card_no(s) for the customer  
+ *   2. Call BoomerangMe API GET /cards/{card_no} for each card to get balance
+ *   3. Return combined data to frontend
  *
- * GET /api/loyalty/cards  — Get customer's loyalty cards (by phone from JWT)
+ * GET /api/loyalty/cards  — Get customer's loyalty cards
  */
 
 const express = require('express');
@@ -9,7 +14,7 @@ const router = express.Router();
 
 const pool = require('../db/connection');
 const { authenticateToken } = require('../middleware/auth');
-const { getCardsByPhone, getCardsByEmail, formatCard } = require('../services/boomerangme');
+const { getCardById, formatCard } = require('../services/boomerangme');
 
 // ─── GET /api/loyalty/cards ───────────────────────────────────────
 router.get('/cards', authenticateToken, async (req, res) => {
@@ -17,75 +22,122 @@ router.get('/cards', authenticateToken, async (req, res) => {
     const customerId = req.user.customer_id;
     console.log('[Loyalty] Fetching cards for customer_id:', customerId);
 
-    // Get customer's mobile from DB
-    const [customers] = await pool.query(
-      'SELECT mobile_number, email, full_name FROM customers WHERE id = ?',
-      [customerId]
-    );
+    // Step 1: Get card numbers from Unify's loyalty_cards table via bookings
+    const [dbCards] = await pool.query(`
+      SELECT 
+        lc.lc_id,
+        lc.card_no,
+        lc.created_date,
+        lc.expiration_date,
+        lc.card_install_link,
+        lc.joturl_shortlink,
+        lc.joturl_qrlink,
+        lc.booking_id
+      FROM loyalty_cards lc
+      JOIN bookings b ON lc.booking_id = b.booking_id
+      WHERE b.customer_id = ?
+      ORDER BY lc.created_date DESC
+    `, [customerId]);
 
-    if (customers.length === 0) {
-      return res.status(404).json({
-        success: false, data: null,
-        message: 'Customer not found', errors: []
+    console.log('[Loyalty] Found', dbCards.length, 'card(s) in database for customer', customerId);
+
+    if (dbCards.length === 0) {
+      return res.json({
+        success: true,
+        data: { cards: [], grouped: {}, total: 0 },
+        message: 'No loyalty cards found for your account',
+        errors: []
       });
     }
 
-    const customer = customers[0];
-    const mobile = customer.mobile_number;
-    console.log('[Loyalty] Customer:', customer.full_name, '| Phone:', mobile, '| Email:', customer.email);
+    // Step 2: Fetch live balance/details from BoomerangMe API for each card
+    const cards = [];
+    for (const dbCard of dbCards) {
+      try {
+        console.log('[Loyalty] Fetching BoomerangMe data for card:', dbCard.card_no);
+        const apiCard = await getCardById(dbCard.card_no);
 
-    // Try phone lookup (multiple PH formats)
-    // BoomerangMe stores PH phones as 63XXXXXXXXX (no leading 0, no +)
-    let cards = [];
-    if (mobile) {
-      const digits = mobile.replace(/\D/g, '');
-      const last10 = digits.slice(-10);
-
-      // Try +63 format first (most common in BoomerangMe)
-      cards = await getCardsByPhone('+63' + last10);
-      console.log('[Loyalty] +63 format result:', cards.length, 'cards');
-
-      // If no results, try original format (09XXXXXXXXX)
-      if (cards.length === 0) {
-        cards = await getCardsByPhone(mobile);
-        console.log('[Loyalty] Original format result:', cards.length, 'cards');
-      }
-
-      // If still no results, try just the 63XXXXXXXXX format (no +)
-      if (cards.length === 0) {
-        cards = await getCardsByPhone('63' + last10);
-        console.log('[Loyalty] 63 format result:', cards.length, 'cards');
+        if (apiCard) {
+          // Merge DB data with API data, format for frontend
+          const formatted = formatCard(apiCard);
+          // Override with DB data where available (DB is source of truth for expiry etc.)
+          formatted.dbId = dbCard.lc_id;
+          formatted.installLink = dbCard.card_install_link || formatted.installLink;
+          formatted.shortLink = dbCard.joturl_shortlink || null;
+          formatted.qrLink = dbCard.joturl_qrlink || formatted.qrLink;
+          cards.push(formatted);
+        } else {
+          // API returned nothing — show card from DB data only (fallback)
+          console.log('[Loyalty] BoomerangMe API returned null for card:', dbCard.card_no);
+          cards.push({
+            id: dbCard.card_no,
+            templateId: null,
+            service: 'MaskPro',
+            tier: 'Care Card',
+            category: 'other',
+            icon: '🎫',
+            color: '#3b82f6',
+            type: 'subscription',
+            status: 'unknown',
+            visitsUsed: 0,
+            stampsTotal: null,
+            stampsBeforeReward: null,
+            rewardsUnused: 0,
+            cashbackBalance: 0,
+            discountPercent: null,
+            bonusBalance: 0,
+            expiresAt: dbCard.expiration_date || null,
+            createdAt: dbCard.created_date || null,
+            installLink: dbCard.card_install_link || null,
+            shortLink: dbCard.joturl_shortlink || null,
+            qrLink: dbCard.joturl_qrlink || null,
+            vehicle: null,
+            branch: null,
+            customerName: null,
+            dbId: dbCard.lc_id,
+          });
+        }
+      } catch (cardErr) {
+        console.error('[Loyalty] Error fetching card', dbCard.card_no, ':', cardErr.message);
+        // Still include the card from DB data
+        cards.push({
+          id: dbCard.card_no,
+          templateId: null,
+          service: 'MaskPro',
+          tier: 'Care Card',
+          category: 'other',
+          icon: '🎫',
+          color: '#3b82f6',
+          type: 'subscription',
+          status: 'error',
+          visitsUsed: 0,
+          expiresAt: dbCard.expiration_date || null,
+          createdAt: dbCard.created_date || null,
+          installLink: dbCard.card_install_link || null,
+          shortLink: dbCard.joturl_shortlink || null,
+          dbId: dbCard.lc_id,
+        });
       }
     }
 
-    // If still no results and customer has email, try email lookup
-    if (cards.length === 0 && customer.email) {
-      cards = await getCardsByEmail(customer.email);
-      console.log('[Loyalty] Email lookup result:', cards.length, 'cards');
-    }
-
-    console.log('[Loyalty] Total cards found:', cards.length);
-
-    // Format cards for frontend
-    const formattedCards = cards.map(formatCard);
+    console.log('[Loyalty] Total cards formatted:', cards.length);
 
     // Group by category for organized display
     const grouped = {};
-    formattedCards.forEach(card => {
-      if (!grouped[card.category]) grouped[card.category] = [];
-      grouped[card.category].push(card);
+    cards.forEach(card => {
+      const cat = card.category || 'other';
+      if (!grouped[cat]) grouped[cat] = [];
+      grouped[cat].push(card);
     });
 
     return res.json({
       success: true,
       data: {
-        cards: formattedCards,
+        cards,
         grouped,
-        total: formattedCards.length,
+        total: cards.length,
       },
-      message: formattedCards.length > 0
-        ? `Found ${formattedCards.length} loyalty card(s)`
-        : 'No loyalty cards found for your account',
+      message: `Found ${cards.length} loyalty card(s)`,
       errors: []
     });
   } catch (err) {
