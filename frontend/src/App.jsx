@@ -5,7 +5,6 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Vehicles from './pages/Vehicles';
 import Bookings from './pages/Bookings';
-import Loyalty from './pages/Loyalty';
 import Profile from './pages/Profile';
 import './index.css';
 
@@ -26,7 +25,7 @@ function AppRoutes() {
         <Route index element={<Dashboard />} />
         <Route path="vehicles" element={<Vehicles />} />
         <Route path="bookings" element={<Bookings />} />
-        <Route path="loyalty" element={<Loyalty />} />
+        <Route path="loyalty" element={<Navigate to="/profile" />} />
         <Route path="profile" element={<Profile />} />
       </Route>
       <Route path="*" element={<Navigate to="/" />} />

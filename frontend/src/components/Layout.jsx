@@ -110,7 +110,6 @@ export default function Layout() {
   const navItems = [
     { path: '/', icon: 'bi-grid', label: 'Dashboard', exact: true },
     { path: '/bookings', icon: 'bi-calendar-check', label: 'My Bookings' },
-    { path: '/loyalty', icon: 'bi-ticket-perforated', label: 'Loyalty Cards' },
     { path: '/vehicles', icon: 'bi-car-front', label: 'My Vehicles' },
     { path: '/profile', icon: 'bi-person', label: 'Profile' },
   ];
