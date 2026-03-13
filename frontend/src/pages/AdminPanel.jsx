@@ -139,7 +139,7 @@ export default function AdminPanel() {
           <>
             {/* Table Header */}
             <div style={{
-              display: 'grid', gridTemplateColumns: '1fr 160px 80px 80px 120px',
+              display: 'grid', gridTemplateColumns: '1fr 160px 80px 120px',
               gap: '12px', padding: '14px 24px',
               background: '#f8fafc', borderBottom: '1px solid #e2e8f0',
               fontSize: '12px', fontWeight: 700, color: '#64748b',
@@ -147,7 +147,6 @@ export default function AdminPanel() {
             }}>
               <div>Customer</div>
               <div>Mobile</div>
-              <div style={{ textAlign: 'center' }}>Vehicles</div>
               <div style={{ textAlign: 'center' }}>Bookings</div>
               <div style={{ textAlign: 'center' }}>Action</div>
             </div>
@@ -155,7 +154,7 @@ export default function AdminPanel() {
             {/* Table Rows */}
             {customers.map((c) => (
               <div key={c.id} style={{
-                display: 'grid', gridTemplateColumns: '1fr 160px 80px 80px 120px',
+                display: 'grid', gridTemplateColumns: '1fr 160px 80px 120px',
                 gap: '12px', padding: '14px 24px',
                 borderBottom: '1px solid #f1f5f9',
                 alignItems: 'center',
@@ -172,9 +171,6 @@ export default function AdminPanel() {
                 </div>
                 <div style={{ fontSize: '13px', color: '#64748b', fontFamily: 'monospace' }}>
                   {c.mobile_number || '—'}
-                </div>
-                <div style={{ textAlign: 'center', fontSize: '14px', fontWeight: 600, color: '#3b82f6' }}>
-                  {c.vehicle_count}
                 </div>
                 <div style={{ textAlign: 'center', fontSize: '14px', fontWeight: 600, color: '#10b981' }}>
                   {c.booking_count}

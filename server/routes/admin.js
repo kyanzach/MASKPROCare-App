@@ -98,8 +98,7 @@ router.get('/customers', authenticateToken, requireAdmin, async (req, res) => {
     // Get customers with booking count
     const [customers] = await pool.query(
       `SELECT c.id, c.full_name, c.mobile_number, c.email, c.branch_id,
-              (SELECT COUNT(*) FROM bookings b WHERE b.customer_id = c.id) as booking_count,
-              (SELECT COUNT(*) FROM customer_vehicles cv WHERE cv.customer_id = c.id) as vehicle_count
+              (SELECT COUNT(*) FROM bookings b WHERE b.customer_id = c.id) as booking_count
        FROM customers c
        ${whereClause}
        ORDER BY c.full_name ASC
