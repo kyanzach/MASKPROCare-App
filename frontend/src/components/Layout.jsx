@@ -3,7 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
 
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.5.0';
 
 export default function Layout() {
   const { customer, logout } = useAuth();
@@ -110,6 +110,7 @@ export default function Layout() {
   const navItems = [
     { path: '/', icon: 'bi-grid', label: 'Dashboard', exact: true },
     { path: '/bookings', icon: 'bi-calendar-check', label: 'My Bookings' },
+    { path: '/loyalty', icon: 'bi-ticket-perforated', label: 'Loyalty Cards' },
     { path: '/vehicles', icon: 'bi-car-front', label: 'My Vehicles' },
     { path: '/profile', icon: 'bi-person', label: 'Profile' },
   ];

@@ -1,5 +1,14 @@
 # Changelog
 
+## [v1.5.0] — 2026-03-13
+### Added
+- **BoomerangMe loyalty card integration** — customers can view their stamps, visits, and rewards on the new Loyalty Cards page
+  - `server/services/boomerangme.js` — API wrapper for digitalwallet.cards v2 with template mapping for all 9 card templates
+  - `server/routes/loyalty.js` — GET /api/loyalty/cards with phone lookup (tries +63, 09, 63 formats) + email fallback
+  - `frontend/src/pages/Loyalty.jsx` — full loyalty page with grouped cards, stamp progress visuals, visit counters, reward badges
+- **Loyalty Cards** nav link added to sidebar and mobile navigation (between My Bookings and My Vehicles)
+- Phone format normalization for Philippine numbers (`09XX` → `+63XX` for BoomerangMe API compatibility)
+
 ## [v1.4.1] — 2026-03-13
 ### Changed
 - **Vehicle cards:** Replaced 3-dot kebab menu with a clear "Edit" button for ease of use (50% older users)
