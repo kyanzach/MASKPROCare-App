@@ -5,6 +5,15 @@ import api from '../api/client';
 
 const APP_VERSION = '1.5.0';
 
+// Aftercare service links config
+const AFTERCARE_ITEMS = [
+  { slug: 'coating', label: 'Nano Ceramic Coating', icon: 'bi-shield-check' },
+  { slug: 'tint', label: 'Nano Ceramic Tint', icon: 'bi-brightness-high' },
+  { slug: 'ppf', label: 'Paint Protection Film', icon: 'bi-fire' },
+  { slug: 'paint-repair', label: 'Auto Paint & Repair', icon: 'bi-brush' },
+  { slug: 'detailing', label: 'Detailing', icon: 'bi-stars' },
+];
+
 export default function Layout() {
   const { customer, logout } = useAuth();
   const navigate = useNavigate();
@@ -16,6 +25,34 @@ export default function Layout() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifLoading, setNotifLoading] = useState(false);
   const notifRef = useRef(null);
+
+  // Admin & impersonation state
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [impersonation, setImpersonation] = useState(null);
+  const [aftercareOpen, setAftercareOpen] = useState(false);
+
+  // Check admin status + impersonation
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api.get('/admin/check');
+        setIsAdmin(res.data.data?.isAdmin || false);
+      } catch { /* not admin */ }
+    })();
+    // Check impersonation
+    const imp = localStorage.getItem('impersonation');
+    if (imp) {
+      try { setImpersonation(JSON.parse(imp)); } catch {}
+    }
+  }, []);
+
+  const exitImpersonation = () => {
+    if (impersonation?.originalToken) {
+      localStorage.setItem('care_token', impersonation.originalToken);
+      localStorage.removeItem('impersonation');
+      window.location.href = '/admin';
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -273,18 +310,42 @@ export default function Layout() {
             </div>
           ))}
 
-          {/* Services Dropdown */}
-          <div className="nav-heading">Services</div>
-          {['Nano Ceramic Coating', 'Nano Ceramic Tint', 'Paint Protection Film (PPF)', 'Auto Paint & Repair', 'Detailing'].map(s => (
-            <div className="nav-item" key={s}>
-              <span className="nav-link" style={{ cursor: 'default', opacity: 0.6, fontSize: '13px', paddingLeft: '28px' }}>
-                <i className="bi bi-chevron-right" style={{ fontSize: '10px' }}></i>
-                <span>{s}</span>
-              </span>
+          {/* Aftercare Accordion */}
+          <div
+            className="nav-heading"
+            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', userSelect: 'none' }}
+            onClick={() => setAftercareOpen(!aftercareOpen)}
+          >
+            <span>Aftercare</span>
+            <i className={`bi bi-chevron-${aftercareOpen ? 'up' : 'down'}`} style={{ fontSize: '12px', transition: 'transform 0.2s' }}></i>
+          </div>
+          {aftercareOpen && AFTERCARE_ITEMS.map(item => (
+            <div className="nav-item" key={item.slug}>
+              <NavLink
+                to={`/aftercare/${item.slug}`}
+                className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
+                onClick={() => setSidebarOpen(false)}
+                style={{ fontSize: '13px', paddingLeft: '28px' }}
+              >
+                <i className={`bi ${item.icon}`} style={{ fontSize: '12px' }}></i>
+                <span>{item.label}</span>
+              </NavLink>
             </div>
           ))}
 
           <div className="nav-heading">Account</div>
+          {isAdmin && (
+            <div className="nav-item">
+              <NavLink
+                to="/admin"
+                className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
+                onClick={() => setSidebarOpen(false)}
+              >
+                <i className="bi bi-shield-lock" style={{ color: '#f59e0b' }}></i>
+                <span>Admin Panel</span>
+              </NavLink>
+            </div>
+          )}
           <div className="nav-item">
             <NavLink
               to="/profile"
@@ -337,6 +398,32 @@ export default function Layout() {
             </div>
           </div>
         </div>
+
+        {/* Impersonation Banner */}
+        {impersonation && (
+          <div style={{
+            background: 'linear-gradient(135deg, #fbbf24, #f59e0b)',
+            color: '#78350f', padding: '10px 20px',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            fontSize: '13px', fontWeight: 600, gap: '12px', flexWrap: 'wrap',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <i className="bi bi-eye-fill"></i>
+              Viewing as <strong style={{ marginLeft: '4px' }}>{impersonation.customerName}</strong>
+            </div>
+            <button
+              onClick={exitImpersonation}
+              style={{
+                background: '#78350f', color: 'white', border: 'none',
+                borderRadius: '8px', padding: '6px 16px', fontSize: '12px',
+                fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              <i className="bi bi-box-arrow-left" style={{ marginRight: '4px' }}></i>
+              Exit
+            </button>
+          </div>
+        )}
 
         <Outlet />
       </div>

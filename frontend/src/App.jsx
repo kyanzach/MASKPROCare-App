@@ -6,6 +6,8 @@ import Dashboard from './pages/Dashboard';
 import Vehicles from './pages/Vehicles';
 import Bookings from './pages/Bookings';
 import Profile from './pages/Profile';
+import Aftercare from './pages/Aftercare';
+import AdminPanel from './pages/AdminPanel';
 import './index.css';
 
 function ProtectedRoute({ children }) {
@@ -27,6 +29,8 @@ function AppRoutes() {
         <Route path="bookings" element={<Bookings />} />
         <Route path="loyalty" element={<Navigate to="/profile" />} />
         <Route path="profile" element={<Profile />} />
+        <Route path="aftercare/:slug" element={<Aftercare />} />
+        <Route path="admin" element={<AdminPanel />} />
       </Route>
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>

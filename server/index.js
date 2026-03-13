@@ -42,6 +42,7 @@ const profileRoutes = require('./routes/profile');
 const notificationRoutes = require('./routes/notifications');
 const serviceRoutes = require('./routes/services');
 const loyaltyRoutes = require('./routes/loyalty');
+const adminRoutes = require('./routes/admin');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/vehicles', vehicleRoutes);
@@ -51,6 +52,7 @@ app.use('/api/profile', profileRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/loyalty', loyaltyRoutes);
+app.use('/api/admin', adminRoutes);
 
 // --- Health check (deploy.sh checks /api/health) ---
 const healthResponse = (req, res) => {
