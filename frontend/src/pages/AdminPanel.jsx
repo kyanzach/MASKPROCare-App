@@ -10,8 +10,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
 export default function AdminPanel() {
+  const { login: authLogin, isAuthenticated } = useAuth();
+
   // Admin auth state
   const [adminAuthed, setAdminAuthed] = useState(false);
   const [username, setUsername] = useState('');
@@ -40,6 +43,9 @@ export default function AdminPanel() {
         .then(res => {
           if (res.data.data?.isAdmin) {
             setAdminAuthed(true);
+            // Also update AuthContext so navigation works
+            const savedCustomer = localStorage.getItem('mpc_customer');
+            if (savedCustomer) authLogin(adminToken, JSON.parse(savedCustomer));
             loadCustomers(1, '');
           } else {
             localStorage.removeItem('admin_token');
@@ -50,7 +56,7 @@ export default function AdminPanel() {
 
     // Also check if current regular session is admin
     const currentToken = localStorage.getItem('mpc_token');
-    if (currentToken) {
+    if (currentToken && !adminToken) {
       api.get('/admin/check')
         .then(res => {
           if (res.data.data?.isAdmin) {
@@ -72,10 +78,8 @@ export default function AdminPanel() {
         const { token, customer } = res.data.data;
         // Store admin token separately
         localStorage.setItem('admin_token', token);
-        // Also set as main token so API calls work
-        localStorage.setItem('mpc_token', token);
-        // Store customer data for the app
-        localStorage.setItem('mpc_customer', JSON.stringify(customer));
+        // Update AuthContext (sets mpc_token + mpc_customer + React state)
+        authLogin(token, customer);
         setAdminAuthed(true);
         loadCustomers(1, '');
       }
