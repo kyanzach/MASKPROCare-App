@@ -121,16 +121,22 @@ router.get('/list', async (req, res) => {
     try {
       const [rows] = await pool.query(`
         SELECT b.booking_id, b.booking_date, b.latest_service, b.notes, b.branch_id,
-               v.make, v.model, v.plate_no, v.color, v.size
+               v.make, v.model, v.plate_no, v.color, v.size,
+               GROUP_CONCAT(DISTINCT bst.service_name SEPARATOR ', ') as service_names
         FROM bookings b
         LEFT JOIN vehicles v ON b.customer_vehicle_id = v.id
+        LEFT JOIN bookings_service_types bst ON b.booking_id = bst.booking_id
         WHERE b.customer_id = ?
+        GROUP BY b.booking_id
         ORDER BY b.booking_date DESC
         LIMIT 50
       `, [customerId]);
 
       const today = new Date().toISOString().slice(0, 10);
       for (const row of rows) {
+        // Use service_names from JOIN, fallback to latest_service
+        row.latest_service = row.service_names || row.latest_service || 'N/A';
+        delete row.service_names;
         if ((row.notes || '').includes('CANCELLED:')) {
           row.status = 'cancelled';
         } else {

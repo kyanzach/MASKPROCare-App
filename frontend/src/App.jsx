@@ -23,6 +23,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={isAuthenticated ? <Navigate to="/" /> : <Login />} />
+      <Route path="/admin" element={<AdminPanel />} />
       <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<Dashboard />} />
         <Route path="vehicles" element={<Vehicles />} />
@@ -30,7 +31,6 @@ function AppRoutes() {
         <Route path="loyalty" element={<Navigate to="/profile" />} />
         <Route path="profile" element={<Profile />} />
         <Route path="aftercare/:slug" element={<Aftercare />} />
-        <Route path="admin" element={<AdminPanel />} />
       </Route>
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>

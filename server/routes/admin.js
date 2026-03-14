@@ -12,6 +12,7 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 
 const pool = require('../db/connection');
 const { authenticateToken, JWT_SECRET } = require('../middleware/auth');
@@ -171,6 +172,85 @@ router.post('/impersonate', authenticateToken, requireAdmin, async (req, res) =>
   } catch (err) {
     console.error('[Admin] Impersonate error:', err.message);
     return res.status(500).json({ success: false, message: 'Failed to impersonate' });
+  }
+});
+
+// ─── POST /api/admin/login ───────────────────────────────────
+// Dedicated admin login (username + password from Unify users table)
+// No OTP required — used for /admin page
+router.post('/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ success: false, message: 'Username and password are required' });
+    }
+
+    // Find user with admin access_level
+    const [users] = await pool.query(
+      "SELECT id, full_name, username, password, mobile_number, access_level FROM users WHERE username = ? AND access_level = 'admin' LIMIT 1",
+      [username.trim()]
+    );
+
+    if (users.length === 0) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+
+    const adminUser = users[0];
+
+    // Verify bcrypt password (PHP $2y$ is compatible with bcryptjs $2a$)
+    const passwordHash = adminUser.password.replace(/^\$2y\$/, '$2a$');
+    const isValid = await bcrypt.compare(password, passwordHash);
+    if (!isValid) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+
+    // Find a matching customer record (by full_name or mobile) — needed for JWT sub
+    let customerId = null;
+    let customerMobile = adminUser.mobile_number;
+
+    const [byName] = await pool.query(
+      "SELECT id, mobile_number FROM customers WHERE LOWER(TRIM(full_name)) = LOWER(TRIM(?)) LIMIT 1",
+      [adminUser.full_name]
+    );
+    if (byName.length > 0) {
+      customerId = byName[0].id;
+      customerMobile = byName[0].mobile_number;
+    }
+
+    // Generate admin JWT
+    const token = jwt.sign(
+      {
+        iss: 'maskpro-care-api',
+        sub: customerId || 0,
+        mobile: customerMobile,
+        branch_id: 1,
+        is_admin: true,
+        admin_user_id: adminUser.id,
+      },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    console.log(`[Admin] Admin login: ${adminUser.full_name} (user ID: ${adminUser.id})`);
+
+    return res.json({
+      success: true,
+      data: {
+        token,
+        customer: {
+          id: customerId || 0,
+          full_name: adminUser.full_name,
+          mobile_number: customerMobile,
+          branch_id: 1,
+        },
+        isAdmin: true,
+        adminName: adminUser.full_name,
+      },
+      message: `Welcome, ${adminUser.full_name}!`,
+    });
+  } catch (err) {
+    console.error('[Admin] Login error:', err.message);
+    return res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 

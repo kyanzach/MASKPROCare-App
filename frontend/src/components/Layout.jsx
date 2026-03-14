@@ -370,7 +370,7 @@ export default function Layout() {
             <div className="sidebar-avatar">{initials}</div>
             <div className="sidebar-user-info">
               <div className="sidebar-user-name">{customer?.full_name || 'User'}</div>
-              <div className="sidebar-user-role">Customer</div>
+              <div className="sidebar-user-role">{isAdmin ? 'Admin' : 'Customer'}</div>
             </div>
           </div>
         </div>
