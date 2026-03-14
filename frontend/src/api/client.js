@@ -25,10 +25,10 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401 && !isRedirecting) {
-      // Skip redirect for background polling calls (notifications)
+      // Skip redirect for background polling and admin calls
       const url = error.config?.url || '';
-      if (url.includes('/notifications/')) {
-        // Silent fail for notification polling — don't nuke the session
+      if (url.includes('/notifications/') || url.includes('/admin/')) {
+        // Silent fail — don't nuke the session
         return Promise.reject(error);
       }
       isRedirecting = true;
