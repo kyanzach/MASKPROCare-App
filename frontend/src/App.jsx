@@ -8,6 +8,7 @@ import Bookings from './pages/Bookings';
 import Profile from './pages/Profile';
 import Aftercare from './pages/Aftercare';
 import AdminPanel from './pages/AdminPanel';
+import AdminLogin from './pages/AdminLogin';
 import './index.css';
 
 function ProtectedRoute({ children }) {
@@ -23,7 +24,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={isAuthenticated ? <Navigate to="/" /> : <Login />} />
-      <Route path="/admin" element={<AdminPanel />} />
+      <Route path="/admin-login" element={<AdminLogin />} />
       <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<Dashboard />} />
         <Route path="vehicles" element={<Vehicles />} />
@@ -31,6 +32,7 @@ function AppRoutes() {
         <Route path="loyalty" element={<Navigate to="/profile" />} />
         <Route path="profile" element={<Profile />} />
         <Route path="aftercare/:slug" element={<Aftercare />} />
+        <Route path="admin" element={<AdminPanel />} />
       </Route>
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
