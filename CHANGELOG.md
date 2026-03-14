@@ -1,5 +1,20 @@
 # Changelog
 
+## [v1.6.0] — 2026-03-14
+### Added
+- **Aftercare section** — renamed SERVICES→AFTERCARE in sidebar, collapsible accordion with 5 service categories
+- **25 full blog-style aftercare articles** — 5 topics per service (coating, tint, PPF, paint repair, detailing) with tabbed navigation. Content from maskpro.ph/blog + original brand content. Self-contained for future native app packaging.
+- **5% discount CTA** for services without bookings → redirects to gaq.maskpro.ph
+- **Admin impersonation panel** — searchable customer list with "Login as" button + custom confirmation modal
+- **Dedicated admin login** at /admin — username/password from Unify `users` table (bcrypt), no OTP required
+- **Impersonation banner** — gold banner "Viewing as {name}" with Exit button
+
+### Fixed
+- **Bookings service names** — was showing N/A because `latest_service` was NULL. Now JOINs `bookings_service_types` for actual service data (e.g. "Nano Ceramic Coating")
+- **Admin badge** — sidebar footer shows "Admin" instead of "Customer" for admin users
+- **No system dialogs** — replaced `window.confirm()` with custom confirmation modal (agent rule compliance)
+- **Admin check** — cross-references `customers.full_name → users.full_name` (handles phone number mismatch)
+
 ## [v1.5.0] — 2026-03-13
 ### Added
 - **BoomerangMe loyalty card integration** — customers can view their stamps, visits, and rewards on the new Loyalty Cards page
