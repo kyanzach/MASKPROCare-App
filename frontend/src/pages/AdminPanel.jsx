@@ -49,7 +49,7 @@ export default function AdminPanel() {
     }
 
     // Also check if current regular session is admin
-    const currentToken = localStorage.getItem('care_token');
+    const currentToken = localStorage.getItem('mpc_token');
     if (currentToken) {
       api.get('/admin/check')
         .then(res => {
@@ -73,9 +73,9 @@ export default function AdminPanel() {
         // Store admin token separately
         localStorage.setItem('admin_token', token);
         // Also set as main token so API calls work
-        localStorage.setItem('care_token', token);
+        localStorage.setItem('mpc_token', token);
         // Store customer data for the app
-        localStorage.setItem('care_customer', JSON.stringify(customer));
+        localStorage.setItem('mpc_customer', JSON.stringify(customer));
         setAdminAuthed(true);
         loadCustomers(1, '');
       }
@@ -124,12 +124,12 @@ export default function AdminPanel() {
       if (res.data.success) {
         const { token, customer, impersonatedBy } = res.data.data;
         localStorage.setItem('impersonation', JSON.stringify({
-          originalToken: localStorage.getItem('care_token'),
+          originalToken: localStorage.getItem('mpc_token'),
           impersonatedBy,
           customerName: customer.full_name,
         }));
-        localStorage.setItem('care_token', token);
-        localStorage.setItem('care_customer', JSON.stringify(customer));
+        localStorage.setItem('mpc_token', token);
+        localStorage.setItem('mpc_customer', JSON.stringify(customer));
         window.location.href = '/';
       }
     } catch (err) {

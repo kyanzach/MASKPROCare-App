@@ -48,7 +48,7 @@ export default function Layout() {
 
   const exitImpersonation = () => {
     if (impersonation?.originalToken) {
-      localStorage.setItem('care_token', impersonation.originalToken);
+      localStorage.setItem('mpc_token', impersonation.originalToken);
       localStorage.removeItem('impersonation');
       window.location.href = '/admin';
     }
