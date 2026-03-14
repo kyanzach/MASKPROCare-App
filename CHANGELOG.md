@@ -1,5 +1,12 @@
 # Changelog
 
+## [v1.6.1] — 2026-03-14
+### Fixed
+- **Admin auth architecture** — split `/admin` into `/admin-login` (standalone login form) and `/admin` (inside Layout with sidebar). Root cause: admin panel was outside `<Layout />`, so no sidebar, no navigation, Home redirected to `/login`
+- **localStorage key mismatch** — AdminPanel wrote to `care_token`/`care_customer` but AuthContext reads `mpc_token`/`mpc_customer`. Session lost on reload
+- **401 interceptor** — API client nuked `mpc_token` when `/admin/check` returned 401. Now skips redirect for `/admin/` API calls
+- **AuthContext React state** — AdminPanel now calls `authLogin()` after login to update React state, not just localStorage
+
 ## [v1.6.0] — 2026-03-14
 ### Added
 - **Aftercare section** — renamed SERVICES→AFTERCARE in sidebar, collapsible accordion with 5 service categories
