@@ -1,5 +1,10 @@
 # Changelog
 
+## [v1.7.1] — 2026-03-16
+### Added
+- **NanoFix Stamp Audit Cron** — daily cron job (1:00 AM) that audits `Nano Fix (Maintenance)` bookings against BoomerangMe loyalty card stamp deductions. Auto-deducts missed stamps. Determines coating vs PPF by checking most recent parent service on the vehicle. Rate-limited at 8 req/sec with 429 backoff retry. Idempotent via `care_stamp_audit_log` table. Supports `--dry-run` flag.
+- **`care_stamp_audit_log` table** — audit trail for stamp deductions, prevents double-deduction on re-runs
+
 ## [v1.7.0] — 2026-03-16
 ### Added
 - **My Loyalty Cards sidebar shortcut** — deep-links to Profile → Loyalty Cards tab via `?tab=loyalty` URL param
