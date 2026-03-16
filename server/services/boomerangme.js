@@ -16,8 +16,8 @@ const TEMPLATE_MAP = {
   43203:  { service: 'Nano Ceramic Coating', tier: 'Diamond Package',      category: 'coating', icon: '🛡️', color: '#6366f1', defaultTotal: 24 },
   1006938:{ service: 'Nano Ceramic Coating', tier: 'Diamond (No Exp)',     category: 'coating', icon: '🛡️', color: '#6366f1', defaultTotal: 24 },
   147644: { service: 'Nano Ceramic Tint',    tier: 'Loyalty Card',         category: 'tint',    icon: '🪟', color: '#0ea5e9', defaultTotal: 0 },
-  318553: { service: 'PPF',                  tier: 'Maintenance Membership', category: 'ppf',   icon: '🔥', color: '#ef4444', defaultTotal: 14 },
-  302979: { service: 'PPF',                  tier: 'Extended Warranty',    category: 'ppf',     icon: '🔥', color: '#f97316', defaultTotal: 14 },
+  318553: { service: 'PPF',                  tier: 'Maintenance Membership', category: 'ppf',   icon: '🔥', color: '#ef4444', defaultTotal: 24 },
+  302979: { service: 'PPF',                  tier: 'Extended Warranty',    category: 'ppf',     icon: '🔥', color: '#f97316', defaultTotal: 4 },
   40799:  { service: 'Care Wash',            tier: 'Prepaid Card',         category: 'wash',    icon: '⭐', color: '#10b981', defaultTotal: 0 },
   283699: { service: 'MaskPro',              tier: 'Gift Card',            category: 'gift',    icon: '🎁', color: '#8b5cf6', defaultTotal: 0 },
 };
