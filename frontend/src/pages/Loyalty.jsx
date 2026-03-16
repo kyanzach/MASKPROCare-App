@@ -3,7 +3,7 @@
  * Displays customer's BoomerangMe loyalty card stamps / visit progress
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../api/client';
 
 // Category display config
@@ -15,6 +15,70 @@ const CATEGORY_META = {
   gift:    { label: 'Gift Card',             icon: 'bi-gift', gradient: 'linear-gradient(135deg, #8b5cf6, #a78bfa)' },
   other:   { label: 'Other',                 icon: 'bi-card-text', gradient: 'linear-gradient(135deg, #64748b, #94a3b8)' },
 };
+
+// --- PDF417 Barcode Component ---
+function PDF417Barcode({ text, width = 240, height = 50 }) {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    if (!canvasRef.current || !text) return;
+    let cancelled = false;
+
+    // Dynamically import bwip-js to avoid SSR issues
+    import('bwip-js').then((bwipjs) => {
+      if (cancelled || !canvasRef.current) return;
+      try {
+        bwipjs.toCanvas(canvasRef.current, {
+          bcid: 'pdf417',
+          text: String(text),
+          scale: 1,
+          height: 8,
+          width: width / 4,
+          includetext: false,
+        });
+      } catch (err) {
+        console.error('PDF417 render error:', err);
+      }
+    });
+
+    return () => { cancelled = true; };
+  }, [text, width, height]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{
+        maxWidth: '100%',
+        height: 'auto',
+        display: 'block',
+        margin: '0 auto',
+      }}
+    />
+  );
+}
+
+// --- Category-specific label helpers ---
+function getCounterLabel(category) {
+  switch (category) {
+    case 'coating': return 'Credits Used';
+    case 'tint':    return 'Earned Points';
+    default:        return 'Visits Used';
+  }
+}
+
+function getStampLabel(category) {
+  switch (category) {
+    case 'coating': return 'Maintenance Credits';
+    default:        return 'Stamp Progress';
+  }
+}
+
+function getEmptyLabel(category) {
+  switch (category) {
+    case 'tint': return 'No points recorded yet';
+    default:     return 'No visits recorded yet';
+  }
+}
 
 export default function Loyalty() {
   const [cards, setCards] = useState([]);
@@ -63,6 +127,56 @@ export default function Loyalty() {
   const isExpired = (dateStr) => {
     if (!dateStr) return false;
     return new Date(dateStr) < new Date();
+  };
+
+  // Render stamp grid — show ALL stamps (total), grey out used ones
+  const renderStamps = (card, catMeta) => {
+    const total = card.visitsTotal || card.stampsTotal || 0;
+    const used = card.visitsUsed || 0;
+
+    if (total <= 0) return null;
+
+    return (
+      <div>
+        <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 500, marginBottom: '8px' }}>
+          {getStampLabel(card.category)}
+        </div>
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          {Array.from({ length: total }, (_, i) => {
+            // First `used` stamps are greyed out (used/deducted), rest are active (remaining)
+            const isUsed = i < used;
+            let bg, textColor, shadow;
+
+            if (card.category === 'coating' || card.category === 'ppf') {
+              bg = isUsed ? '#e2e8f0' : catMeta.gradient;
+              textColor = isUsed ? '#94a3b8' : 'white';
+              shadow = isUsed ? 'none' : '0 2px 6px rgba(0,0,0,0.12)';
+            } else {
+              bg = isUsed ? catMeta.gradient : '#f1f5f9';
+              textColor = isUsed ? 'white' : '#cbd5e1';
+              shadow = isUsed ? '0 2px 6px rgba(0,0,0,0.12)' : 'none';
+            }
+
+            return (
+              <div
+                key={i}
+                style={{
+                  width: '36px', height: '36px', borderRadius: '10px',
+                  background: bg,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '16px', color: textColor,
+                  boxShadow: shadow,
+                  transition: 'transform 0.2s',
+                  opacity: isUsed ? 0.5 : 1,
+                }}
+              >
+                <i className={`bi ${catMeta.icon}`} style={{ fontSize: '16px' }}></i>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
   };
 
   // Render a single loyalty card
@@ -134,14 +248,19 @@ export default function Loyalty() {
 
         {/* Card Body — Visit / Stamp Progress */}
         <div style={{ padding: '20px 24px 24px' }}>
-          {/* Visit counter */}
+          {/* Visit counter — show used/total */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
             <div>
               <div style={{ fontSize: '12px', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>
-                Visits Used
+                {getCounterLabel(card.category)}
               </div>
-              <div style={{ fontSize: '32px', fontWeight: 800, color: '#1e293b', lineHeight: 1 }}>
+              <div style={{ fontSize: '32px', fontWeight: 800, color: '#1e293b', lineHeight: 1, display: 'flex', alignItems: 'baseline', gap: '4px' }}>
                 {card.visitsUsed}
+                {card.visitsTotal > 0 && (
+                  <span style={{ fontSize: '16px', fontWeight: 600, color: '#94a3b8' }}>
+                    / {card.visitsTotal}
+                  </span>
+                )}
               </div>
             </div>
             {card.rewardsUnused > 0 && (
@@ -157,41 +276,10 @@ export default function Loyalty() {
             )}
           </div>
 
-          {/* Stamp Row — visual stamp indicator */}
-          {card.visitsUsed > 0 && (
-            <div>
-              <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 500, marginBottom: '8px' }}>
-                Stamp Progress
-              </div>
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                {Array.from({ length: Math.min(card.visitsUsed, 20) }, (_, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      width: '36px', height: '36px', borderRadius: '10px',
-                      background: catMeta.gradient,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '16px', color: 'white',
-                      boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
-                      transition: 'transform 0.2s',
-                    }}
-                  >
-                    <i className={`bi ${catMeta.icon}`} style={{ fontSize: '16px' }}></i>
-                  </div>
-                ))}
-                {card.visitsUsed > 20 && (
-                  <div style={{
-                    width: '36px', height: '36px', borderRadius: '10px',
-                    background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '11px', fontWeight: 700, color: '#64748b',
-                  }}>
-                    +{card.visitsUsed - 20}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+          {/* Stamp Row — show ALL stamps */}
+          {card.visitsTotal > 0 && renderStamps(card, catMeta)}
 
+          {/* Empty state — category-specific label */}
           {card.visitsUsed === 0 && (
             <div style={{
               textAlign: 'center', padding: '16px',
@@ -199,43 +287,47 @@ export default function Loyalty() {
               color: '#94a3b8', fontSize: '13px',
             }}>
               <i className="bi bi-ticket-perforated" style={{ fontSize: '24px', display: 'block', marginBottom: '6px' }}></i>
-              No visits recorded yet
+              {getEmptyLabel(card.category)}
             </div>
           )}
 
-          {/* Vehicle info if available */}
-          {card.vehicle && (
-            <div style={{
-              marginTop: '16px', paddingTop: '12px',
-              borderTop: '1px solid #f1f5f9',
-              fontSize: '12px', color: '#64748b',
-              display: 'flex', alignItems: 'center', gap: '6px',
-            }}>
-              <i className="bi bi-car-front" style={{ color: '#94a3b8' }}></i>
-              {card.vehicle}
-            </div>
-          )}
-
-          {/* Branch info if available */}
-          {card.branch && (
-            <div style={{
-              marginTop: card.vehicle ? '4px' : '16px',
-              paddingTop: card.vehicle ? '0' : '12px',
-              borderTop: card.vehicle ? 'none' : '1px solid #f1f5f9',
-              fontSize: '12px', color: '#64748b',
-              display: 'flex', alignItems: 'center', gap: '6px',
-            }}>
-              <i className="bi bi-geo-alt" style={{ color: '#94a3b8' }}></i>
-              {card.branch}
-            </div>
-          )}
-
-          {/* Card ID */}
+          {/* Footer: Vehicle + Branch on same line, then centered Card # + barcode */}
           <div style={{
-            marginTop: '12px', fontSize: '11px', color: '#cbd5e1',
-            fontFamily: 'monospace',
+            marginTop: '16px', paddingTop: '12px',
+            borderTop: '1px solid #f1f5f9',
           }}>
-            Card #{card.id}
+            {/* Vehicle + Branch row */}
+            {(card.vehicle || card.branch) && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '12px',
+                fontSize: '12px', color: '#64748b',
+                flexWrap: 'wrap', marginBottom: '12px',
+              }}>
+                {card.vehicle && (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <i className="bi bi-car-front" style={{ color: '#94a3b8' }}></i>
+                    {card.vehicle}
+                  </span>
+                )}
+                {card.branch && (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <i className="bi bi-geo-alt" style={{ color: '#94a3b8' }}></i>
+                    {card.branch}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Centered Card ID + PDF417 barcode */}
+            <div style={{ textAlign: 'center' }}>
+              <div style={{
+                fontSize: '11px', color: '#94a3b8',
+                fontFamily: 'monospace', marginBottom: '8px',
+              }}>
+                Card #{card.id}
+              </div>
+              <PDF417Barcode text={String(card.id)} />
+            </div>
           </div>
         </div>
       </div>
