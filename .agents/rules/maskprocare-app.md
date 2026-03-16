@@ -61,6 +61,7 @@ description: Critical guardrails for MaskPro Care App (customer-facing vehicle m
 
 ## Deployment (`deploy.sh`)
 - **Always use `deploy.sh`** for deploying — NEVER manual rsync/pm2
+- **⚠️ CRITICAL: Nginx serves from `/var/www/care/frontend/dist/` — NEVER rsync to `/var/www/care/dist/`!** Manual rsync to the wrong path will silently fail to update the live site. Always use deploy.sh which handles the correct path.
 - Usage: `./deploy.sh` (all) | `--frontend` | `--backend` | `--setup-nginx`
 - `.env` is **NOT uploaded** by deploy.sh — must be created manually on server at `/var/www/care/.env`
 - First-time deploy requires `./deploy.sh --setup-nginx` once, then `certbot --nginx -d care.maskpro.ph` for SSL
@@ -69,4 +70,5 @@ description: Critical guardrails for MaskPro Care App (customer-facing vehicle m
 - Backend deploy: uploads `server/`, runs `npm install --production`, restarts PM2
 - Frontend deploy: `npm run build`, uploads `dist/`, cleans orphaned JS/CSS hashes
 - API health check: `https://care.maskpro.ph/api/health`
+- **After deploy, ALWAYS verify**: check version in PM2, grep for expected strings in deployed JS, confirm API health
 - See `maskprocare-reference.md` for first-time server setup (production `.env` values)

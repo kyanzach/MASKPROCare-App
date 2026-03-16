@@ -43,6 +43,7 @@ function PDF417Barcode({ text, fullWidth = false }) {
 function getCounterLabel(category) {
   switch (category) {
     case 'coating': return 'Credits Used';
+    case 'ppf':     return 'Credits Used';
     case 'tint':    return 'Earned Points';
     default:        return 'Visits Used';
   }
@@ -316,6 +317,13 @@ export default function Profile() {
                 <i className="bi bi-gift"></i> {card.rewardsUnused} Reward{card.rewardsUnused > 1 ? 's' : ''}
               </div>
             )}
+            {/* Earned Points — coating + PPF Maintenance */}
+            {(card.category === 'coating' || (card.category === 'ppf' && card.tier === 'Maintenance Membership')) && card.bonusBalance > 0 && (
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>Earned Points</div>
+                <div style={{ fontSize: '32px', fontWeight: 800, color: '#10b981', lineHeight: 1 }}>{card.bonusBalance}</div>
+              </div>
+            )}
           </div>
           {/* Stamp grid — show ALL stamps */}
           {card.visitsTotal > 0 && renderStamps(card, catMeta)}
@@ -431,6 +439,12 @@ export default function Profile() {
                 <div style={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>Expiry</div>
                 <div style={{ fontSize: '14px', fontWeight: 600, color: card.expiresAt && isExpired(card.expiresAt) ? '#ef4444' : '#1e293b' }}>{formatDate(card.expiresAt)}</div>
               </div>
+              {(card.category === 'coating' || (card.category === 'ppf' && card.tier === 'Maintenance Membership')) && card.bonusBalance > 0 && (
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>Earned Points</div>
+                  <div style={{ fontSize: '14px', fontWeight: 600, color: '#10b981' }}>{card.bonusBalance}</div>
+                </div>
+              )}
             </div>
 
             {/* Terms of Use */}
