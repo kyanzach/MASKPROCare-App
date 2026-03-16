@@ -116,14 +116,14 @@ async function getCardOperations(cardId) {
   }
 }
 
-async function subtractStamp(cardId, stamps, comment) {
+async function subtractVisit(cardId, visits, comment) {
   try {
     const resp = await throttledApiCall(() =>
-      apiClient.post(`/cards/${cardId}/subtract-stamp`, { stamps, comment })
+      apiClient.post(`/cards/${cardId}/subtract-visit`, { visits, comment })
     );
     return resp.data || resp.status === 200;
   } catch (err) {
-    log('error', `API subtractStamp failed for ${cardId}`, err.response?.data || err.message);
+    log('error', `API subtractVisit failed for ${cardId}`, err.response?.data || err.message);
     return null;
   }
 }
@@ -418,7 +418,7 @@ async function main() {
       }
 
       const comment = `Auto-audit: ${deficit} missed NanoFix deduction(s) for ${veh.vehicle_name || veh.plate_no}`;
-      const result = await subtractStamp(cardNo, deficit, comment);
+      const result = await subtractVisit(cardNo, deficit, comment);
 
       if (result) {
         let remaining = deficit;
