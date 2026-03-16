@@ -258,7 +258,7 @@ export default function Loyalty() {
                 {card.visitsUsed}
                 {card.visitsTotal > 0 && (
                   <span style={{ fontSize: '16px', fontWeight: 600, color: '#94a3b8' }}>
-                    / {card.visitsTotal}
+                    {' '}out of {card.visitsTotal}
                   </span>
                 )}
               </div>
