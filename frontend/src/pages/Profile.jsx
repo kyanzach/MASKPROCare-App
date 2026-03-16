@@ -49,7 +49,7 @@ function getCounterLabel(category) {
 }
 function getStampLabel(category) {
   switch (category) {
-    case 'coating': return 'Remaining Credits';
+    case 'coating': return 'Maintenance Credits';
     default:        return 'Stamp Progress';
   }
 }
@@ -224,26 +224,38 @@ export default function Profile() {
   const isExpired = (dateStr) => dateStr ? new Date(dateStr) < new Date() : false;
 
   // ── Loyalty: render stamps grid ──
-  // For ALL categories: filled stamps (i < visitsUsed) = colored, empty = grey
-  // No special reversal for coating — visitsUsed = credits earned, all shown as blue
+  // For coating/PPF: used stamps = greyed out, remaining = colored (blue gradient)
+  // For others: filled stamps = colored, remaining = grey
   const renderStamps = (card, catMeta) => {
-    const total = card.stampsTotal || card.visitsUsed;
-    const used = card.visitsUsed;
-    if (total <= 0 && used <= 0) return null;
-    const stampCount = Math.max(total, used);
+    const total = card.visitsTotal || card.stampsTotal || 0;
+    const used = card.visitsUsed || 0;
+    if (total <= 0) return null;
     return (
       <div>
         <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 500, marginBottom: '8px' }}>{getStampLabel(card.category)}</div>
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-          {Array.from({ length: stampCount }, (_, i) => {
-            const isFilled = i < used;
+          {Array.from({ length: total }, (_, i) => {
+            const isUsed = i < used;
+            let bg, textColor, shadow, opacity;
+            if (card.category === 'coating' || card.category === 'ppf') {
+              // Used = greyed out, Remaining = blue gradient
+              bg = isUsed ? '#e2e8f0' : catMeta.gradient;
+              textColor = isUsed ? '#94a3b8' : 'white';
+              shadow = isUsed ? 'none' : '0 2px 6px rgba(0,0,0,0.12)';
+              opacity = isUsed ? 0.5 : 1;
+            } else {
+              bg = isUsed ? catMeta.gradient : '#f1f5f9';
+              textColor = isUsed ? 'white' : '#cbd5e1';
+              shadow = isUsed ? '0 2px 6px rgba(0,0,0,0.12)' : 'none';
+              opacity = 1;
+            }
             return (
               <div key={i} style={{
                 width: '36px', height: '36px', borderRadius: '10px',
-                background: isFilled ? catMeta.gradient : '#f1f5f9',
+                background: bg,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '16px', color: isFilled ? 'white' : '#cbd5e1',
-                boxShadow: isFilled ? '0 2px 6px rgba(0,0,0,0.12)' : 'none',
+                fontSize: '16px', color: textColor,
+                boxShadow: shadow, opacity,
                 transition: 'transform 0.2s',
               }}>
                 <i className={`bi ${catMeta.icon}`} style={{ fontSize: '16px' }}></i>
@@ -290,7 +302,14 @@ export default function Profile() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
             <div>
               <div style={{ fontSize: '12px', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>{getCounterLabel(card.category)}</div>
-              <div style={{ fontSize: '32px', fontWeight: 800, color: '#1e293b', lineHeight: 1 }}>{card.visitsUsed}</div>
+              <div style={{ fontSize: '32px', fontWeight: 800, color: '#1e293b', lineHeight: 1, display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                {card.visitsUsed}
+                {card.visitsTotal > 0 && (
+                  <span style={{ fontSize: '16px', fontWeight: 600, color: '#94a3b8' }}>
+                    {' '}out of {card.visitsTotal}
+                  </span>
+                )}
+              </div>
             </div>
             {card.rewardsUnused > 0 && (
               <div style={{ background: 'linear-gradient(135deg, #10b981, #34d399)', color: 'white', padding: '6px 14px', borderRadius: '30px', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -299,7 +318,7 @@ export default function Profile() {
             )}
           </div>
           {/* Stamp grid — show ALL stamps */}
-          {card.visitsUsed > 0 && renderStamps(card, catMeta)}
+          {card.visitsTotal > 0 && renderStamps(card, catMeta)}
           {/* Empty state — category-specific label */}
           {card.visitsUsed === 0 && (
             <div style={{ textAlign: 'center', padding: '16px', background: '#f8fafc', borderRadius: '12px', color: '#94a3b8', fontSize: '13px' }}>
@@ -406,7 +425,7 @@ export default function Profile() {
               )}
               <div>
                 <div style={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>{getCounterLabel(card.category)}</div>
-                <div style={{ fontSize: '14px', fontWeight: 600, color: '#1e293b' }}>{card.visitsUsed}</div>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: '#1e293b' }}>{card.visitsUsed}{card.visitsTotal > 0 ? ` out of ${card.visitsTotal}` : ''}</div>
               </div>
               <div>
                 <div style={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>Expiry</div>
