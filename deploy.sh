@@ -91,7 +91,7 @@ build_frontend() {
   local INDEX_HTML="${PROJECT_DIR}/frontend/dist/index.html"
   [ -f "$INDEX_HTML" ] || fail "index.html missing from frontend/dist/"
 
-  local JS_BUNDLE=$(grep -oE 'index-[a-zA-Z0-9]+\.js' "$INDEX_HTML" | head -1)
+  local JS_BUNDLE=$(grep -oE 'index-[a-zA-Z0-9_-]+\.js' "$INDEX_HTML" | head -1)
   [ -n "$JS_BUNDLE" ] || fail "No JS bundle found in index.html"
   [ -f "${PROJECT_DIR}/frontend/dist/assets/$JS_BUNDLE" ] || fail "$JS_BUNDLE missing from dist/assets/"
 
@@ -126,8 +126,8 @@ clean_orphan_assets() {
   local INDEX_FILE="${PROJECT_DIR}/frontend/dist/index.html"
   [ -f "$INDEX_FILE" ] || fail "dist/index.html missing for orphan cleanup"
 
-  local CURRENT_JS=$(grep -oE 'index-[a-zA-Z0-9]+\.js' "$INDEX_FILE" | head -1)
-  local CURRENT_CSS=$(grep -oE 'index-[a-zA-Z0-9]+\.css' "$INDEX_FILE" | head -1)
+  local CURRENT_JS=$(grep -oE 'index-[a-zA-Z0-9_-]+\.js' "$INDEX_FILE" | head -1)
+  local CURRENT_CSS=$(grep -oE 'index-[a-zA-Z0-9_-]+\.css' "$INDEX_FILE" | head -1)
 
   local SERVER_FILES=$(ssh_cmd "find $APP_DIR/frontend/dist/assets/ -maxdepth 1 -name 'index-*' -printf '%f\n' 2>/dev/null" || echo "")
 
@@ -218,6 +218,15 @@ server {
         alias /var/www/care/uploads/;
         expires 30d;
         add_header Cache-Control "public, immutable";
+    }
+
+    # API-served uploads — ^~ gives prefix priority over regex
+    location ^~ /api/uploads/ {
+        proxy_pass http://127.0.0.1:3004;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     location ~* \.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|webp)$ {
