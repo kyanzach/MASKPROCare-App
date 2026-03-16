@@ -82,6 +82,7 @@ export default function AdminPanel() {
         const { token, customer, impersonatedBy } = res.data.data;
         localStorage.setItem('impersonation', JSON.stringify({
           originalToken: localStorage.getItem('mpc_token'),
+          originalCustomer: localStorage.getItem('mpc_customer'),
           impersonatedBy,
           customerName: customer.full_name,
         }));
