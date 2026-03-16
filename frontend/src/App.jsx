@@ -9,6 +9,7 @@ import Profile from './pages/Profile';
 import Aftercare from './pages/Aftercare';
 import AdminPanel from './pages/AdminPanel';
 import AdminLogin from './pages/AdminLogin';
+import Shop from './pages/Shop';
 import './index.css';
 
 function ProtectedRoute({ children }) {
@@ -29,8 +30,9 @@ function AppRoutes() {
         <Route index element={<Dashboard />} />
         <Route path="vehicles" element={<Vehicles />} />
         <Route path="bookings" element={<Bookings />} />
-        <Route path="loyalty" element={<Navigate to="/profile" />} />
+        <Route path="loyalty" element={<Navigate to="/profile?tab=loyalty" />} />
         <Route path="profile" element={<Profile />} />
+        <Route path="shop" element={<Shop />} />
         <Route path="aftercare/:slug" element={<Aftercare />} />
         <Route path="admin" element={<AdminPanel />} />
       </Route>

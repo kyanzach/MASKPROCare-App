@@ -33,10 +33,16 @@ export function AuthProvider({ children }) {
     setCustomer(null);
   };
 
+  const updateCustomer = (data) => {
+    const updated = { ...customer, ...data };
+    localStorage.setItem('mpc_customer', JSON.stringify(updated));
+    setCustomer(updated);
+  };
+
   const isAuthenticated = !!token;
 
   return (
-    <AuthContext.Provider value={{ customer, token, loading, isAuthenticated, login, logout }}>
+    <AuthContext.Provider value={{ customer, token, loading, isAuthenticated, login, logout, updateCustomer }}>
       {children}
     </AuthContext.Provider>
   );

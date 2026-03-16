@@ -32,6 +32,8 @@ app.use(express.urlencoded({ extended: true }));
 
 // --- Static files (vehicle photos) ---
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
+// --- Static files (profile photos) ---
+app.use('/api/uploads/photos', express.static(path.join(__dirname, 'uploads', 'photos')));
 
 // --- Routes ---
 const authRoutes = require('./routes/auth');

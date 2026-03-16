@@ -7,9 +7,32 @@
 
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const sharp = require('sharp');
+const path = require('path');
+const fs = require('fs');
 
 const pool = require('../db/connection');
 const { authenticateToken } = require('../middleware/auth');
+
+// Ensure uploads directory exists
+const UPLOAD_DIR = path.join(__dirname, '..', 'uploads', 'photos');
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
+
+// Multer config: 5MB max, image/* only, temp storage
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'), false);
+    }
+  },
+});
 
 router.use(authenticateToken);
 
@@ -76,5 +99,64 @@ async function handleProfileUpdate(req, res) {
     return res.status(500).json({ success: false, data: null, message: 'Failed to update profile', errors: [] });
   }
 }
+
+// ─── POST /api/profile/photo ────────────────────────────────────────
+router.post('/photo', upload.single('photo'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, data: null, message: 'No image file provided', errors: [] });
+    }
+
+    const customerId = req.user.customer_id;
+    const filename = `profile_${customerId}_${Date.now()}.webp`;
+    const outputPath = path.join(UPLOAD_DIR, filename);
+
+    // Convert to 512x512 WebP at 80% quality
+    await sharp(req.file.buffer)
+      .resize(512, 512, { fit: 'cover', position: 'centre' })
+      .webp({ quality: 80 })
+      .toFile(outputPath);
+
+    // Delete old photo if exists
+    const [existing] = await pool.query("SELECT profile_photo FROM customers WHERE id = ?", [customerId]);
+    if (existing[0]?.profile_photo) {
+      const oldFile = path.join(UPLOAD_DIR, existing[0].profile_photo);
+      if (fs.existsSync(oldFile)) fs.unlinkSync(oldFile);
+    }
+
+    // Update DB
+    await pool.query("UPDATE customers SET profile_photo = ? WHERE id = ?", [filename, customerId]);
+
+    return res.json({
+      success: true,
+      data: { profile_photo: filename },
+      message: 'Profile photo updated',
+      errors: [],
+    });
+  } catch (err) {
+    console.error('Profile photo upload error:', err);
+    return res.status(500).json({ success: false, data: null, message: 'Failed to upload photo', errors: [] });
+  }
+});
+
+// ─── DELETE /api/profile/photo ──────────────────────────────────────
+router.delete('/photo', async (req, res) => {
+  try {
+    const customerId = req.user.customer_id;
+    const [existing] = await pool.query("SELECT profile_photo FROM customers WHERE id = ?", [customerId]);
+
+    if (existing[0]?.profile_photo) {
+      const filePath = path.join(UPLOAD_DIR, existing[0].profile_photo);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    }
+
+    await pool.query("UPDATE customers SET profile_photo = NULL WHERE id = ?", [customerId]);
+
+    return res.json({ success: true, data: null, message: 'Profile photo removed', errors: [] });
+  } catch (err) {
+    console.error('Profile photo delete error:', err);
+    return res.status(500).json({ success: false, data: null, message: 'Failed to remove photo', errors: [] });
+  }
+});
 
 module.exports = router;

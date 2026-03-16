@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
 
@@ -14,12 +14,63 @@ const CATEGORY_META = {
 };
 const CATEGORY_ORDER = ['coating', 'tint', 'ppf', 'wash', 'gift', 'other'];
 
+// ── PDF417 Barcode Component ────────────────────────────────
+function PDF417Barcode({ text, fullWidth = false }) {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    if (!canvasRef.current || !text) return;
+    let cancelled = false;
+    import('bwip-js').then((bwipjs) => {
+      if (cancelled || !canvasRef.current) return;
+      try {
+        bwipjs.toCanvas(canvasRef.current, {
+          bcid: 'pdf417',
+          text: String(text),
+          scale: fullWidth ? 2 : 1,
+          height: fullWidth ? 12 : 8,
+          includetext: false,
+        });
+      } catch (err) {
+        console.error('PDF417 render error:', err);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [text, fullWidth]);
+  return <canvas ref={canvasRef} style={{ width: fullWidth ? '100%' : 'auto', maxWidth: '100%', height: 'auto', display: 'block', margin: '0 auto' }} />;
+}
+
+// ── Category-specific label helpers ──────────────────────────
+function getCounterLabel(category) {
+  switch (category) {
+    case 'coating': return 'Credits Used';
+    case 'tint':    return 'Earned Points';
+    default:        return 'Visits Used';
+  }
+}
+function getStampLabel(category) {
+  switch (category) {
+    case 'coating': return 'Remaining Credits';
+    default:        return 'Stamp Progress';
+  }
+}
+function getEmptyLabel(category) {
+  switch (category) {
+    case 'tint': return 'No points recorded yet';
+    default:     return 'No visits recorded yet';
+  }
+}
+
 export default function Profile() {
-  const { customer: authCustomer, logout } = useAuth();
+  const { customer: authCustomer, logout, updateCustomer } = useAuth();
   const navigate = useNavigate();
 
-  // ── Tab state ──
-  const [activeTab, setActiveTab] = useState('profile');
+  const [searchParams] = useSearchParams();
+
+  // ── Tab state (supports ?tab=loyalty deep-link) ──
+  const [activeTab, setActiveTab] = useState(() => {
+    const tabParam = searchParams.get('tab');
+    return tabParam === 'loyalty' ? 'loyalty' : 'profile';
+  });
 
   // ── Profile state ──
   const [profile, setProfile] = useState(null);
@@ -36,6 +87,56 @@ export default function Profile() {
   const [loyaltyGrouped, setLoyaltyGrouped] = useState({});
   const [loyaltyLoading, setLoyaltyLoading] = useState(false);
   const [loyaltyLoaded, setLoyaltyLoaded] = useState(false);
+  const [selectedCard, setSelectedCard] = useState(null);
+
+  // ── Photo upload state ──
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const photoInputRef = useRef(null);
+
+  const getPhotoUrl = (filename) => {
+    if (!filename) return null;
+    const base = import.meta.env.VITE_API_URL || '';
+    return `${base}/api/uploads/photos/${filename}`;
+  };
+
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoUploading(true);
+    setError('');
+    try {
+      const formData = new FormData();
+      formData.append('photo', file);
+      const res = await api.post('/profile/photo', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      if (res.data.success) {
+        const newPhoto = res.data.data.profile_photo;
+        setProfile(prev => ({ ...prev, profile_photo: newPhoto }));
+        updateCustomer({ profile_photo: newPhoto });
+        setSuccess('Profile photo updated!');
+        setTimeout(() => setSuccess(''), 3000);
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to upload photo');
+    } finally {
+      setPhotoUploading(false);
+      if (photoInputRef.current) photoInputRef.current.value = '';
+    }
+  };
+
+  const handlePhotoRemove = async () => {
+    setPhotoUploading(true);
+    try {
+      await api.delete('/profile/photo');
+      setProfile(prev => ({ ...prev, profile_photo: null }));
+      updateCustomer({ profile_photo: null });
+      setSuccess('Profile photo removed');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError('Failed to remove photo');
+    } finally { setPhotoUploading(false); }
+  };
 
   useEffect(() => { loadProfile(); }, []);
 
@@ -122,6 +223,38 @@ export default function Profile() {
   };
   const isExpired = (dateStr) => dateStr ? new Date(dateStr) < new Date() : false;
 
+  // ── Loyalty: render stamps grid ──
+  // For ALL categories: filled stamps (i < visitsUsed) = colored, empty = grey
+  // No special reversal for coating — visitsUsed = credits earned, all shown as blue
+  const renderStamps = (card, catMeta) => {
+    const total = card.stampsTotal || card.visitsUsed;
+    const used = card.visitsUsed;
+    if (total <= 0 && used <= 0) return null;
+    const stampCount = Math.max(total, used);
+    return (
+      <div>
+        <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 500, marginBottom: '8px' }}>{getStampLabel(card.category)}</div>
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          {Array.from({ length: stampCount }, (_, i) => {
+            const isFilled = i < used;
+            return (
+              <div key={i} style={{
+                width: '36px', height: '36px', borderRadius: '10px',
+                background: isFilled ? catMeta.gradient : '#f1f5f9',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '16px', color: isFilled ? 'white' : '#cbd5e1',
+                boxShadow: isFilled ? '0 2px 6px rgba(0,0,0,0.12)' : 'none',
+                transition: 'transform 0.2s',
+              }}>
+                <i className={`bi ${catMeta.icon}`} style={{ fontSize: '16px' }}></i>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   // ── Loyalty: render a single card ──
   const renderLoyaltyCard = (card) => {
     const expired = isExpired(card.expiresAt);
@@ -132,7 +265,8 @@ export default function Profile() {
         boxShadow: '0 4px 20px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)',
         border: expired ? '2px solid #fca5a5' : '1px solid rgba(59,130,246,0.08)',
         opacity: expired ? 0.7 : 1, transition: 'all 0.3s ease',
-      }}>
+        cursor: 'pointer',
+      }} onClick={() => setSelectedCard(card)}>
         {/* Card Header */}
         <div style={{ background: catMeta.gradient, padding: '20px 24px 16px', position: 'relative', overflow: 'hidden' }}>
           <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '120px', height: '120px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)' }} />
@@ -152,9 +286,10 @@ export default function Profile() {
         </div>
         {/* Card Body */}
         <div style={{ padding: '20px 24px 24px' }}>
+          {/* Counter — category-specific label */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
             <div>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>Visits Used</div>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>{getCounterLabel(card.category)}</div>
               <div style={{ fontSize: '32px', fontWeight: 800, color: '#1e293b', lineHeight: 1 }}>{card.visitsUsed}</div>
             </div>
             {card.rewardsUnused > 0 && (
@@ -163,40 +298,188 @@ export default function Profile() {
               </div>
             )}
           </div>
-          {/* Stamp Row */}
-          {card.visitsUsed > 0 && (
-            <div>
-              <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 500, marginBottom: '8px' }}>Stamp Progress</div>
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                {Array.from({ length: Math.min(card.visitsUsed, 20) }, (_, i) => (
-                  <div key={i} style={{ width: '36px', height: '36px', borderRadius: '10px', background: catMeta.gradient, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', color: 'white', boxShadow: '0 2px 6px rgba(0,0,0,0.12)' }}>
-                    <i className={`bi ${catMeta.icon}`} style={{ fontSize: '16px' }}></i>
-                  </div>
-                ))}
-                {card.visitsUsed > 20 && (
-                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, color: '#64748b' }}>+{card.visitsUsed - 20}</div>
-                )}
-              </div>
-            </div>
-          )}
+          {/* Stamp grid — show ALL stamps */}
+          {card.visitsUsed > 0 && renderStamps(card, catMeta)}
+          {/* Empty state — category-specific label */}
           {card.visitsUsed === 0 && (
             <div style={{ textAlign: 'center', padding: '16px', background: '#f8fafc', borderRadius: '12px', color: '#94a3b8', fontSize: '13px' }}>
               <i className="bi bi-ticket-perforated" style={{ fontSize: '24px', display: 'block', marginBottom: '6px' }}></i>
-              No visits recorded yet
+              {getEmptyLabel(card.category)}
             </div>
           )}
-          {card.vehicle && (
-            <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #f1f5f9', fontSize: '12px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <i className="bi bi-car-front" style={{ color: '#94a3b8' }}></i> {card.vehicle}
+          {/* Footer: Vehicle left, Branch right */}
+          <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #f1f5f9' }}>
+            {(card.vehicle || card.branch) && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', marginBottom: '12px' }}>
+                {card.vehicle && (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <i className="bi bi-car-front" style={{ color: '#94a3b8' }}></i> {card.vehicle}
+                  </span>
+                )}
+                {card.branch && (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: 'auto' }}>
+                    <i className="bi bi-geo-alt" style={{ color: '#94a3b8' }}></i> {card.branch}
+                  </span>
+                )}
+              </div>
+            )}
+            {/* Full-width barcode + centered card ID */}
+            <div style={{ textAlign: 'center' }}>
+              <PDF417Barcode text={String(card.id)} fullWidth />
+              <div style={{ fontSize: '11px', color: '#94a3b8', fontFamily: 'monospace', marginTop: '6px' }}>Card #{card.id}</div>
             </div>
-          )}
-          {card.branch && (
-            <div style={{ marginTop: card.vehicle ? '4px' : '16px', paddingTop: card.vehicle ? '0' : '12px', borderTop: card.vehicle ? 'none' : '1px solid #f1f5f9', fontSize: '12px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <i className="bi bi-geo-alt" style={{ color: '#94a3b8' }}></i> {card.branch}
+            {/* Tap hint */}
+            <div style={{ textAlign: 'center', marginTop: '8px', fontSize: '11px', color: '#cbd5e1' }}>
+              <i className="bi bi-hand-index" style={{ marginRight: '4px' }}></i> Tap to view card details
             </div>
-          )}
-          <div style={{ marginTop: '12px', fontSize: '11px', color: '#cbd5e1', fontFamily: 'monospace' }}>Card #{card.id}</div>
+          </div>
         </div>
+      </div>
+    );
+  };
+
+  // ── Card Detail Modal (Back of Card) ──
+  const renderCardDetailModal = () => {
+    if (!selectedCard) return null;
+    const card = selectedCard;
+    const catMeta = CATEGORY_META[card.category] || CATEGORY_META.other;
+    return (
+      <div
+        style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 9999, padding: '20px',
+        }}
+        onClick={() => setSelectedCard(null)}
+      >
+        <div
+          style={{
+            background: 'white', borderRadius: '24px', maxWidth: '480px', width: '100%',
+            maxHeight: '90vh', overflowY: 'auto',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.3)',
+            animation: 'modalSlideUp 0.3s ease',
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Modal Header */}
+          <div style={{ background: catMeta.gradient, padding: '24px 28px 20px', borderRadius: '24px 24px 0 0', position: 'relative', overflow: 'hidden' }}>
+            <div style={{ position: 'absolute', top: '-30px', right: '-30px', width: '140px', height: '140px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)' }} />
+            <button
+              onClick={() => setSelectedCard(null)}
+              style={{ position: 'absolute', top: '16px', right: '16px', background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '16px', zIndex: 2 }}
+            >
+              <i className="bi bi-x-lg"></i>
+            </button>
+            <div style={{ position: 'relative', zIndex: 1 }}>
+              <div style={{ fontSize: '14px', fontWeight: 700, color: 'rgba(255,255,255,0.85)', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '4px' }}>Warranty, Maintenance & Rewards Card</div>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: 'white' }}>{card.service} — {card.tier}</div>
+              {card.branch && (
+                <div style={{ marginTop: '8px', fontSize: '13px', color: 'rgba(255,255,255,0.75)', fontWeight: 500 }}>
+                  <i className="bi bi-geo-alt-fill" style={{ marginRight: '4px' }}></i>
+                  MaskPro {card.branch} Branch
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Big Barcode */}
+          <div style={{ padding: '24px 28px 16px', borderBottom: '1px dashed #e2e8f0' }}>
+            <PDF417Barcode text={String(card.id)} fullWidth />
+          </div>
+
+          {/* Card Details */}
+          <div style={{ padding: '20px 28px' }}>
+            {/* Info Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+              {card.customerName && (
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>Customer</div>
+                  <div style={{ fontSize: '14px', fontWeight: 600, color: '#1e293b' }}>{card.customerName}</div>
+                </div>
+              )}
+              {card.vehicle && (
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>Vehicle</div>
+                  <div style={{ fontSize: '14px', fontWeight: 600, color: '#1e293b' }}>{card.vehicle}</div>
+                </div>
+              )}
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>{getCounterLabel(card.category)}</div>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: '#1e293b' }}>{card.visitsUsed}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>Expiry</div>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: card.expiresAt && isExpired(card.expiresAt) ? '#ef4444' : '#1e293b' }}>{formatDate(card.expiresAt)}</div>
+              </div>
+            </div>
+
+            {/* Terms of Use */}
+            <div style={{ background: '#f8fafc', borderRadius: '14px', padding: '16px 20px', marginBottom: '20px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b', marginBottom: '10px' }}>Terms of Use</div>
+              <ol style={{ margin: 0, paddingLeft: '18px', fontSize: '11.5px', color: '#64748b', lineHeight: 1.7 }}>
+                <li>This card contains free maintenance stamps/visits that comes with your package. One stamp can be claimed every six months until your warranty ends.</li>
+                <li>Earn (25) points every time you redeem a stamp/visit. Once your points reach (100), you qualify for an extra free (1) stamp/visit.</li>
+                <li>Cards, stamps/visits, and points cannot be traded, returned, replaced, or converted into cash.</li>
+                <li>Each card is issued for a specific customer and their vehicle and cannot be transferred or combined with other cards.</li>
+                <li>MaskPro holds the right to deny services if deemed necessary.</li>
+              </ol>
+            </div>
+
+            {/* QR Code + Install Link */}
+            {(card.qrLink || card.installLink || card.shortLink) && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '20px', padding: '16px', background: '#f8fafc', borderRadius: '14px' }}>
+                {card.qrLink && (
+                  <img src={card.qrLink} alt="QR Code" style={{ width: '80px', height: '80px', borderRadius: '8px', border: '1px solid #e2e8f0' }} />
+                )}
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '4px' }}>To install wallet</div>
+                  {card.installLink && (
+                    <a href={card.installLink} target="_blank" rel="noopener noreferrer" style={{ fontSize: '12px', color: '#3b82f6', wordBreak: 'break-all', textDecoration: 'none' }}>
+                      {card.installLink}
+                    </a>
+                  )}
+                  {card.shortLink && (
+                    <div style={{ marginTop: '4px' }}>
+                      <span style={{ fontSize: '11px', color: '#94a3b8' }}>or visit: </span>
+                      <a href={card.shortLink} target="_blank" rel="noopener noreferrer" style={{ fontSize: '12px', color: '#3b82f6', textDecoration: 'none' }}>
+                        {card.shortLink}
+                      </a>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* VIP Footer */}
+          <div style={{
+            background: '#f1f5f9', borderRadius: '0 0 24px 24px',
+            padding: '16px 28px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            borderTop: '1px solid #e2e8f0',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <i className="bi bi-broadcast" style={{ fontSize: '20px', color: '#3b82f6' }}></i>
+              <div>
+                <div style={{ fontSize: '10px', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>VIP ID No.</div>
+                <div style={{ fontSize: '15px', fontWeight: 800, color: '#1e293b', fontFamily: 'monospace' }}>{card.id}</div>
+              </div>
+            </div>
+            <div style={{ textAlign: 'right', fontSize: '11px', color: '#94a3b8', lineHeight: 1.4 }}>
+              <div>(+63) 1800-155-000-37</div>
+              <div>Technical Support</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Modal animation */}
+        <style>{`
+          @keyframes modalSlideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+        `}</style>
       </div>
     );
   };
@@ -269,7 +552,58 @@ export default function Profile() {
             {/* Avatar Card */}
             <div className="card-modern" style={{ marginBottom: '20px' }}>
               <div className="card-modern-body" style={{ textAlign: 'center' }}>
-                <div className="profile-avatar-lg">{initials}</div>
+                {/* Hidden file input */}
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={handlePhotoUpload}
+                />
+                {/* Clickable avatar */}
+                <div
+                  style={{ position: 'relative', display: 'inline-block', cursor: 'pointer', marginBottom: '4px' }}
+                  onClick={() => !photoUploading && photoInputRef.current?.click()}
+                >
+                  {profile?.profile_photo ? (
+                    <img
+                      src={getPhotoUrl(profile.profile_photo)}
+                      alt="Profile"
+                      style={{
+                        width: '90px', height: '90px', borderRadius: '50%',
+                        objectFit: 'cover', border: '3px solid #e2e8f0',
+                      }}
+                    />
+                  ) : (
+                    <div className="profile-avatar-lg">{initials}</div>
+                  )}
+                  {/* Camera overlay */}
+                  <div style={{
+                    position: 'absolute', bottom: '0', right: '0',
+                    width: '28px', height: '28px', borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    border: '2px solid white', boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+                  }}>
+                    {photoUploading ? (
+                      <div className="spinner" style={{ width: '14px', height: '14px', borderWidth: '2px' }}></div>
+                    ) : (
+                      <i className="bi bi-camera-fill" style={{ color: 'white', fontSize: '12px' }}></i>
+                    )}
+                  </div>
+                </div>
+                {profile?.profile_photo && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handlePhotoRemove(); }}
+                    style={{
+                      background: 'none', border: 'none', color: '#ef4444',
+                      fontSize: '11px', cursor: 'pointer', marginBottom: '8px',
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    <i className="bi bi-trash" style={{ marginRight: '4px' }}></i>Remove photo
+                  </button>
+                )}
                 <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#1f2937', marginBottom: '4px' }}>{profile?.full_name}</h2>
                 <p style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '20px' }}>Customer</p>
                 <div className="profile-stat-row">
@@ -510,6 +844,9 @@ export default function Profile() {
           `}</style>
         </div>
       )}
+
+      {/* Card Detail Modal */}
+      {renderCardDetailModal()}
     </div>
   );
 }

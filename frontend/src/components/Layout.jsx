@@ -3,7 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
 
-const APP_VERSION = '1.5.0';
+const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0';
 
 // Aftercare service links config
 const AFTERCARE_ITEMS = [
@@ -64,6 +64,13 @@ export default function Layout() {
     : 'U';
 
   const firstName = customer?.first_name || customer?.full_name?.split(' ')[0] || 'User';
+
+  const getPhotoUrl = (filename) => {
+    if (!filename) return null;
+    const base = import.meta.env.VITE_API_URL || '';
+    return `${base}/api/uploads/photos/${filename}`;
+  };
+  const profilePhoto = getPhotoUrl(customer?.profile_photo);
 
   // Poll notification count every 60s
   const fetchNotifCount = useCallback(async () => {
@@ -148,6 +155,14 @@ export default function Layout() {
     { path: '/', icon: 'bi-grid', label: 'Dashboard', exact: true },
     { path: '/bookings', icon: 'bi-calendar-check', label: 'My Bookings' },
     { path: '/vehicles', icon: 'bi-car-front', label: 'My Vehicles' },
+    { path: '/profile?tab=loyalty', icon: 'bi-credit-card-2-front', label: 'My Loyalty Cards' },
+  ];
+
+  const mobileNavItems = [
+    { path: '/', icon: 'bi-grid', label: 'Dashboard', exact: true },
+    { path: '/bookings', icon: 'bi-calendar-check', label: 'My Bookings' },
+    { path: '/vehicles', icon: 'bi-car-front', label: 'My Vehicles' },
+    { path: '/shop', icon: 'bi-bag', label: 'Shop' },
     { path: '/profile', icon: 'bi-person', label: 'Profile' },
   ];
 
@@ -311,13 +326,18 @@ export default function Layout() {
           ))}
 
           {/* Aftercare Accordion */}
-          <div
-            className="nav-heading"
-            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', userSelect: 'none' }}
-            onClick={() => setAftercareOpen(!aftercareOpen)}
-          >
-            <span>Aftercare</span>
-            <i className={`bi bi-chevron-${aftercareOpen ? 'up' : 'down'}`} style={{ fontSize: '12px', transition: 'transform 0.2s' }}></i>
+          <div className="nav-item">
+            <button
+              className={`nav-link${aftercareOpen ? ' active' : ''}`}
+              onClick={() => setAftercareOpen(!aftercareOpen)}
+              style={{ width: '100%', border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <i className="bi bi-heart-pulse"></i>
+                <span>Aftercare</span>
+              </span>
+              <i className={`bi bi-chevron-${aftercareOpen ? 'up' : 'down'}`} style={{ fontSize: '12px', transition: 'transform 0.2s' }}></i>
+            </button>
           </div>
           {aftercareOpen && AFTERCARE_ITEMS.map(item => (
             <div className="nav-item" key={item.slug}>
@@ -325,13 +345,24 @@ export default function Layout() {
                 to={`/aftercare/${item.slug}`}
                 className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
                 onClick={() => setSidebarOpen(false)}
-                style={{ fontSize: '13px', paddingLeft: '28px' }}
+                style={{ fontSize: '13px', paddingLeft: '48px' }}
               >
                 <i className={`bi ${item.icon}`} style={{ fontSize: '12px' }}></i>
                 <span>{item.label}</span>
               </NavLink>
             </div>
           ))}
+
+          <div className="nav-item">
+            <NavLink
+              to="/shop"
+              className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
+              onClick={() => setSidebarOpen(false)}
+            >
+              <i className="bi bi-bag"></i>
+              <span>Shop</span>
+            </NavLink>
+          </div>
 
           <div className="nav-heading">Account</div>
           {isAdmin && (
@@ -367,7 +398,11 @@ export default function Layout() {
         {/* Sidebar Footer - User */}
         <div className="sidebar-footer">
           <div className="sidebar-user">
-            <div className="sidebar-avatar">{initials}</div>
+            {profilePhoto ? (
+              <img src={profilePhoto} alt="" style={{ width: '38px', height: '38px', borderRadius: '50%', objectFit: 'cover' }} />
+            ) : (
+              <div className="sidebar-avatar">{initials}</div>
+            )}
             <div className="sidebar-user-info">
               <div className="sidebar-user-name">{customer?.full_name || 'User'}</div>
               <div className="sidebar-user-role">{isAdmin ? 'Admin' : 'Customer'}</div>
@@ -392,10 +427,14 @@ export default function Layout() {
           <div className="top-header-right" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             {/* Bell in mobile header */}
             <BellIcon />
-            <div className="sidebar-avatar" style={{ width: '36px', height: '36px', fontSize: '14px', cursor: 'pointer' }}
-                 onClick={() => navigate('/profile')}>
-              {initials}
-            </div>
+            {profilePhoto ? (
+              <img src={profilePhoto} alt="" onClick={() => navigate('/profile')} style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', cursor: 'pointer' }} />
+            ) : (
+              <div className="sidebar-avatar" style={{ width: '36px', height: '36px', fontSize: '14px', cursor: 'pointer' }}
+                   onClick={() => navigate('/profile')}>
+                {initials}
+              </div>
+            )}
           </div>
         </div>
 
@@ -431,7 +470,7 @@ export default function Layout() {
       {/* Mobile Bottom Nav */}
       <nav className="mobile-nav">
         <div className="mobile-nav-items">
-          {navItems.map((item) => (
+          {mobileNavItems.map((item) => (
             <NavLink
               key={item.path}
               to={item.path}

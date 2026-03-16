@@ -1,5 +1,21 @@
 # Changelog
 
+## [v1.7.0] — 2026-03-16
+### Added
+- **My Loyalty Cards sidebar shortcut** — deep-links to Profile → Loyalty Cards tab via `?tab=loyalty` URL param
+- **Shop page (Coming Soon)** — animated hero with VIP excitement messaging, product category teasers. Added to sidebar and mobile bottom nav
+- **Profile photo upload** — clickable avatar with camera overlay, accepts any image format (JPEG, PNG, HEIC, WebP), server-side conversion to 512×512 WebP via sharp. Photo syncs to sidebar + mobile header avatar instantly via AuthContext
+- **Profile photo remove** — red "Remove photo" link below avatar when photo is set
+
+### Fixed
+- **Version display permanently fixed** — sidebar badge was hardcoded `v1.5.0` in Layout.jsx, never synced with package.json. Now injected at Vite build time via `define: { __APP_VERSION__ }` from package.json — never stale again
+- **Aftercare content accuracy** — NanoFix 6-month maintenance now clarifies detailing fee schedule (Small ₱1,500–XXLarge ₱3,500) per maskpro.ph/mfmtc terms. Tint warranty lists specific product tiers (Hogo 12yr, Shirudo 21yr, Shirudo+/Mamori lifetime)
+
+### Changed
+- **Sidebar menu reordered** — Profile removed from nav, replaced with My Loyalty Cards. Order: Dashboard → Bookings → Vehicles → Loyalty Cards → Aftercare → Shop → Account
+- **Aftercare sidebar header** — changed from ALL CAPS section divider to regular nav item with heart-pulse icon
+- **Mobile bottom nav** — added Shop tab (between My Vehicles and Profile)
+
 ## [v1.6.1] — 2026-03-14
 ### Fixed
 - **Admin auth architecture** — split `/admin` into `/admin-login` (standalone login form) and `/admin` (inside Layout with sidebar). Root cause: admin panel was outside `<Layout />`, so no sidebar, no navigation, Home redirected to `/login`
