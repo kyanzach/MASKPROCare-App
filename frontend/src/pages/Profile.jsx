@@ -595,7 +595,7 @@ export default function Profile() {
                 />
                 {/* Clickable avatar */}
                 <div
-                  style={{ position: 'relative', display: 'inline-block', cursor: 'pointer', marginBottom: '4px' }}
+                  style={{ position: 'relative', display: 'inline-block', cursor: 'pointer', marginBottom: '12px' }}
                   onClick={() => !photoUploading && photoInputRef.current?.click()}
                 >
                   {profile?.profile_photo ? (
@@ -610,7 +610,7 @@ export default function Profile() {
                   ) : (
                     <div className="profile-avatar-lg">{initials}</div>
                   )}
-                  {/* Camera overlay */}
+                  {/* Camera overlay — bottom-right */}
                   <div style={{
                     position: 'absolute', bottom: '0', right: '0',
                     width: '28px', height: '28px', borderRadius: '50%',
@@ -624,19 +624,25 @@ export default function Profile() {
                       <i className="bi bi-camera-fill" style={{ color: 'white', fontSize: '12px' }}></i>
                     )}
                   </div>
+                  {/* Remove badge — top-right, only when photo exists */}
+                  {profile?.profile_photo && (
+                    <div
+                      onClick={(e) => { e.stopPropagation(); handlePhotoRemove(); }}
+                      title="Remove photo"
+                      style={{
+                        position: 'absolute', top: '-2px', right: '-2px',
+                        width: '22px', height: '22px', borderRadius: '50%',
+                        background: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        border: '2px solid white', boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+                        cursor: 'pointer', transition: 'transform 0.15s',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.15)'}
+                      onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                    >
+                      <i className="bi bi-x" style={{ color: 'white', fontSize: '13px', lineHeight: 1 }}></i>
+                    </div>
+                  )}
                 </div>
-                {profile?.profile_photo && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handlePhotoRemove(); }}
-                    style={{
-                      background: 'none', border: 'none', color: '#ef4444',
-                      fontSize: '11px', cursor: 'pointer', marginBottom: '8px',
-                      fontFamily: 'inherit',
-                    }}
-                  >
-                    <i className="bi bi-trash" style={{ marginRight: '4px' }}></i>Remove photo
-                  </button>
-                )}
                 <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#1f2937', marginBottom: '4px' }}>{profile?.full_name}</h2>
                 <p style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '20px' }}>Customer</p>
                 <div className="profile-stat-row">
