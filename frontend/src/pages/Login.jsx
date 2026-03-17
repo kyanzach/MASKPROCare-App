@@ -20,6 +20,7 @@ export default function Login() {
 
   const otpRefs = useRef([]);
   const mobileInputRef = useRef(null);
+  const secretTapRef = useRef({ count: 0, timer: null });
 
   // URL parameter pre-fill (admin/sales UX enhancement)
   useEffect(() => {
@@ -159,7 +160,7 @@ export default function Login() {
             <img src="/maskpro_logo.png" alt="MaskPro" style={{ width: '64px', height: '64px', borderRadius: '14px' }} />
           </div>
           <h1 className="login-title">
-            {step === 'mobile' ? 'Welcome Back' : 'Verify OTP'}
+            {step === 'mobile' ? 'MASKPRO Care' : 'Verify OTP'}
           </h1>
           <p className="login-subtitle">
             {step === 'mobile'
@@ -284,7 +285,13 @@ export default function Login() {
               <a className="login-footer-link">Terms of Service</a> and{' '}
               <a className="login-footer-link">Privacy Policy</a>
             </p>
-            <div className="login-security-badge">
+            <div className="login-security-badge" onClick={() => {
+              const s = secretTapRef.current;
+              clearTimeout(s.timer);
+              s.count++;
+              if (s.count >= 5) { s.count = 0; navigate('/admin-login'); return; }
+              s.timer = setTimeout(() => { s.count = 0; }, 2000);
+            }} style={{ cursor: 'default' }}>
               <i className="fas fa-shield-alt"></i>
               <span>{step === 'mobile' ? 'Secured by MASKPRO' : 'Secured with 256-bit SSL encryption'}</span>
               <i className="fas fa-lock"></i>
