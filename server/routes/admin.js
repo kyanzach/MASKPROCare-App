@@ -130,7 +130,7 @@ router.post('/impersonate', authenticateToken, requireAdmin, async (req, res) =>
 
     // Get the target customer
     const [customers] = await pool.query(
-      'SELECT id, full_name, mobile_number, branch_id FROM customers WHERE id = ?',
+      'SELECT id, full_name, mobile_number, branch_id, profile_photo FROM customers WHERE id = ?',
       [customer_id]
     );
 
@@ -164,6 +164,7 @@ router.post('/impersonate', authenticateToken, requireAdmin, async (req, res) =>
           full_name: target.full_name,
           mobile_number: target.mobile_number,
           branch_id: target.branch_id,
+          profile_photo: target.profile_photo || null,
         },
         impersonatedBy: req.adminUser.full_name,
       },
@@ -209,7 +210,7 @@ router.post('/login', async (req, res) => {
     let customerMobile = adminUser.mobile_number;
 
     const [byName] = await pool.query(
-      "SELECT id, mobile_number FROM customers WHERE LOWER(TRIM(full_name)) = LOWER(TRIM(?)) LIMIT 1",
+      "SELECT id, mobile_number, profile_photo FROM customers WHERE LOWER(TRIM(full_name)) = LOWER(TRIM(?)) LIMIT 1",
       [adminUser.full_name]
     );
     if (byName.length > 0) {
@@ -242,6 +243,7 @@ router.post('/login', async (req, res) => {
           full_name: adminUser.full_name,
           mobile_number: customerMobile,
           branch_id: 1,
+          profile_photo: (byName.length > 0 ? byName[0].profile_photo : null) || null,
         },
         isAdmin: true,
         adminName: adminUser.full_name,
