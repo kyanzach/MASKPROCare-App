@@ -34,7 +34,7 @@ async function isAdminUser(customerId, mobile) {
     const [byName] = await pool.query(
       `SELECT u.id, u.full_name, u.access_level
        FROM users u
-       JOIN customers c ON LOWER(TRIM(u.full_name)) = LOWER(TRIM(c.full_name))
+       JOIN customers c ON TRIM(u.full_name) = TRIM(c.full_name)
        WHERE c.id = ? AND u.access_level = 'admin'
        LIMIT 1`,
       [customerId]
@@ -199,7 +199,7 @@ router.post('/login', async (req, res) => {
     const adminUser = users[0];
 
     // Verify bcrypt password (PHP $2y$ is compatible with bcryptjs $2a$)
-    const passwordHash = adminUser.password.replace(/^\$2y\$/, '$2a$');
+    const passwordHash = String(adminUser.password).replace(/^\$2y\$/, '$2a$');
     const isValid = await bcrypt.compare(password, passwordHash);
     if (!isValid) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
@@ -207,11 +207,11 @@ router.post('/login', async (req, res) => {
 
     // Find a matching customer record (by full_name or mobile) — needed for JWT sub
     let customerId = null;
-    let customerMobile = adminUser.mobile_number;
+    let customerMobile = String(adminUser.mobile_number || '');
 
     const [byName] = await pool.query(
-      "SELECT id, mobile_number, profile_photo FROM customers WHERE LOWER(TRIM(full_name)) = LOWER(TRIM(?)) LIMIT 1",
-      [adminUser.full_name]
+      "SELECT id, mobile_number, profile_photo FROM customers WHERE TRIM(full_name) = TRIM(?) LIMIT 1",
+      [String(adminUser.full_name)]
     );
     if (byName.length > 0) {
       customerId = byName[0].id;
@@ -232,7 +232,8 @@ router.post('/login', async (req, res) => {
       { expiresIn: '24h' }
     );
 
-    console.log(`[Admin] Admin login: ${adminUser.full_name} (user ID: ${adminUser.id})`);
+    const adminFullName = String(adminUser.full_name);
+    console.log(`[Admin] Admin login: ${adminFullName} (user ID: ${adminUser.id}, customer_id: ${customerId})`);
 
     return res.json({
       success: true,
@@ -240,15 +241,15 @@ router.post('/login', async (req, res) => {
         token,
         customer: {
           id: customerId || 0,
-          full_name: adminUser.full_name,
+          full_name: adminFullName,
           mobile_number: customerMobile,
           branch_id: 1,
-          profile_photo: (byName.length > 0 ? byName[0].profile_photo : null) || null,
+          profile_photo: (byName.length > 0 ? String(byName[0].profile_photo || '') : null) || null,
         },
         isAdmin: true,
-        adminName: adminUser.full_name,
+        adminName: adminFullName,
       },
-      message: `Welcome, ${adminUser.full_name}!`,
+      message: `Welcome, ${adminFullName}!`,
     });
   } catch (err) {
     console.error('[Admin] Login error:', err.message);

@@ -1,5 +1,19 @@
 # Changelog
 
+## [v1.8.0] — 2026-03-18
+### Fixed
+- **mysql2 UTF-8 Buffer fix** — after Unify's `utf8mb4_general_ci` migration, mysql2 returned all text columns as Buffers. Added `typeCast` function in `connection.js` to auto-convert Buffers to UTF-8 strings at the driver level. Fixes all routes simultaneously
+- **Admin login customer matching** — `LOWER(TRIM())` SQL comparisons break under mysql2 + utf8mb4_general_ci. Removed redundant `LOWER()` since utf8mb4_general_ci is already case-insensitive. Fixed both admin login and impersonate queries
+- **Admin login Buffer safety** — wrapped `password`, `full_name`, `mobile_number` from `users` table in `String()` as extra defense
+- **Profile stats display** — Profile.jsx was reading `data.total_vehicles` but dashboard API nests stats under `data.stats.total_vehicles`. Fixed path mapping
+
+### Added
+- **Loyalty cards backfill script** (`server/scripts/backfill-loyalty.js`) — server-side script to backfill missing loyalty cards from BoomerangMe API into `loyalty_cards` table. Features accent normalization, fuzzy name matching (first+last, without middle initials), row-level dedup checks (SELECT before INSERT), and `--dry-run`/`--execute` modes
+- **Backfill executed** — inserted 1,614 missing loyalty cards from BoomerangMe. Total loyalty_cards went from 4,999 → 6,613
+
+### Removed
+- Cleaned 2 empty-name customer records (IDs 2993, 5477) from `customers` table
+
 ## [v1.7.1] — 2026-03-16
 ### Added
 - **NanoFix Stamp Audit Cron** — daily cron job (1:00 AM) that audits `Nano Fix (Maintenance)` bookings against BoomerangMe loyalty card stamp deductions. Auto-deducts missed stamps. Determines coating vs PPF by checking most recent parent service on the vehicle. Rate-limited at 8 req/sec with 429 backoff retry. Idempotent via `care_stamp_audit_log` table. Supports `--dry-run` flag.

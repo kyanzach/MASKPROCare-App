@@ -16,7 +16,18 @@ const pool = mysql.createPool({
   connectionLimit: 10,
   queueLimit: 0,
   timezone: '+08:00',
-  charset: 'utf8mb4'
+  charset: 'utf8mb4',
+  // Fix: After Unify's utf8mb4_general_ci migration, mysql2 returns text columns
+  // as Buffers instead of strings. typeCast converts them back to UTF-8 strings.
+  typeCast: function (field, next) {
+    if (field.type === 'VAR_STRING' || field.type === 'STRING' ||
+        field.type === 'TINY_BLOB' || field.type === 'MEDIUM_BLOB' ||
+        field.type === 'LONG_BLOB' || field.type === 'BLOB') {
+      const val = field.buffer();
+      return val ? val.toString('utf8') : null;
+    }
+    return next();
+  },
 });
 
 // Test connection on startup

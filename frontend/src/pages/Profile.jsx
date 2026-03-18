@@ -148,7 +148,7 @@ export default function Profile() {
     }
   }, [activeTab]);
 
-  const loadProfile = async () => {
+   const loadProfile = async () => {
     try {
       const [profileRes, statsRes] = await Promise.all([
         api.get('/profile/get'),
@@ -157,11 +157,14 @@ export default function Profile() {
       const p = profileRes.data.data?.customer || profileRes.data.data;
       setProfile(p);
       setForm({ full_name: p?.full_name || '', email: p?.email || '', address: p?.address || '' });
-      const s = statsRes.data.data;
+
+      // Profile/get may include stats; dashboard/stats nests under .stats
+      const profileStats = profileRes.data.data?.stats;
+      const dashStats = statsRes.data.data?.stats || statsRes.data.data;
       setStats({
-        vehicles: s?.total_vehicles || 0,
-        bookings: s?.total_bookings || 0,
-        completed: s?.completed_services || 0,
+        vehicles: profileStats?.total_vehicles ?? dashStats?.total_vehicles ?? 0,
+        bookings: profileStats?.total_bookings ?? (dashStats?.upcoming_bookings ?? 0) + (dashStats?.completed_services ?? 0),
+        completed: profileStats?.completed_services ?? dashStats?.completed_services ?? 0,
       });
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
