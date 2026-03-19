@@ -2,12 +2,14 @@
 
 ## [v1.8.1] — 2026-03-19
 ### Fixed
-- **Stamp audit cron disabled** — cron had a double-deduction bug (BoomerangMe operations API returned empty, causing it to assume 0 prior deductions). Disabled until logic is corrected
 - **Reverted 2,692 wrongful stamp deductions** — restored stamps on 1,302 cards via BoomerangMe `add-visit` API. Audit log entries marked `[REVERTED]`
 - **formatCard() display bug** — uninitialized cards (0 balance, never had visits added) were shown as "fully used" (e.g., 24/24). Now correctly detects uninitialized cards and shows 0 used
 
 ### Added
 - **Revert script** (`server/scripts/revert-stamp-deductions.js`) — reads audit log and restores stamps via `add-visit` API with `--dry-run`/`--execute` modes
+
+### Removed
+- **Stamp audit cron** (`server/cron/stamp-audit.js`) — permanently removed. Had a double-deduction bug (BoomerangMe operations API returned empty, causing wrong deductions). Crontab entry also removed from server. Loyalty card stamp tracking now relies on BoomerangMe data as source of truth
 
 ## [v1.8.0] — 2026-03-18
 ### Fixed
