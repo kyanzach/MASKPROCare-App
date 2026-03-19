@@ -115,12 +115,21 @@ function formatCard(card) {
     if (f.name?.toLowerCase().includes('branch')) customFields.branch = f.value;
   });
 
-  // currentNumberOfUses = REMAINING visits (not used!)
+  // currentNumberOfUses = REMAINING visits on BoomerangMe
+  // IMPORTANT: For uninitialized cards, currentNumberOfUses is 0 because visits
+  // were never added (not because all were consumed). We detect this by checking
+  // if numberStampsTotal is null — BoomerangMe sets this once visits are added.
   const remaining = balance.currentNumberOfUses || 0;
   const totalDefault = meta.defaultTotal || 0;
-  // If remaining > default total, card may have had visits added — use remaining as total
+  const stampsTotal = balance.numberStampsTotal;
+  
+  // Detect uninitialized cards: balance is 0 AND BoomerangMe never tracked stamps
+  const isUninitialized = remaining === 0 && stampsTotal === null && totalDefault > 0;
+  
+  // If remaining > default total, card may have had extra visits added — use remaining as total
   const total = totalDefault > 0 ? Math.max(totalDefault, remaining) : remaining;
-  const used = total > 0 ? Math.max(0, total - remaining) : 0;
+  // Uninitialized cards: show 0 used (not "all used")
+  const used = isUninitialized ? 0 : (total > 0 ? Math.max(0, total - remaining) : 0);
 
   return {
     id: card.id,

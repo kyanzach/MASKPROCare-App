@@ -1,5 +1,14 @@
 # Changelog
 
+## [v1.8.1] — 2026-03-19
+### Fixed
+- **Stamp audit cron disabled** — cron had a double-deduction bug (BoomerangMe operations API returned empty, causing it to assume 0 prior deductions). Disabled until logic is corrected
+- **Reverted 2,692 wrongful stamp deductions** — restored stamps on 1,302 cards via BoomerangMe `add-visit` API. Audit log entries marked `[REVERTED]`
+- **formatCard() display bug** — uninitialized cards (0 balance, never had visits added) were shown as "fully used" (e.g., 24/24). Now correctly detects uninitialized cards and shows 0 used
+
+### Added
+- **Revert script** (`server/scripts/revert-stamp-deductions.js`) — reads audit log and restores stamps via `add-visit` API with `--dry-run`/`--execute` modes
+
 ## [v1.8.0] — 2026-03-18
 ### Fixed
 - **mysql2 UTF-8 Buffer fix** — after Unify's `utf8mb4_general_ci` migration, mysql2 returned all text columns as Buffers. Added `typeCast` function in `connection.js` to auto-convert Buffers to UTF-8 strings at the driver level. Fixes all routes simultaneously
