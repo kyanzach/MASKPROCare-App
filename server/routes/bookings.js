@@ -122,7 +122,8 @@ router.get('/list', async (req, res) => {
       const [rows] = await pool.query(`
         SELECT b.booking_id, b.booking_date, b.latest_service, b.notes, b.branch_id,
                v.make, v.model, v.plate_no, v.color, v.size,
-               GROUP_CONCAT(DISTINCT bst.service_name SEPARATOR ', ') as service_names
+               GROUP_CONCAT(DISTINCT bst.service_name SEPARATOR ', ') as service_names,
+               GROUP_CONCAT(DISTINCT bst.status SEPARATOR ', ') as service_statuses
         FROM bookings b
         LEFT JOIN vehicles v ON b.customer_vehicle_id = v.id
         LEFT JOIN bookings_service_types bst ON b.booking_id = bst.booking_id
@@ -137,11 +138,30 @@ router.get('/list', async (req, res) => {
         // Use service_names from JOIN, fallback to latest_service
         row.latest_service = row.service_names || row.latest_service || 'N/A';
         delete row.service_names;
-        if ((row.notes || '').includes('CANCELLED:')) {
+
+        // Derive status — check MULTIPLE signals for cancellation
+        const serviceStatuses = (row.service_statuses || '').split(', ').map(s => s.trim().toLowerCase());
+        delete row.service_statuses;
+
+        const isCancelledByNotes = (row.notes || '').includes('CANCELLED:');
+        const isCancelledByStatus = serviceStatuses.includes('cancelled');
+
+        if (isCancelledByNotes || isCancelledByStatus) {
           row.status = 'cancelled';
         } else {
-          const bookingDate = new Date(row.booking_date).toISOString().slice(0, 10);
-          row.status = bookingDate >= today ? 'scheduled' : 'done';
+          // Check for other Unify statuses
+          const isDone = serviceStatuses.includes('done');
+          const isScheduled = serviceStatuses.some(s => ['scheduled', 'rescheduled'].includes(s));
+
+          if (isDone) {
+            row.status = 'done';
+          } else if (isScheduled) {
+            row.status = 'scheduled';
+          } else {
+            // Fallback to date-based for bookings without explicit status
+            const bookingDate = new Date(row.booking_date).toISOString().slice(0, 10);
+            row.status = bookingDate >= today ? 'scheduled' : 'done';
+          }
         }
         row.type = 'booking';
         bookings.push(row);

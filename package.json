@@ -1,6 +1,6 @@
 {
   "name": "maskpro-care",
-  "version": "1.8.1",
+  "version": "1.8.2",
   "description": "MaskPro Care — Customer Vehicle Maintenance API",
   "main": "server/index.js",
   "scripts": {

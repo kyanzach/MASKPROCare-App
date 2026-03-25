@@ -1,5 +1,9 @@
 # Changelog
 
+## [v1.8.2] — 2026-03-25
+### Fixed
+- **Cancelled bookings showing as "Done"** — booking list API derived status solely from `notes` field (`CANCELLED:` prefix), but Unify's cancellation flow only sets `bst.status = 'Cancelled'` without modifying notes. All 956 cancelled bookings appeared as "Done" in Care. Now checks both `bst.status` and notes for cancellation detection, and also respects `Done`/`Scheduled`/`Rescheduled` statuses from `bookings_service_types` before falling back to date-based logic
+
 ## [v1.8.1] — 2026-03-19
 ### Fixed
 - **Reverted 2,692 wrongful stamp deductions** — restored stamps on 1,302 cards via BoomerangMe `add-visit` API. Audit log entries marked `[REVERTED]`

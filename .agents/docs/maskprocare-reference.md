@@ -226,13 +226,47 @@ ssh root@167.71.217.49 'certbot --nginx -d care.maskpro.ph'
 - **Phase 1 (PHP API Refactor):** ✅ Complete — 22 endpoints, JWT auth, CORS
 - **Phase 2 (React Web):** ✅ Complete — Login, Dashboard, Vehicles, Bookings, Profile, Notifications
 - **Phase 3 (PHP→Express Rewrite):** ✅ Complete — 22 endpoints in 7 route files, SMS service, capacity helper
-- **Phase 4 (Deploy to Droplet):** 🔄 Ready — `deploy.sh` exists, first deploy pending
+- **Phase 4 (Deploy to Droplet):** ✅ Complete — deployed since 2026-03-13. PM2 `maskpro-care` online, Nginx + SSL (Let's Encrypt), `.env` configured, `care.maskpro.ph` live
 - **Phase 5 (React Native):** Not started
 - **Phase 6 (App Stores):** Not started
 
 ---
 
 ## 📝 Session Learnings Log
+
+### 2026-03-25: Booking Status Derivation Bug Fix
+- **Root cause:** `bookings` table has no `status` column. Care derived status from `notes LIKE 'CANCELLED:'` prefix + date comparison. But Unify's cancellation workflow sets `bst.status = 'Cancelled'` (in `bookings_service_types`) WITHOUT modifying notes → 956 cancelled bookings appeared as "Done"
+- **Fix:** Added `GROUP_CONCAT(DISTINCT bst.status SEPARATOR ', ') as service_statuses` to the booking list query, then check `bst.status` for Cancelled/Done/Scheduled/Rescheduled before falling back to date-based logic
+- **Multi-service bookings:** A booking can have multiple services with potentially different statuses. Priority: Cancelled > Done > Scheduled > date-fallback
+- **Test case:** Customer 3804 (Abner Ugokan) — bookings 9808 and 9810 (Jan 11 2025, NanoFix) had `bst.status = 'Cancelled'` but notes = "dili mutubag" (no CANCELLED: prefix)
+- **Scope:** 956 cancelled bookings across all services will now correctly show as "Cancelled" instead of "Done"
+
+### 2026-03-16: Loyalty Card UI Architecture & Gotchas
+- **Loyalty cards are rendered in `Profile.jsx`** (as a tab), NOT `Loyalty.jsx` — the standalone page exists but is unused. Always edit `Profile.jsx` for loyalty card changes
+- **BoomerangMe `visitsUsed` = stamps earned/collected** (not consumed). For Nano Ceramic Coating these represent credits loaded on the card — they should all show as blue (filled), not greyed out
+- **`stampsTotal` from BoomerangMe** = total stamp slots on the card. If `stampsTotal == visitsUsed`, the card is fully stamped (all credits loaded)
+- **`deploy.sh` regex needed fix** — Vite 7.x generates hashes with hyphens (e.g. `index-B-fT8Skg.js`). Updated regex from `[a-zA-Z0-9]+` to `[a-zA-Z0-9_-]+` in all 3 places
+- **`bwip-js` library** used for PDF417 barcode rendering via canvas — ~885KB chunk, lazy-loaded via `import('bwip-js')`
+- **Card data from API** already includes `installLink`, `shortLink`, `qrLink`, `customerName`, `branch`, `vehicle` — sufficient for back-of-card modal without additional API calls
+
+### 2026-03-16: Deployment Audit — Phase 4 Was Already Done
+- **Server was already fully deployed since ~Mar 13** — PM2 `maskpro-care` online, Nginx + SSL (Let's Encrypt), API health 200
+- **Server had v1.6.x code deployed** (admin.js, bookings.js, frontend dist all timestamped Mar 14) but `package.json` and `CHANGELOG.md` on server were stale at v1.5.0
+- **Root cause:** `deploy.sh` was run after v1.6.0/v1.6.1 code changes but the version-bumped `package.json` and updated `CHANGELOG.md` weren't re-deployed
+- **Nginx root** points to `/var/www/care/frontend/dist` (not `/var/www/care/dist/`)
+- **SSL is active** — certbot Let's Encrypt cert configured in Nginx
+- **`.env` is present** on server with all production creds including `BOOMERANGME_API_KEY`
+- **Phase 4 status corrected** from "Ready — first deploy pending" → ✅ Complete
+- **deploy.sh does NOT upload CHANGELOG.md** — only `package.json` and `server/`. Must manually scp CHANGELOG after deploy
+- **Lesson:** Always verify server state via SSH before claiming deployment status. Never assume from docs alone
+
+### 2026-03-16: Version Display, Profile Photo, and BoomerangMe Terms
+- **Version bug root cause:** `Layout.jsx` had `const APP_VERSION = '1.5.0'` hardcoded — never synced with `package.json`. Fix: Vite `define: { __APP_VERSION__: JSON.stringify(pkg.version) }` in `vite.config.js` injects version at build time
+- **Profile photo architecture:** `customers.profile_photo VARCHAR(255) NULL` column added (shared Unify table — additive only). Photos stored in `server/uploads/photos/`, served at `/api/uploads/photos/{filename}`. Multer → Sharp → 512×512 WebP @ 80% quality
+- **AuthContext `updateCustomer()`** method allows instant sidebar/mobile avatar sync without full page reload
+- **BoomerangMe API does NOT expose Terms of Use** — neither `/cards/{id}` nor `/templates/{id}` return terms. Terms are only in the BoomerangMe dashboard UI → must be hardcoded per template ID
+- **`?tab=loyalty` URL param** used for My Loyalty Cards deep-link → Profile page reads via `useSearchParams`
+- **Shop.jsx** is a coming-soon placeholder — not connected to backend. Will need backend when shop goes live
 
 ### 2026-03-13: Express Rewrite Complete + Deploy Script
 - **All 22 PHP endpoints rewritten** to Express/Node.js in `server/` (7 route files)
