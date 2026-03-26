@@ -1,5 +1,9 @@
 # Changelog
 
+## [v1.8.3] — 2026-03-26
+### Fixed
+- **Diamond (No Exp) display** — unlimited-term Diamond template (1006938) now shows "Diamond Package" instead of "Diamond (No Exp)" to match the original Diamond template name. Synthesizes a 12-year warranty expiry date from card creation date so customers see a normal expiry instead of blank. This is a frontend-only display fix for the Y2038 workaround template
+
 ## [v1.8.2] — 2026-03-25
 ### Fixed
 - **Cancelled bookings showing as "Done"** — booking list API derived status solely from `notes` field (`CANCELLED:` prefix), but Unify's cancellation flow only sets `bst.status = 'Cancelled'` without modifying notes. All 956 cancelled bookings appeared as "Done" in Care. Now checks both `bst.status` and notes for cancellation detection, and also respects `Done`/`Scheduled`/`Rescheduled` statuses from `bookings_service_types` before falling back to date-based logic

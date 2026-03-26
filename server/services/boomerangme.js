@@ -14,7 +14,7 @@ const TEMPLATE_MAP = {
   41402:  { service: 'Nano Ceramic Coating', tier: 'Silver Package',       category: 'coating', icon: '🛡️', color: '#94a3b8', defaultTotal: 10 },
   42605:  { service: 'Nano Ceramic Coating', tier: 'Gold Package',         category: 'coating', icon: '🛡️', color: '#d97706', defaultTotal: 14 },
   43203:  { service: 'Nano Ceramic Coating', tier: 'Diamond Package',      category: 'coating', icon: '🛡️', color: '#6366f1', defaultTotal: 24 },
-  1006938:{ service: 'Nano Ceramic Coating', tier: 'Diamond (No Exp)',     category: 'coating', icon: '🛡️', color: '#6366f1', defaultTotal: 24 },
+  1006938:{ service: 'Nano Ceramic Coating', tier: 'Diamond Package',      category: 'coating', icon: '🛡️', color: '#6366f1', defaultTotal: 24 },
   147644: { service: 'Nano Ceramic Tint',    tier: 'Loyalty Card',         category: 'tint',    icon: '🪟', color: '#0ea5e9', defaultTotal: 0 },
   318553: { service: 'PPF',                  tier: 'Maintenance Membership', category: 'ppf',   icon: '🔥', color: '#ef4444', defaultTotal: 24 },
   302979: { service: 'PPF',                  tier: 'Extended Warranty',    category: 'ppf',     icon: '🔥', color: '#f97316', defaultTotal: 4 },
@@ -152,7 +152,13 @@ function formatCard(card) {
     discountPercent: balance.discountPercentage || null,
     bonusBalance: balance.bonusBalance || 0,
     // Dates
-    expiresAt: card.expiresAt || null,
+    // Template 1006938 (Diamond unlimited-term) has no expiry in Boomerang due to Y2038 DB limit.
+    // Synthesize a 12-year expiry from createdAt so customers see a normal warranty date.
+    expiresAt: card.expiresAt
+      ? card.expiresAt
+      : (card.templateId === 1006938 && card.createdAt
+          ? (() => { const d = new Date(card.createdAt); d.setFullYear(d.getFullYear() + 12); return d.toISOString(); })()
+          : null),
     createdAt: card.createdAt || null,
     // Links
     installLink: card.installLink || null,
