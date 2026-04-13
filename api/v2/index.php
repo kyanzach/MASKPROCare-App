@@ -52,12 +52,14 @@ $routes = [
     'vehicles/create'  => __DIR__ . '/vehicles/create.php',
     'vehicles/update'  => __DIR__ . '/vehicles/update.php',
     'vehicles/delete'  => __DIR__ . '/vehicles/delete.php',
+    'vehicles/upload-photo' => __DIR__ . '/vehicles/upload-photo.php',
 
     // Bookings (JWT required)
     'bookings/list'         => __DIR__ . '/bookings/list.php',
     'bookings/detail'       => __DIR__ . '/bookings/detail.php',
     'bookings/create'       => __DIR__ . '/bookings/create.php',
     'bookings/cancel'       => __DIR__ . '/bookings/cancel.php',
+    'bookings/edit-request' => __DIR__ . '/bookings/edit-request.php',
     'bookings/availability' => __DIR__ . '/bookings/availability.php',
 
     // Services (no JWT required — public info)

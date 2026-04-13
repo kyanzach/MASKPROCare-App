@@ -84,7 +84,10 @@ export default function Dashboard() {
     );
   }
 
-  const firstName = customer?.full_name?.split(' ')[0] || customer?.first_name || 'there';
+  // Get display name — check impersonation name first (it's always set correctly)
+  const impersonation = JSON.parse(localStorage.getItem('impersonation') || 'null');
+  const displayName = impersonation?.customerName || customer?.full_name || customer?.first_name || '';
+  const firstName = displayName?.split(' ')[0] || 'there';
   const upcomingBookings = bookings.filter(b => b.status === 'Scheduled' || new Date(b.booking_date) >= new Date());
   const recentBookings = bookings.slice(0, 5);
 

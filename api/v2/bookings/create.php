@@ -19,6 +19,9 @@ require_once __DIR__ . '/../middleware/auth.php';
 require_once __DIR__ . '/../../../includes/booking_capacity_helper.php';
 require_method('POST');
 
+// Force Philippine timezone globally
+date_default_timezone_set('Asia/Manila');
+
 $body = get_json_body();
 $errors = validate_required($body, ['vehicle_id', 'service_type', 'booking_date', 'booking_time']);
 if (!empty($errors)) {
@@ -43,12 +46,14 @@ if (!preg_match('/^\d{2}:\d{2}$/', $bookingTime)) {
 
 $bookingDatetime = $bookingDate . ' ' . $bookingTime;
 
-// Check if in the future
-if (strtotime($bookingDatetime) <= time()) {
-    api_error('Please select a future date and time.', 422);
-}
+// Get customer's branch_id (needed for capacity check)
+$branchStmt = $conn->prepare("SELECT branch_id FROM customers WHERE id = ?");
+$branchStmt->bind_param("i", $authCustomerId);
+$branchStmt->execute();
+$branchResult = $branchStmt->get_result()->fetch_assoc();
+$branchId = (int) ($branchResult['branch_id'] ?? $authBranchId);
+$branchStmt->close();
 
-// Check capacity
 // Check capacity (branch-specific)
 $availableSlots = getAvailableSlots($conn, $bookingDate, $serviceType, $branchId);
 if ($availableSlots <= 0) {
@@ -68,20 +73,17 @@ if ($stmt->get_result()->num_rows === 0) {
 }
 $stmt->close();
 
-// Get customer's branch_id
-$branchStmt = $conn->prepare("SELECT branch_id FROM customers WHERE id = ?");
-$branchStmt->bind_param("i", $authCustomerId);
-$branchStmt->execute();
-$branchResult = $branchStmt->get_result()->fetch_assoc();
-$branchId = (int) ($branchResult['branch_id'] ?? $authBranchId);
-$branchStmt->close();
+// Check if in the future (PH time)
+if (strtotime($bookingDatetime) <= time()) {
+    api_error('Please select a future date and time.', 422);
+}
 
 // Create booking request
 try {
     $stmt = $conn->prepare("
         INSERT INTO booking_requests 
-        (customer_id, vehicle_id, booking_date, latest_service, notes, branch_id, status, created_at) 
-        VALUES (?, ?, ?, ?, ?, ?, 'pending', NOW())
+        (customer_id, customer_vehicle_id, booking_date, latest_service, notes, branch_id, status) 
+        VALUES (?, ?, ?, ?, ?, ?, 'pending')
     ");
     $stmt->bind_param("iisssi", $authCustomerId, $vehicleId, $bookingDatetime, $serviceType, $notes, $branchId);
     $stmt->execute();

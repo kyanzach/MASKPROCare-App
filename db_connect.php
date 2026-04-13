@@ -4,7 +4,7 @@
 // Environment Detection
 $isProduction = (
     isset($_SERVER['HTTP_HOST']) && 
-    ($_SERVER['HTTP_HOST'] === 'app.maskpro.ph' || strpos($_SERVER['HTTP_HOST'], 'maskpro.ph') !== false)
+    ($_SERVER['HTTP_HOST'] === 'care.maskpro.ph')
 ) || (isset($_ENV['APP_ENV']) && $_ENV['APP_ENV'] === 'production');
 
 if ($isProduction) {

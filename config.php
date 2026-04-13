@@ -10,16 +10,16 @@ define('APP_VERSION', '1.0.0');
 // Environment detection
 $isProduction = (
     isset($_SERVER['HTTP_HOST']) && 
-    ($_SERVER['HTTP_HOST'] === 'app.maskpro.ph' || strpos($_SERVER['HTTP_HOST'], 'maskpro.ph') !== false)
+    ($_SERVER['HTTP_HOST'] === 'care.maskpro.ph')
 ) || (isset($_ENV['APP_ENV']) && $_ENV['APP_ENV'] === 'production');
 
 define('IS_PRODUCTION', $isProduction);
 
 // Base URL
 if (IS_PRODUCTION) {
-    define('BASE_URL', 'https://app.maskpro.ph/nanofix-maintenance/');
+    define('BASE_URL', 'https://care.maskpro.ph/');
 } else {
-    define('BASE_URL', 'http://localhost/unify.maskpro.ph/nanofix-maintenance/');
+    define('BASE_URL', 'http://localhost/care.maskpro.ph/');
 }
 
 // Session configuration

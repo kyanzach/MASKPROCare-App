@@ -2,16 +2,19 @@
 /**
  * GET /api/v2/bookings/list
  * 
- * Get all bookings for the authenticated customer.
- * Uses REAL database schema (customer_vehicle_id, booking_id as PK).
+ * Get all bookings + booking requests for the authenticated customer.
+ * Returns a unified list for the frontend.
  * 
- * Response: { success: true, data: { bookings: [...], pending_requests: [...] } }
+ * Response: { success: true, data: { bookings: [...], requests: [...] } }
  */
 
 require_once __DIR__ . '/../middleware/auth.php';
 require_method('GET');
 
-// Get bookings with vehicle info using REAL schema
+date_default_timezone_set('Asia/Manila');
+$today = date('Y-m-d');
+
+// Get approved bookings with vehicle info
 $bookings = [];
 try {
     $stmt = $conn->prepare("
@@ -27,8 +30,14 @@ try {
     $stmt->execute();
     $result = $stmt->get_result();
     while ($row = $result->fetch_assoc()) {
-        // Determine status from notes
-        $row['status'] = (strpos($row['notes'] ?? '', 'CANCELLED:') !== false) ? 'cancelled' : 'active';
+        // Determine status
+        if (strpos($row['notes'] ?? '', 'CANCELLED:') !== false) {
+            $row['status'] = 'cancelled';
+        } else {
+            $bookingDate = date('Y-m-d', strtotime($row['booking_date']));
+            $row['status'] = ($bookingDate >= $today) ? 'scheduled' : 'done';
+        }
+        $row['type'] = 'booking';
         $bookings[] = $row;
     }
     $stmt->close();
@@ -36,25 +45,32 @@ try {
     // Fall back gracefully
 }
 
-// Get pending booking requests
-$pendingRequests = [];
+// Get ALL booking requests (pending, cancelled, rejected — NOT approved since those are in bookings)
+$requests = [];
 try {
     $stmt = $conn->prepare("
-        SELECT br.*, 
+        SELECT br.request_id, br.booking_date, br.latest_service, br.notes, br.branch_id,
+               br.status, br.cancellation_reason, br.rejection_reason, br.edit_history,
+               br.time_added,
                v.make, v.model, v.plate_no,
                GROUP_CONCAT(brs.service_name SEPARATOR ', ') as service_names
         FROM booking_requests br
-        LEFT JOIN vehicles v ON br.vehicle_id = v.id
+        LEFT JOIN vehicles v ON br.customer_vehicle_id = v.id
         LEFT JOIN booking_request_services brs ON br.request_id = brs.request_id
-        WHERE br.customer_id = ? AND br.status = 'pending'
+        WHERE br.customer_id = ? AND br.status IN ('pending', 'cancelled', 'rejected')
         GROUP BY br.request_id
-        ORDER BY br.created_at DESC
+        ORDER BY br.time_added DESC
     ");
     $stmt->bind_param("i", $authCustomerId);
     $stmt->execute();
     $result = $stmt->get_result();
     while ($row = $result->fetch_assoc()) {
-        $pendingRequests[] = $row;
+        $row['type'] = 'request';
+        // Decode edit_history if present
+        if (!empty($row['edit_history'])) {
+            $row['edit_history'] = json_decode($row['edit_history'], true);
+        }
+        $requests[] = $row;
     }
     $stmt->close();
 } catch (\Throwable $e) {
@@ -63,7 +79,7 @@ try {
 
 api_success([
     'bookings' => $bookings,
-    'pending_requests' => $pendingRequests,
+    'requests' => $requests,
     'total_bookings' => count($bookings),
-    'total_pending' => count($pendingRequests)
+    'total_requests' => count($requests)
 ], 'Bookings retrieved successfully');

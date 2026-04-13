@@ -13,7 +13,16 @@
  */
 
 require_once __DIR__ . '/../middleware/auth.php';
-require_method('POST');
+// Accept both GET (query params) and POST (JSON body)
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    $body = $_GET;
+} else {
+    require_method('POST');
+    $body = get_json_body();
+}
+
+// Force Philippine timezone for all date/time calculations
+date_default_timezone_set('Asia/Manila');
 
 // Get the customer's branch_id from their profile (not just JWT — confirm from DB)
 $customerBranchId = $authBranchId; // from JWT
@@ -59,8 +68,8 @@ $timeSlots = [
     '15:00' => '3:00 PM'
 ];
 
-$body = get_json_body();
-$service = trim($body['service'] ?? '');
+// $body already set at top (GET params or POST JSON)
+$service = trim($body['service'] ?? $body['service_type'] ?? '');
 $action = trim($body['action'] ?? '');
 
 if (empty($service) || empty($action)) {
@@ -119,8 +128,21 @@ try {
         }
 
         $availableTimes = [];
+        $isToday = ($date === date('Y-m-d')); // PH time comparison
+        $nowHour = (int)date('H');
+        $nowMin = (int)date('i');
+        
         foreach ($timeSlots as $time => $label) {
-            $isAvailable = checkTimeAvail($conn, $service, $date, $time, $serviceCapacity, $customerBranchId);
+            // If today, grey out past time slots
+            $isPast = false;
+            if ($isToday) {
+                $parts = explode(':', $time);
+                $slotHour = (int)$parts[0];
+                $slotMin = (int)$parts[1];
+                $isPast = ($slotHour < $nowHour) || ($slotHour === $nowHour && $slotMin <= $nowMin);
+            }
+            
+            $isAvailable = !$isPast && checkTimeAvail($conn, $service, $date, $time, $serviceCapacity, $customerBranchId);
             $availableTimes[] = [
                 'time' => $time,
                 'label' => $label,

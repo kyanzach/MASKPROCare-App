@@ -80,8 +80,8 @@ export default function Shop() {
           fontSize: '16px', lineHeight: 1.6, margin: '0 auto 32px',
           maxWidth: '480px', opacity: 0.9,
         }}>
-          We're building something special for our VIP customers. Premium car care products, 
-          exclusive accessories, and members-only deals — all at your fingertips.
+          We're building something special for our VIP customers. Premium car accessories, 
+          high-grade gadgets, and members-only deals — all at your fingertips.
         </p>
 
         {/* Feature highlights */}
@@ -91,17 +91,17 @@ export default function Shop() {
         }}>
           {[
             { icon: '💎', text: 'VIP Exclusive Discounts' },
-            { icon: '🚗', text: 'Premium Car Care' },
+            { icon: '🔧', text: 'Premium Gadgets' },
             { icon: '🎁', text: 'Loyalty Rewards' },
           ].map((f, i) => (
             <div key={i} style={{
               background: 'rgba(255,255,255,0.12)', backdropFilter: 'blur(8px)',
-              borderRadius: '16px', padding: '16px 24px',
-              display: 'flex', alignItems: 'center', gap: '10px',
+              borderRadius: '12px', padding: '10px 16px',
+              display: 'flex', alignItems: 'center', gap: '8px',
               border: '1px solid rgba(255,255,255,0.15)',
             }}>
-              <span style={{ fontSize: '24px' }}>{f.icon}</span>
-              <span style={{ fontSize: '14px', fontWeight: 600 }}>{f.text}</span>
+              <span style={{ fontSize: '20px' }}>{f.icon}</span>
+              <span style={{ fontSize: '13px', fontWeight: 600 }}>{f.text}</span>
             </div>
           ))}
         </div>
@@ -117,24 +117,24 @@ export default function Shop() {
 
       {/* Teaser grid */}
       <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-        gap: '16px', marginTop: '24px',
+        display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
+        gap: '12px', marginTop: '24px',
       }}>
         {[
-          { icon: '🧴', title: 'Car Care Products', desc: 'MaskPro-recommended shampoos, microfiber towels, and ceramic boosters' },
-          { icon: '🛡️', title: 'Coating Accessories', desc: 'Maintenance kits, applicators, and NanoFix solutions' },
+          { icon: '🚗', title: 'Car Accessories', desc: 'Premium accessories to elevate your vehicle\'s style and functionality' },
+          { icon: '🔧', title: 'Premium Gadgets', desc: 'High-grade tools and gadgets handpicked for car enthusiasts' },
           { icon: '🎫', title: 'Gift Cards', desc: 'Give the gift of MaskPro protection to friends and family' },
           { icon: '⭐', title: 'VIP Rewards', desc: 'Redeem loyalty points for exclusive products and services' },
         ].map((item, i) => (
           <div key={i} style={{
-            background: 'white', borderRadius: '16px', padding: '24px',
+            background: 'white', borderRadius: '14px', padding: '20px',
             border: '1px solid rgba(0,0,0,0.06)',
             boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
             opacity: 0.7,
           }}>
-            <div style={{ fontSize: '32px', marginBottom: '12px' }}>{item.icon}</div>
-            <h4 style={{ fontSize: '15px', fontWeight: 700, color: '#1e293b', margin: '0 0 6px' }}>{item.title}</h4>
-            <p style={{ fontSize: '13px', color: '#64748b', margin: 0, lineHeight: 1.5 }}>{item.desc}</p>
+            <div style={{ fontSize: '28px', marginBottom: '10px' }}>{item.icon}</div>
+            <h4 style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b', margin: '0 0 4px' }}>{item.title}</h4>
+            <p style={{ fontSize: '12px', color: '#64748b', margin: 0, lineHeight: 1.4 }}>{item.desc}</p>
           </div>
         ))}
       </div>
