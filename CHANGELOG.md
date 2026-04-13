@@ -1,5 +1,16 @@
 # Changelog
 
+## [v1.9.1] — 2026-04-13
+### Fixed
+- **🔥 CRITICAL: Calendar always showed all-green (available)** — `mysql2` returns `DATE()` results as JavaScript Date objects, not strings. Map key became `"Tue Apr 14 2026 00:00:00 GMT+0800"` instead of `"2026-04-14"`, causing ALL date lookups to return 0 bookings. Fixed by using `DATE_FORMAT(b.booking_date, '%Y-%m-%d')` in SQL to return string keys directly
+- **UTC timezone bug in date generation** — `toISOString().slice(0,10)` was generating UTC dates which could be 1 day behind Manila time late at night. Replaced with local `toLocalDateStr()` helper
+- **Service name mismatch** — added `normalizeServiceName()` map to canonicalize PPF/NanoFix variants between what Care sends vs what `branch_booking_capacity` and `bookings_service_types` use
+- **NanoFix eligibility check too narrow** — only checked for Nano Ceramic Coating (MNCC). Now also checks PPF bookings, since PPF customers can also avail Maintenance (NanoFix)
+- **Capacity lookup used raw service name** — `branchCapacity[service]` used the frontend-sent name instead of the normalized DB name. Now uses `branchCapacity[normalizedService]`
+
+- **Calendar respects vehicle’s branch** — availability/capacity uses the branch where the vehicle was originally booked
+- **Fail-safe calendar** — dates without availability data show as Closed instead of defaulting to Open
+
 ## [v1.9.0] — 2026-04-13
 ### Fixed
 - **Booking capacity now reads from DB only** — deleted hardcoded `CAPACITY_DEFAULTS` object. All capacity is now sourced exclusively from `branch_booking_capacity` table, managed by admins in Unify's Booking Capacity Settings page. `0 = unlimited` (never full), matching Unify's exact behavior

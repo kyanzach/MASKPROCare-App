@@ -18,18 +18,39 @@ const { authenticateToken } = require('../middleware/auth');
 // All booking routes require authentication
 router.use(authenticateToken);
 
+// --- Helper: Format Date to YYYY-MM-DD in local timezone (Manila) ---
+function toLocalDateStr(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// --- Service name normalization map (matches Unify naming conventions) ---
+// Care sends api_name → must match bookings_service_types.service_name AND branch_booking_capacity.service_name
+const SERVICE_NAME_MAP = {
+  'Nano Fix (Maintenance)': 'Nano Fix (Maintenance)',
+  'NanoFix': 'Nano Fix (Maintenance)',
+  'Maintenance (NanoFix)': 'Nano Fix (Maintenance)',
+  'PPF': 'PPF',
+  'Paint Protection Film (PPF)': 'PPF',
+  'Paint Protection Film': 'PPF',
+};
+function normalizeServiceName(name) {
+  return SERVICE_NAME_MAP[name] || name;
+}
+
 // --- Helper: Get branch-specific capacity from DB (matches Unify's booking_capacity.php) ---
 // Capacity is ALWAYS read from branch_booking_capacity table, managed by admins in Unify.
 // 0 = unlimited (never full). No hardcoded defaults.
 async function getBranchServiceCapacity(serviceName, branchId) {
-  // Normalize PPF variants to canonical name
-  if (/PPF|Paint Protection Film/i.test(serviceName)) serviceName = 'PPF';
+  const normalized = normalizeServiceName(serviceName);
 
   if (branchId && branchId > 0) {
     try {
       const [rows] = await pool.query(
         "SELECT max_capacity FROM branch_booking_capacity WHERE branch_id = ? AND service_name = ?",
-        [branchId, serviceName]
+        [branchId, normalized]
       );
       if (rows.length > 0) return rows[0].max_capacity;
     } catch { /* fall through */ }
@@ -45,8 +66,8 @@ async function getAvailableSlots(date, serviceName, branchId) {
   // 0 = unlimited — always available
   if (capacity === 0) return Infinity;
 
-  // Normalize PPF variants
-  const normalized = /PPF|Paint Protection Film/i.test(serviceName) ? 'PPF' : serviceName;
+  // Normalize PPF/NanoFix variants to canonical name
+  const normalized = normalizeServiceName(serviceName);
 
   // Count confirmed bookings only (exact match, no LIKE — matches Unify)
   let confirmedCount = 0;
@@ -69,12 +90,48 @@ async function getAvailableSlots(date, serviceName, branchId) {
   return Math.max(0, capacity - confirmedCount);
 }
 
-// --- Helper: Get customer's branch_id from DB ---
-async function getCustomerBranch(customerId, jwtBranchId) {
+// --- Helper: Resolve branch_id for capacity checks ---
+async function getCustomerBranch(customerId, jwtBranchId, vehicleId) {
+  const vehId = parseInt(vehicleId || 0, 10);
+  if (vehId > 0) {
+    try {
+      const [rows] = await pool.query(
+        "SELECT branch_id FROM bookings WHERE customer_id = ? AND customer_vehicle_id = ? AND branch_id IS NOT NULL ORDER BY booking_date ASC LIMIT 1",
+        [customerId, vehId]
+      );
+      if (rows[0]?.branch_id) return rows[0].branch_id;
+    } catch { /* ignore */ }
+
+    try {
+      const [rows] = await pool.query(
+        "SELECT branch_id FROM booking_requests WHERE customer_id = ? AND customer_vehicle_id = ? AND branch_id IS NOT NULL ORDER BY time_added ASC LIMIT 1",
+        [customerId, vehId]
+      );
+      if (rows[0]?.branch_id) return rows[0].branch_id;
+    } catch { /* ignore */ }
+  }
+
   try {
     const [rows] = await pool.query("SELECT branch_id FROM customers WHERE id = ?", [customerId]);
     if (rows[0]?.branch_id) return rows[0].branch_id;
-  } catch { /* fallthrough */ }
+  } catch { /* ignore */ }
+
+  try {
+    const [rows] = await pool.query(
+      "SELECT branch_id FROM bookings WHERE customer_id = ? AND branch_id IS NOT NULL ORDER BY booking_date DESC LIMIT 1",
+      [customerId]
+    );
+    if (rows[0]?.branch_id) return rows[0].branch_id;
+  } catch { /* ignore */ }
+
+  try {
+    const [rows] = await pool.query(
+      "SELECT branch_id FROM booking_requests WHERE customer_id = ? AND branch_id IS NOT NULL ORDER BY time_added DESC LIMIT 1",
+      [customerId]
+    );
+    if (rows[0]?.branch_id) return rows[0].branch_id;
+  } catch { /* ignore */ }
+
   return jwtBranchId || 1;
 }
 
@@ -238,7 +295,7 @@ router.post('/create', async (req, res) => {
     const customerId = req.user.customer_id;
 
     // Get branch
-    const branchId = await getCustomerBranch(customerId, req.user.branch_id);
+    const branchId = await getCustomerBranch(customerId, req.user.branch_id, vehicle_id);
 
     // Check capacity
     const available = await getAvailableSlots(booking_date, String(service_type).trim(), branchId);
@@ -373,12 +430,23 @@ async function handleAvailability(req, res) {
     const body = req.method === 'GET' ? req.query : req.body;
     const service = String(body.service || body.service_type || '').trim();
     const action = String(body.action || '').trim();
+    const vehicleId = parseInt(body.vehicle_id || 0, 10);
 
     if (!service || !action) {
       return res.status(422).json({ success: false, data: null, message: 'Service and action are required', errors: [] });
     }
 
-    const branchId = await getCustomerBranch(req.user.customer_id, req.user.branch_id);
+    if (vehicleId > 0) {
+      const [vehicles] = await pool.query(
+        "SELECT id FROM vehicles WHERE id = ? AND customer_id = ?",
+        [vehicleId, req.user.customer_id]
+      );
+      if (vehicles.length === 0) {
+        return res.status(404).json({ success: false, data: null, message: 'Vehicle not found', errors: [] });
+      }
+    }
+
+    const branchId = await getCustomerBranch(req.user.customer_id, req.user.branch_id, vehicleId);
 
     // Load branch capacity
     let branchCapacity = {};
@@ -388,19 +456,33 @@ async function handleAvailability(req, res) {
     } catch { /* ignore */ }
 
     if (action === 'get_available_dates') {
-      const days = Math.min(365, Math.max(30, parseInt(body.days || 90, 10)));
-      const startDate = new Date();
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + days);
+      const month = String(body.month || '').trim();
+      let startDate;
+      let endDate;
 
-      const monthStart = startDate.toISOString().slice(0, 10);
-      const monthEnd = endDate.toISOString().slice(0, 10);
+      if (/^\d{4}-\d{2}$/.test(month)) {
+        const [y, m] = month.split('-').map(Number);
+        startDate = new Date(y, m - 1, 1);
+        endDate = new Date(y, m, 0);
+      } else {
+        const days = Math.min(365, Math.max(30, parseInt(body.days || 90, 10)));
+        startDate = new Date();
+        endDate = new Date();
+        endDate.setDate(endDate.getDate() + days);
+      }
 
-      // Bulk booking counts
+      // Use local date strings (YYYY-MM-DD) — NOT toISOString() which is UTC
+      const monthStart = toLocalDateStr(startDate);
+      const monthEnd = toLocalDateStr(endDate);
+
+      // Normalize service name for DB queries
+      const normalizedService = normalizeServiceName(service);
+
+      // Bulk booking counts — use DATE_FORMAT to get string keys (mysql2 returns DATE() as JS Date object!)
       const bookingCounts = {};
       try {
         const [rows] = await pool.query(`
-          SELECT DATE(b.booking_date) as dt, COUNT(*) as cnt
+          SELECT DATE_FORMAT(b.booking_date, '%Y-%m-%d') as dt, COUNT(*) as cnt
           FROM bookings b
           JOIN bookings_service_types bst ON bst.booking_id = b.booking_id
           WHERE b.branch_id = ?
@@ -409,20 +491,22 @@ async function handleAvailability(req, res) {
           AND (b.notes IS NULL OR b.notes NOT LIKE '%CANCELLED:%')
           AND (bst.status IS NULL OR bst.status != 'Cancelled')
           GROUP BY dt
-        `, [branchId, monthStart, monthEnd, service]);
+        `, [branchId, monthStart, monthEnd, normalizedService]);
         for (const r of rows) bookingCounts[r.dt] = r.cnt;
       } catch { /* ignore */ }
+
+      // Look up capacity using normalized service name
+      const max = branchCapacity[normalizedService] ?? 0; // 0 = unlimited (from DB)
 
       // Only count confirmed bookings (no pending requests — matches Unify)
       const availableDates = [];
       const current = new Date(startDate);
       while (current <= endDate) {
-        const dateStr = current.toISOString().slice(0, 10);
+        const dateStr = toLocalDateStr(current); // Local timezone, NOT UTC
         const dayOfWeek = current.getDay(); // 0=Sun
 
         if (dayOfWeek !== 0) { // Skip Sundays
           const booked = bookingCounts[dateStr] || 0;
-          const max = branchCapacity[service] ?? 0; // 0 = unlimited (from DB)
 
           // Compute status matching Unify's logic (bookings_create.php lines 116-153)
           let status;
@@ -454,7 +538,7 @@ async function handleAvailability(req, res) {
 
       return res.json({
         success: true,
-        data: { dates: availableDates, capacity: branchCapacity[service] ?? 0, branch_id: branchId },
+        data: { dates: availableDates, capacity: max, branch_id: branchId },
         message: 'Available dates retrieved',
         errors: []
       });

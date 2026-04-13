@@ -125,11 +125,13 @@ export default function Bookings() {
   }, [bookings, requests]);
 
   // --- New Booking Logic ---
-  const loadAvailability = async (serviceType) => {
+  const loadAvailability = async (serviceType, vehicleId, monthDate) => {
     setLoadingDates(true);
     try {
+      const m = monthDate || new Date();
+      const month = `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, '0')}`;
       const res = await api.get('/bookings/availability', {
-        params: { action: 'get_available_dates', service_type: serviceType },
+        params: { action: 'get_available_dates', service_type: serviceType, vehicle_id: vehicleId, month },
       });
       setAvailableDates(res.data.data?.dates || []);
     } catch (err) { console.error(err); }
@@ -138,8 +140,19 @@ export default function Bookings() {
 
   const handleServiceChange = (service) => {
     setBookingForm({ ...bookingForm, service_type: service, booking_date: '', booking_time: '' });
-    if (service) loadAvailability(service);
   };
+
+  const handleVehicleChange = (vehicleId) => {
+    setBookingForm({ ...bookingForm, vehicle_id: vehicleId, booking_date: '', booking_time: '' });
+  };
+
+  useEffect(() => {
+    if (bookingForm.service_type && bookingForm.vehicle_id) {
+      loadAvailability(bookingForm.service_type, bookingForm.vehicle_id, calendarMonth);
+    } else {
+      setAvailableDates([]);
+    }
+  }, [bookingForm.service_type, bookingForm.vehicle_id, calendarMonth]);
 
   const handleDateSelect = (dateStr) => {
     setBookingForm({ ...bookingForm, booking_date: dateStr, booking_time: '' });
@@ -157,14 +170,16 @@ export default function Bookings() {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const dateInfo = availableDates.find(a => a.date === dateStr);
       const isSunday = new Date(year, month, d).getDay() === 0;
+      const isClosed = !dateInfo && !isSunday && dateStr >= today;
       days.push({
         day: d, dateStr,
         isToday: dateStr === today,
         isPast: dateStr < today,
         isSunday,
-        isAvailable: dateInfo ? dateInfo.available : (!isSunday && dateStr >= today),
+        isAvailable: dateInfo ? dateInfo.available : false,
         isLimited: dateInfo ? dateInfo.status === 'limited' : false,
         isUnavailable: dateInfo ? dateInfo.status === 'full' : false,
+        isClosed,
         isSelected: bookingForm.booking_date === dateStr,
         capacity: dateInfo?.capacity,
         booked: dateInfo?.booked,
@@ -240,19 +255,27 @@ export default function Bookings() {
     setEditAvailableDates([]);
     setError('');
     // Load availability for this service
-    loadEditAvailability(item.latest_service || item.service_names);
+    loadEditAvailability(item.latest_service || item.service_names, new Date());
   };
 
-  const loadEditAvailability = async (serviceType) => {
+  const loadEditAvailability = async (serviceType, monthDate) => {
     setEditLoadingDates(true);
     try {
+      const m = monthDate || new Date();
+      const month = `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, '0')}`;
       const res = await api.get('/bookings/availability', {
-        params: { action: 'get_available_dates', service_type: serviceType },
+        params: { action: 'get_available_dates', service_type: serviceType, month },
       });
       setEditAvailableDates(res.data.data?.dates || []);
     } catch (err) { console.error(err); }
     finally { setEditLoadingDates(false); }
   };
+
+  useEffect(() => {
+    if (editTarget?.latest_service || editTarget?.service_names) {
+      loadEditAvailability(editTarget.latest_service || editTarget.service_names, editCalendarMonth);
+    }
+  }, [editTarget, editCalendarMonth]);
 
   const editCalendarDays = useMemo(() => {
     const year = editCalendarMonth.getFullYear();
@@ -266,14 +289,16 @@ export default function Bookings() {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const dateInfo = editAvailableDates.find(a => a.date === dateStr);
       const isSunday = new Date(year, month, d).getDay() === 0;
+      const isClosed = !dateInfo && !isSunday && dateStr > today;
       days.push({
         day: d, dateStr,
         isToday: dateStr === today,
         isPast: dateStr <= today,
         isSunday,
-        isAvailable: dateInfo ? dateInfo.available : (!isSunday && dateStr > today),
+        isAvailable: dateInfo ? dateInfo.available : false,
         isLimited: dateInfo ? dateInfo.status === 'limited' : false,
         isUnavailable: dateInfo ? dateInfo.status === 'full' : false,
+        isClosed,
         isSelected: editDate === dateStr,
         capacity: dateInfo?.capacity,
         booked: dateInfo?.booked,
@@ -442,7 +467,7 @@ export default function Bookings() {
                 <div className="form-group">
                   <label className="form-label"><i className="fas fa-car" style={{ marginRight: '6px', color: '#3b82f6' }}></i>Select Vehicle *</label>
                   {vehicles.length > 0 ? (
-                    <select className="form-select" value={bookingForm.vehicle_id} onChange={e => setBookingForm({...bookingForm, vehicle_id: e.target.value})} required>
+                    <select className="form-select" value={bookingForm.vehicle_id} onChange={e => handleVehicleChange(e.target.value)} required>
                       <option value="">Choose a vehicle...</option>
                       {vehicles.map(v => <option key={v.id} value={v.id}>{v.make} {v.model} — {v.plate_no || 'No plate'}</option>)}
                     </select>
@@ -642,10 +667,10 @@ function renderCalendar(month, setMonth, days, onSelect) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
         {days.map((d, i) => {
           if (!d) return <div key={`empty-${i}`} />;
-          const canClick = (d.isAvailable || d.isLimited) && !d.isPast && !d.isSunday;
+          const canClick = (d.isAvailable || d.isLimited) && !d.isPast && !d.isSunday && !d.isClosed;
           return (
             <button key={d.dateStr} type="button" onClick={() => canClick && onSelect(d.dateStr)}
-              title={d.isLimited ? 'Almost Full — 1 slot left' : d.isUnavailable ? 'Fully Booked' : ''}
+              title={d.isClosed || d.isSunday ? 'Closed' : d.isLimited ? 'Almost Full — 1 slot left' : d.isUnavailable ? 'Fully Booked' : ''}
               style={{
                 aspectRatio: '1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                 borderRadius: '8px', position: 'relative',
@@ -654,12 +679,14 @@ function renderCalendar(month, setMonth, days, onSelect) {
                   : d.isPast || d.isSunday ? '#f3f4f6'
                   : d.isLimited ? 'rgba(245, 158, 11, 0.12)'
                   : d.isAvailable ? 'rgba(16, 185, 129, 0.1)'
-                  : d.isUnavailable ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
+                  : d.isUnavailable ? 'rgba(239, 68, 68, 0.1)'
+                  : d.isClosed ? 'rgba(203, 213, 225, 0.25)' : 'transparent',
                 color: d.isSelected ? 'white'
                   : d.isPast || d.isSunday ? '#9ca3af'
                   : d.isLimited ? '#d97706'
                   : d.isAvailable ? '#059669'
-                  : d.isUnavailable ? '#dc2626' : '#374151',
+                  : d.isUnavailable ? '#dc2626'
+                  : d.isClosed ? '#94a3b8' : '#374151',
                 fontWeight: d.isSelected || d.isToday ? 600 : 500, fontSize: '13px',
                 cursor: canClick ? 'pointer' : 'not-allowed',
                 transition: 'all 0.2s ease',
@@ -667,12 +694,12 @@ function renderCalendar(month, setMonth, days, onSelect) {
               }}>
               {d.day}
               {/* Status dot — matches Unify's calendar dots */}
-              {!d.isPast && !d.isSunday && !d.isSelected && (d.isLimited || d.isUnavailable || d.isAvailable) && (
+              {!d.isPast && !d.isSelected && (d.isLimited || d.isUnavailable || d.isAvailable || d.isClosed || d.isSunday) && (
                 <span style={{
                   width: d.isUnavailable ? '6px' : '5px',
                   height: d.isUnavailable ? '6px' : '5px',
                   borderRadius: '50%',
-                  background: d.isLimited ? '#f59e0b' : d.isUnavailable ? '#ef4444' : '#22c55e',
+                  background: d.isClosed || d.isSunday ? '#cbd5e1' : d.isLimited ? '#f59e0b' : d.isUnavailable ? '#ef4444' : '#22c55e',
                   position: 'absolute', bottom: '3px',
                   boxShadow: d.isUnavailable ? '0 0 3px 1px rgba(239,68,68,0.4)' : '0 0 0 1px rgba(255,255,255,0.8)',
                 }} />

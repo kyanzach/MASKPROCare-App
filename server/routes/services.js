@@ -27,12 +27,12 @@ router.get('/list', async (req, res) => {
     const customerId = req.user.customer_id;
     let hasMncc = false;
 
-    // Check if customer has existing MNCC booking
+    // Check if customer has existing Coating or PPF booking (NanoFix is maintenance for these)
     try {
       const [rows] = await pool.query(`
         SELECT COUNT(*) as cnt FROM bookings
         WHERE customer_id = ?
-        AND (latest_service = 'Nano Ceramic Coating' OR latest_service = 'MNCC')
+        AND (latest_service IN ('Nano Ceramic Coating', 'MNCC', 'PPF', 'Paint Protection Film (PPF)'))
         AND (notes IS NULL OR notes NOT LIKE '%CANCELLED:%')
       `, [customerId]);
       hasMncc = (rows[0]?.cnt || 0) > 0;
@@ -45,7 +45,7 @@ router.get('/list', async (req, res) => {
           SELECT COUNT(*) as cnt FROM bookings b
           JOIN bookings_service_types bst ON b.booking_id = bst.booking_id
           WHERE b.customer_id = ?
-          AND bst.service_name = 'Nano Ceramic Coating'
+          AND bst.service_name IN ('Nano Ceramic Coating', 'PPF')
           AND (b.notes IS NULL OR b.notes NOT LIKE '%CANCELLED:%')
         `, [customerId]);
         hasMncc = (rows[0]?.cnt || 0) > 0;
@@ -55,7 +55,7 @@ router.get('/list', async (req, res) => {
     // Build final service list
     const services = [...CORE_SERVICES];
 
-    // Prepend Maintenance (NanoFix) if customer has MNCC
+    // Prepend Maintenance (NanoFix) if customer has Coating or PPF booking
     if (hasMncc) {
       services.unshift({
         api_name: 'Nano Fix (Maintenance)',
