@@ -18,19 +18,11 @@ const { authenticateToken } = require('../middleware/auth');
 // All booking routes require authentication
 router.use(authenticateToken);
 
-// --- Capacity defaults (from booking_capacity_helper.php) ---
-const CAPACITY_DEFAULTS = {
-  'Nano Ceramic Coating': 4,
-  'Nano Ceramic Tint': 4,
-  'Nano Fix (Maintenance)': 5,
-  'Auto Paint & Repair': 1,
-  'PPF': 1,
-  'Paint Protection Film (PPF)': 1
-};
-
-// --- Helper: Get branch-specific capacity ---
+// --- Helper: Get branch-specific capacity from DB (matches Unify's booking_capacity.php) ---
+// Capacity is ALWAYS read from branch_booking_capacity table, managed by admins in Unify.
+// 0 = unlimited (never full). No hardcoded defaults.
 async function getBranchServiceCapacity(serviceName, branchId) {
-  // Normalize PPF
+  // Normalize PPF variants to canonical name
   if (/PPF|Paint Protection Film/i.test(serviceName)) serviceName = 'PPF';
 
   if (branchId && branchId > 0) {
@@ -42,27 +34,30 @@ async function getBranchServiceCapacity(serviceName, branchId) {
       if (rows.length > 0) return rows[0].max_capacity;
     } catch { /* fall through */ }
   }
-  return CAPACITY_DEFAULTS[serviceName] ?? 10;
+  return 0; // No DB row = unlimited (matches Unify: $row ? intval($row['max_capacity']) : 0)
 }
 
 // --- Helper: Get available slots for date+service+branch ---
+// Only counts confirmed bookings (matches Unify — no pending requests in count)
 async function getAvailableSlots(date, serviceName, branchId) {
   const capacity = await getBranchServiceCapacity(serviceName, branchId);
 
-  // Normalize PPF
-  const normalized = /PPF|Paint Protection Film/i.test(serviceName) ? 'PPF' : serviceName;
-  const likePattern = `%${normalized}%`;
+  // 0 = unlimited — always available
+  if (capacity === 0) return Infinity;
 
-  // Count confirmed bookings
+  // Normalize PPF variants
+  const normalized = /PPF|Paint Protection Film/i.test(serviceName) ? 'PPF' : serviceName;
+
+  // Count confirmed bookings only (exact match, no LIKE — matches Unify)
   let confirmedCount = 0;
   try {
     let query = `SELECT COUNT(*) as count FROM bookings b
       JOIN bookings_service_types bst ON b.booking_id = bst.booking_id
       WHERE DATE(b.booking_date) = ?
-      AND (bst.service_name = ? OR bst.service_name LIKE ?)
+      AND bst.service_name = ?
       AND (b.notes IS NULL OR b.notes NOT LIKE '%CANCELLED:%')
       AND (bst.status IS NULL OR bst.status != 'Cancelled')`;
-    const params = [date, normalized, likePattern];
+    const params = [date, normalized];
     if (branchId && branchId > 0) {
       query += ' AND b.branch_id = ?';
       params.push(branchId);
@@ -71,24 +66,7 @@ async function getAvailableSlots(date, serviceName, branchId) {
     confirmedCount = rows[0]?.count || 0;
   } catch { /* ignore */ }
 
-  // Count pending requests
-  let pendingCount = 0;
-  try {
-    let query = `SELECT COUNT(*) as count FROM booking_requests br
-      JOIN booking_request_services brs ON br.request_id = brs.request_id
-      WHERE DATE(br.booking_date) = ?
-      AND (brs.service_name = ? OR brs.service_name LIKE ?)
-      AND br.status = 'pending'`;
-    const params = [date, normalized, likePattern];
-    if (branchId && branchId > 0) {
-      query += ' AND br.branch_id = ?';
-      params.push(branchId);
-    }
-    const [rows] = await pool.query(query, params);
-    pendingCount = rows[0]?.count || 0;
-  } catch { /* ignore */ }
-
-  return Math.max(0, capacity - confirmedCount - pendingCount);
+  return Math.max(0, capacity - confirmedCount);
 }
 
 // --- Helper: Get customer's branch_id from DB ---
@@ -435,22 +413,7 @@ async function handleAvailability(req, res) {
         for (const r of rows) bookingCounts[r.dt] = r.cnt;
       } catch { /* ignore */ }
 
-      // Bulk pending counts
-      const pendingCounts = {};
-      try {
-        const [rows] = await pool.query(`
-          SELECT DATE(br.booking_date) as dt, COUNT(*) as cnt
-          FROM booking_requests br
-          LEFT JOIN booking_request_services brs ON br.request_id = brs.request_id
-          WHERE br.branch_id = ?
-          AND br.booking_date >= ? AND br.booking_date < DATE_ADD(?, INTERVAL 1 DAY)
-          AND (br.latest_service = ? OR brs.service_name = ?)
-          AND br.status = 'pending'
-          GROUP BY dt
-        `, [branchId, monthStart, monthEnd, service, service]);
-        for (const r of rows) pendingCounts[r.dt] = r.cnt;
-      } catch { /* ignore */ }
-
+      // Only count confirmed bookings (no pending requests — matches Unify)
       const availableDates = [];
       const current = new Date(startDate);
       while (current <= endDate) {
@@ -458,17 +421,31 @@ async function handleAvailability(req, res) {
         const dayOfWeek = current.getDay(); // 0=Sun
 
         if (dayOfWeek !== 0) { // Skip Sundays
-          const booked = (bookingCounts[dateStr] || 0) + (pendingCounts[dateStr] || 0);
-          const max = branchCapacity[service] || CAPACITY_DEFAULTS[service] || 0;
-          const isAvailable = max > 0 ? booked < max : true;
+          const booked = bookingCounts[dateStr] || 0;
+          const max = branchCapacity[service] ?? 0; // 0 = unlimited (from DB)
+
+          // Compute status matching Unify's logic (bookings_create.php lines 116-153)
+          let status;
+          if (max === 0) {
+            // Unlimited capacity — always available
+            status = 'available';
+          } else if (booked >= max) {
+            status = 'full';
+          } else if (booked >= max - 1) {
+            // Only 1 slot remaining — "Almost Full" (Unify calls it 'limited')
+            status = 'limited';
+          } else {
+            status = 'available';
+          }
 
           availableDates.push({
             date: dateStr,
             formatted: current.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
             day: current.toLocaleDateString('en-US', { weekday: 'long' }),
-            available: isAvailable,
+            status,
+            available: status !== 'full',
             booked,
-            capacity: max
+            capacity: max === 0 ? '∞' : max
           });
         }
 
@@ -477,7 +454,7 @@ async function handleAvailability(req, res) {
 
       return res.json({
         success: true,
-        data: { dates: availableDates, capacity: branchCapacity[service] || CAPACITY_DEFAULTS[service] || 0, branch_id: branchId },
+        data: { dates: availableDates, capacity: branchCapacity[service] ?? 0, branch_id: branchId },
         message: 'Available dates retrieved',
         errors: []
       });

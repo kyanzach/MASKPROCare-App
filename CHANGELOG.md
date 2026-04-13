@@ -1,5 +1,19 @@
 # Changelog
 
+## [v1.9.0] — 2026-04-13
+### Fixed
+- **Booking capacity now reads from DB only** — deleted hardcoded `CAPACITY_DEFAULTS` object. All capacity is now sourced exclusively from `branch_booking_capacity` table, managed by admins in Unify's Booking Capacity Settings page. `0 = unlimited` (never full), matching Unify's exact behavior
+- **Removed pending booking_requests from capacity count** — only confirmed bookings (from `bookings_service_types`) are counted for capacity. Matches Unify's `bookings_create.php` logic
+- **Removed fragile LIKE patterns** in service name matching — now uses exact match (`bst.service_name = ?`) like Unify
+
+### Added
+- **"Almost Full" (Limited) indicator** — calendar now shows amber/orange color and dot when only 1 slot remains for a service on a date. Matches Unify's Smart Calendar `limited` status (`booked >= max - 1`)
+- **Status dots on calendar days** — green (Open), amber (Limited), red (Full) dots below each date, matching Unify's calendar dot system
+- **Updated legend** — now shows 4 states: Open, Limited, Full, Closed (matching Unify's legend)
+
+### Changed
+- **API response format** — `GET /api/bookings/availability` now returns `status` field per date (`available`, `limited`, `full`) alongside existing `available` boolean. `capacity` returns `∞` for unlimited services
+
 ## [v1.8.3] — 2026-03-26
 ### Fixed
 - **Diamond (No Exp) display** — unlimited-term Diamond template (1006938) now shows "Diamond Package" instead of "Diamond (No Exp)" to match the original Diamond template name. Synthesizes a 12-year warranty expiry date from card creation date so customers see a normal expiry instead of blank. This is a frontend-only display fix for the Y2038 workaround template

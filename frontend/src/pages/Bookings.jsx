@@ -163,8 +163,11 @@ export default function Bookings() {
         isPast: dateStr < today,
         isSunday,
         isAvailable: dateInfo ? dateInfo.available : (!isSunday && dateStr >= today),
-        isUnavailable: dateInfo ? !dateInfo.available : false,
+        isLimited: dateInfo ? dateInfo.status === 'limited' : false,
+        isUnavailable: dateInfo ? dateInfo.status === 'full' : false,
         isSelected: bookingForm.booking_date === dateStr,
+        capacity: dateInfo?.capacity,
+        booked: dateInfo?.booked,
       });
     }
     return days;
@@ -269,8 +272,11 @@ export default function Bookings() {
         isPast: dateStr <= today,
         isSunday,
         isAvailable: dateInfo ? dateInfo.available : (!isSunday && dateStr > today),
-        isUnavailable: dateInfo ? !dateInfo.available : false,
+        isLimited: dateInfo ? dateInfo.status === 'limited' : false,
+        isUnavailable: dateInfo ? dateInfo.status === 'full' : false,
         isSelected: editDate === dateStr,
+        capacity: dateInfo?.capacity,
+        booked: dateInfo?.booked,
       });
     }
     return days;
@@ -636,30 +642,50 @@ function renderCalendar(month, setMonth, days, onSelect) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
         {days.map((d, i) => {
           if (!d) return <div key={`empty-${i}`} />;
-          const canClick = d.isAvailable && !d.isPast && !d.isSunday;
+          const canClick = (d.isAvailable || d.isLimited) && !d.isPast && !d.isSunday;
           return (
             <button key={d.dateStr} type="button" onClick={() => canClick && onSelect(d.dateStr)}
+              title={d.isLimited ? 'Almost Full — 1 slot left' : d.isUnavailable ? 'Fully Booked' : ''}
               style={{
-                aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                borderRadius: '8px',
+                aspectRatio: '1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                borderRadius: '8px', position: 'relative',
                 border: d.isSelected ? '2px solid #1d4ed8' : d.isToday ? '2px solid #f59e0b' : '1px solid transparent',
                 background: d.isSelected ? 'linear-gradient(135deg, #3b82f6, #1d4ed8)'
                   : d.isPast || d.isSunday ? '#f3f4f6'
+                  : d.isLimited ? 'rgba(245, 158, 11, 0.12)'
                   : d.isAvailable ? 'rgba(16, 185, 129, 0.1)'
                   : d.isUnavailable ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
-                color: d.isSelected ? 'white' : d.isPast || d.isSunday ? '#9ca3af' : d.isAvailable ? '#059669' : d.isUnavailable ? '#dc2626' : '#374151',
+                color: d.isSelected ? 'white'
+                  : d.isPast || d.isSunday ? '#9ca3af'
+                  : d.isLimited ? '#d97706'
+                  : d.isAvailable ? '#059669'
+                  : d.isUnavailable ? '#dc2626' : '#374151',
                 fontWeight: d.isSelected || d.isToday ? 600 : 500, fontSize: '13px',
                 cursor: canClick ? 'pointer' : 'not-allowed',
                 transition: 'all 0.2s ease',
                 textDecoration: d.isUnavailable && !d.isPast ? 'line-through' : 'none',
-              }}>{d.day}</button>
+              }}>
+              {d.day}
+              {/* Status dot — matches Unify's calendar dots */}
+              {!d.isPast && !d.isSunday && !d.isSelected && (d.isLimited || d.isUnavailable || d.isAvailable) && (
+                <span style={{
+                  width: d.isUnavailable ? '6px' : '5px',
+                  height: d.isUnavailable ? '6px' : '5px',
+                  borderRadius: '50%',
+                  background: d.isLimited ? '#f59e0b' : d.isUnavailable ? '#ef4444' : '#22c55e',
+                  position: 'absolute', bottom: '3px',
+                  boxShadow: d.isUnavailable ? '0 0 3px 1px rgba(239,68,68,0.4)' : '0 0 0 1px rgba(255,255,255,0.8)',
+                }} />
+              )}
+            </button>
           );
         })}
       </div>
-      <div style={{ display: 'flex', gap: '16px', marginTop: '12px', justifyContent: 'center', fontSize: '11px', color: '#64748b', flexWrap: 'wrap' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ width: '12px', height: '12px', borderRadius: '3px', background: '#d1fae5', border: '1px solid #10b981' }}></span>Available</span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ width: '12px', height: '12px', borderRadius: '3px', background: '#fee2e2', border: '1px solid #ef4444' }}></span>Full</span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ width: '12px', height: '12px', borderRadius: '3px', background: '#f3f4f6', border: '1px solid #9ca3af' }}></span>Past/Closed</span>
+      <div style={{ display: 'flex', gap: '12px', marginTop: '12px', justifyContent: 'center', fontSize: '10px', color: '#64748b', flexWrap: 'wrap', textTransform: 'uppercase', letterSpacing: '0.3px', fontWeight: 500 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}><span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e' }}></span>Open</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}><span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#f59e0b' }}></span>Limited</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}><span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444' }}></span>Full</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}><span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#cbd5e1' }}></span>Closed</span>
       </div>
     </>
   );
