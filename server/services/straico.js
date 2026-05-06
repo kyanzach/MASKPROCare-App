@@ -47,11 +47,16 @@ Reply ONLY with the exact word "FAIL" if it contains hate speech, sabotage, or m
         }
       );
 
-      // Straico response structure typically has data.completions or data.data.completions
-      // Adjusting for common format:
-      const completionText = response.data?.data?.completions?.['openai/gpt-4o-mini']?.completion 
-        || response.data?.completions?.['openai/gpt-4o-mini']?.completion 
-        || '';
+      // Parse the AI response using robust logic (from Unify/GAQ learnings)
+      const completions = response.data?.data?.completions;
+      let completionText = '';
+      if (completions && completions['openai/gpt-4o-mini']) {
+        completionText = completions['openai/gpt-4o-mini']?.completion?.choices?.[0]?.message?.content || '';
+      } else {
+        completionText = response.data?.completion?.choices?.[0]?.message?.content
+          || response.data?.data?.completion?.choices?.[0]?.message?.content
+          || '';
+      }
 
       const result = completionText.trim().toUpperCase();
       console.log(`[Straico Moderation] Title: "${title}" -> AI Result: ${result}`);
