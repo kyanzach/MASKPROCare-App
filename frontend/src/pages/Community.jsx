@@ -11,7 +11,7 @@ export default function Community() {
   const [isPosting, setIsPosting] = useState(false);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
-  const [postType, setPostType] = useState('discussion'); // 'sos' or 'discussion'
+  const [postType, setPostType] = useState('sos'); // 'sos' or 'discussion'
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -69,7 +69,7 @@ export default function Community() {
     return (
       <div style={{ padding: '24px', maxWidth: '800px', margin: '0 auto' }}>
         <div style={{ fontSize: '13px', color: '#64748b', marginBottom: '16px' }}>
-          <span style={{ cursor: 'pointer', color: '#3b82f6' }} onClick={() => setIsPosting(false)}>Community</span>
+          <span style={{ cursor: 'pointer', color: '#3b82f6' }} onClick={() => setIsPosting(false)}>Community Care</span>
           <span style={{ margin: '0 8px' }}>/</span>
           <span>Create Post</span>
         </div>
@@ -82,18 +82,6 @@ export default function Community() {
 
           <div style={{ display: 'flex', gap: '16px', marginBottom: '24px' }}>
             <button
-              onClick={() => setPostType('discussion')}
-              style={{
-                flex: 1, padding: '16px', borderRadius: '12px', border: '2px solid',
-                borderColor: postType === 'discussion' ? '#3b82f6' : '#e2e8f0',
-                background: postType === 'discussion' ? '#eff6ff' : 'white',
-                cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px'
-              }}
-            >
-              <i className="bi bi-chat-text" style={{ fontSize: '24px', color: postType === 'discussion' ? '#3b82f6' : '#64748b' }}></i>
-              <span style={{ fontWeight: 600, color: postType === 'discussion' ? '#1e40af' : '#475569' }}>General Discussion</span>
-            </button>
-            <button
               onClick={() => setPostType('sos')}
               style={{
                 flex: 1, padding: '16px', borderRadius: '12px', border: '2px solid',
@@ -105,6 +93,18 @@ export default function Community() {
               <i className="bi bi-exclamation-triangle" style={{ fontSize: '24px', color: postType === 'sos' ? '#ef4444' : '#64748b' }}></i>
               <span style={{ fontWeight: 600, color: postType === 'sos' ? '#b91c1c' : '#475569' }}>MASKPRO S.O.S.</span>
             </button>
+            <button
+              onClick={() => setPostType('discussion')}
+              style={{
+                flex: 1, padding: '16px', borderRadius: '12px', border: '2px solid',
+                borderColor: postType === 'discussion' ? '#3b82f6' : '#e2e8f0',
+                background: postType === 'discussion' ? '#eff6ff' : 'white',
+                cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px'
+              }}
+            >
+              <i className="bi bi-chat-text" style={{ fontSize: '24px', color: postType === 'discussion' ? '#3b82f6' : '#64748b' }}></i>
+              <span style={{ fontWeight: 600, color: postType === 'discussion' ? '#1e40af' : '#475569' }}>Maintenance Discussion</span>
+            </button>
           </div>
 
           <form onSubmit={handleSubmit}>
@@ -115,7 +115,7 @@ export default function Community() {
                 required
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder={postType === 'sos' ? "E.g. Flat tire at EDSA Ayala, need help!" : "E.g. What's the best tire wax?"}
+                placeholder={postType === 'sos' ? "E.g. Flat tire at EDSA Ayala, need help!" : "E.g. How to maintain my Nano Ceramic Coating?"}
                 style={{
                   width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1',
                   fontSize: '15px'
@@ -133,7 +133,7 @@ export default function Community() {
                 placeholder={
                   postType === 'sos' 
                   ? "Guide: Where are you? What is your car model? What is the issue?\n\nExample: My car battery died at SM Megamall parking. I drive a Toyota Fortuner. Can any techs or members nearby help?"
-                  : "Share your thoughts, ask for maintenance tips, or start a discussion..."
+                  : "Share or ask about maintenance tips for your coating, tint, or PPF. Note: For service issues, please contact support directly."
                 }
                 style={{
                   width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1',
@@ -174,7 +174,7 @@ export default function Community() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <h2 style={{ fontSize: '24px', fontWeight: 700, color: '#1e293b', margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
           <i className="bi bi-people" style={{ color: '#4f46e5' }}></i>
-          Care Community
+          Community Care
         </h2>
         <button
           onClick={() => setIsPosting(true)}

@@ -158,7 +158,7 @@ export default function Layout() {
     { path: '/', icon: 'bi-grid', label: 'Dashboard', exact: true },
     { path: '/bookings', icon: 'bi-calendar-check', label: 'My Bookings' },
     { path: '/vehicles', icon: 'bi-car-front', label: 'My Vehicles' },
-    { path: '/community', icon: 'bi-people', label: 'Community' },
+    { path: '/community-care', icon: 'bi-people', label: 'Community Care' },
     { path: '/profile?tab=loyalty', icon: 'bi-credit-card-2-front', label: 'My Loyalty Cards' },
   ];
 
@@ -166,7 +166,7 @@ export default function Layout() {
     { path: '/', icon: 'bi-grid', label: 'Dashboard', exact: true },
     { path: '/bookings', icon: 'bi-calendar-check', label: 'My Bookings' },
     { path: '/vehicles', icon: 'bi-car-front', label: 'My Vehicles' },
-    { path: '/community', icon: 'bi-people', label: 'Community' },
+    { path: '/community-care', icon: 'bi-people', label: 'Community Care' },
     { path: '/shop', icon: 'bi-bag', label: 'Shop' },
     { path: '/profile', icon: 'bi-person', label: 'Profile' },
   ];

@@ -34,7 +34,7 @@ function AppRoutes() {
         <Route path="loyalty" element={<Navigate to="/profile?tab=loyalty" />} />
         <Route path="profile" element={<Profile />} />
         <Route path="shop" element={<Shop />} />
-        <Route path="community" element={<Community />} />
+        <Route path="community-care" element={<Community />} />
         <Route path="aftercare/:slug" element={<Aftercare />} />
         <Route path="admin" element={<AdminPanel />} />
       </Route>
