@@ -1,15 +1,13 @@
 # Changelog
 
-## [v1.9.1] — 2026-04-13
-### Fixed
-- **🔥 CRITICAL: Calendar always showed all-green (available)** — `mysql2` returns `DATE()` results as JavaScript Date objects, not strings. Map key became `"Tue Apr 14 2026 00:00:00 GMT+0800"` instead of `"2026-04-14"`, causing ALL date lookups to return 0 bookings. Fixed by using `DATE_FORMAT(b.booking_date, '%Y-%m-%d')` in SQL to return string keys directly
-- **UTC timezone bug in date generation** — `toISOString().slice(0,10)` was generating UTC dates which could be 1 day behind Manila time late at night. Replaced with local `toLocalDateStr()` helper
-- **Service name mismatch** — added `normalizeServiceName()` map to canonicalize PPF/NanoFix variants between what Care sends vs what `branch_booking_capacity` and `bookings_service_types` use
-- **NanoFix eligibility check too narrow** — only checked for Nano Ceramic Coating (MNCC). Now also checks PPF bookings, since PPF customers can also avail Maintenance (NanoFix)
-- **Capacity lookup used raw service name** — `branchCapacity[service]` used the frontend-sent name instead of the normalized DB name. Now uses `branchCapacity[normalizedService]`
-
-- **Calendar respects vehicle’s branch** — availability/capacity uses the branch where the vehicle was originally booked
-- **Fail-safe calendar** — dates without availability data show as Closed instead of defaulting to Open
+## [v1.10.0] — 2026-05-06
+### Added
+- **Care Community / MASKPRO S.O.S.** feature implemented across backend and mobile UI
+- **AI Moderation (Straico API)** integrated into `server/services/straico.js` to instantly gate MASKPRO S.O.S. posts against hate/spam with a 0-tolerance policy
+- Backend API routes added in `server/routes/community.js` (`GET /posts`, `POST /posts`, `POST /comments`, `PUT /posts/:id/resolve`)
+- Database migration script `community_tables.sql` created for `community_posts` and `community_comments`
+- React Native UI `mobile/app/(tabs)/community.tsx` created featuring pre-filled text guidelines for SOS and general posts
+- Added Community tab to `mobile/app/(tabs)/_layout.tsx`
 
 ## [v1.9.0] — 2026-04-13
 ### Fixed
