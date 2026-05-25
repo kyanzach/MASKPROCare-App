@@ -1,5 +1,17 @@
 # Changelog
 
+## [v1.11.0] — 2026-05-25
+### Added
+- **Completed full mobile app screen parity** — ported all remaining screens from web to React Native / Expo:
+  - **Dashboard** (`mobile/app/(tabs)/index.tsx`): welcome, stats cards, upcoming appointments list, horizontal vehicle cards
+  - **Vehicles** (`mobile/app/(tabs)/vehicles.tsx`): card displays, LTO renewal banner, add/edit slide modal, confirm delete
+  - **Bookings** (`mobile/app/(tabs)/bookings.tsx`): unified list, new booking modal, cancel/edit modal
+  - **Aftercare** (`mobile/app/(tabs)/services.tsx`): landing portal, locked/unlocked article tabs (5 blog categories)
+  - **Profile** (`mobile/app/(tabs)/profile.tsx`): profile edit, photo upload/delete, loyalty cards list (visits/stamps grids, barcode)
+- **PDF417 Barcode SVG rendering** (`mobile/components/ui/PDF417Barcode.tsx`) using pure JS `bwip-js` and `react-native-svg`
+- **Shared UI components** (`mobile/components/ui/`): LoadingSpinner, EmptyState, StatusBadge, VehicleIcon, SectionHeader, AlertBanner, ConfirmModal, CalendarPicker
+- **Image Picker** integrated via `expo-image-picker` for profile and vehicle photo uploads
+
 ## [v1.10.0] — 2026-05-06
 ### Added
 - **Care Community / MASKPRO S.O.S.** feature implemented across backend and mobile UI
