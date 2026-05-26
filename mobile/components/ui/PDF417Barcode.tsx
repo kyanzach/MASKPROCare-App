@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { View, StyleSheet, Text } from 'react-native';
 import { SvgXml } from 'react-native-svg';
-import bwipjs from 'bwip-js';
+import bwipjs from 'bwip-js/generic';
 
 interface PDF417BarcodeProps {
   text: string;

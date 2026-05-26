@@ -1,5 +1,9 @@
 # Changelog
 
+## [v1.11.1] — 2026-05-26
+### Fixed
+- **Resolved Metro bundler error with bwip-js** — changed barcode generator import from `bwip-js` to `bwip-js/generic` in `mobile/components/ui/PDF417Barcode.tsx` to bypass `react-zlib-js` dependency in React Native.
+
 ## [v1.11.0] — 2026-05-25
 ### Added
 - **Completed full mobile app screen parity** — ported all remaining screens from web to React Native / Expo:
