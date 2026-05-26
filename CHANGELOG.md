@@ -1,5 +1,9 @@
 # Changelog
 
+## [v1.11.2] — 2026-05-26
+### Fixed
+- **Fixed 401 Unauthorized handling** — implemented `setSignOutHandler` in `mobile/api/client.ts` to coordinate with `AuthProvider` in `mobile/context/AuthContext.tsx`. On receiving a 401 response, the client clears the SecureStore and resets the `user` state to `null`, triggering an immediate auto-redirect to the login screen instead of hanging on the dashboard with 401 console errors.
+
 ## [v1.11.1] — 2026-05-26
 ### Fixed
 - **Resolved Metro bundler error with bwip-js** — changed barcode generator import from `bwip-js` to `bwip-js/generic` in `mobile/components/ui/PDF417Barcode.tsx` to bypass `react-zlib-js` dependency in React Native.

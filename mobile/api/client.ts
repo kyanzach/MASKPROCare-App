@@ -30,6 +30,12 @@ client.interceptors.request.use(
   }
 );
 
+let signOutHandler: (() => void) | null = null;
+
+export const setSignOutHandler = (handler: () => void) => {
+  signOutHandler = handler;
+};
+
 // Response Interceptor
 client.interceptors.response.use(
   (response) => response,
@@ -39,7 +45,9 @@ client.interceptors.response.use(
       try {
         await SecureStore.deleteItemAsync('mpc_token');
         await SecureStore.deleteItemAsync('mpc_customer');
-        // Redirection should be handled in an AuthContext or via router events
+        if (signOutHandler) {
+          signOutHandler();
+        }
       } catch (e) {
         console.error('Error clearing secure store on 401:', e);
       }

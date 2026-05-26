@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { useRouter, useSegments } from 'expo-router';
+import { setSignOutHandler } from '@/api/client';
 
 interface Customer {
   id: number;
@@ -23,6 +24,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const segments = useSegments();
   const router = useRouter();
+
+  useEffect(() => {
+    setSignOutHandler(() => {
+      setUser(null);
+    });
+    return () => {
+      setSignOutHandler(() => {});
+    };
+  }, []);
 
   useEffect(() => {
     // Load token and user from SecureStore on startup
