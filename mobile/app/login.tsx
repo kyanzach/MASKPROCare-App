@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/context/AuthContext';
 import client from '@/api/client';
+import AlertBanner from '@/components/ui/AlertBanner';
 
 export default function LoginScreen() {
   const { login } = useAuth();
@@ -10,24 +11,26 @@ export default function LoginScreen() {
   const [otp, setOtp] = useState('');
   const [step, setStep] = useState(1); // 1 = mobile, 2 = otp
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const requestOTP = async () => {
     if (!mobile || mobile.length < 10) {
-      Alert.alert('Error', 'Please enter a valid mobile number');
+      setError('Please enter a valid mobile number');
       return;
     }
 
     setLoading(true);
+    setError('');
     try {
       const response = await client.post('/auth/login', { mobile_number: mobile });
       if (response.data.success) {
         setStep(2);
       } else {
-        Alert.alert('Error', response.data.message || 'Failed to send OTP');
+        setError(response.data.message || 'Failed to send OTP');
       }
-    } catch (error: any) {
-      const msg = error.response?.data?.message || 'Network error occurred';
-      Alert.alert('Error', msg);
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'Network error occurred';
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -35,11 +38,12 @@ export default function LoginScreen() {
 
   const verifyOTP = async () => {
     if (!otp || otp.length < 6) {
-      Alert.alert('Error', 'Please enter the 6-digit OTP');
+      setError('Please enter the 6-digit OTP');
       return;
     }
 
     setLoading(true);
+    setError('');
     try {
       const response = await client.post('/auth/verify', { mobile_number: mobile, otp_code: otp });
       if (response.data.success) {
@@ -47,11 +51,11 @@ export default function LoginScreen() {
         await login(response.data.data.token, response.data.data.customer);
         // The AuthContext will automatically redirect to /(tabs)
       } else {
-        Alert.alert('Error', response.data.message || 'Invalid OTP');
+        setError(response.data.message || 'Invalid OTP');
       }
-    } catch (error: any) {
-      const msg = error.response?.data?.message || 'Verification failed';
-      Alert.alert('Error', msg);
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'Verification failed';
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -66,12 +70,16 @@ export default function LoginScreen() {
         colors={['#4f46e5', '#06b6d4']}
         style={styles.background}
       />
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>
           <Text style={styles.title}>Welcome Back 👋</Text>
           <Text style={styles.subtitle}>
             {step === 1 ? 'Enter your mobile number to continue' : `We sent an OTP to ${mobile}`}
           </Text>
+
+          {error ? (
+            <AlertBanner message={error} type="error" onDismiss={() => setError('')} />
+          ) : null}
 
           {step === 1 ? (
             <>
@@ -83,7 +91,10 @@ export default function LoginScreen() {
                   placeholderTextColor="#9ca3af"
                   keyboardType="phone-pad"
                   value={mobile}
-                  onChangeText={setMobile}
+                  onChangeText={(val) => {
+                    setMobile(val);
+                    if (error) setError('');
+                  }}
                   maxLength={11}
                 />
               </View>
@@ -99,12 +110,15 @@ export default function LoginScreen() {
           ) : (
             <>
               <TextInput
-                style={[styles.input, { textAlign: 'center', letterSpacing: 8, fontSize: 24 }]}
+                style={[styles.input, { textAlign: 'center', letterSpacing: 8, fontSize: 24, borderWidth: 1, borderColor: '#d1d5db', borderRadius: 12, backgroundColor: '#fff', marginBottom: 24 }]}
                 placeholder="000000"
                 placeholderTextColor="#9ca3af"
                 keyboardType="number-pad"
                 value={otp}
-                onChangeText={setOtp}
+                onChangeText={(val) => {
+                  setOtp(val);
+                  if (error) setError('');
+                }}
                 maxLength={6}
               />
 
@@ -118,7 +132,10 @@ export default function LoginScreen() {
               
               <TouchableOpacity 
                 style={styles.linkButton} 
-                onPress={() => setStep(1)}
+                onPress={() => {
+                  setStep(1);
+                  setError('');
+                }}
                 disabled={loading}
               >
                 <Text style={styles.linkText}>Change Mobile Number</Text>
