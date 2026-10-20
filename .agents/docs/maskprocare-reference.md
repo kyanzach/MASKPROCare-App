@@ -269,7 +269,11 @@ ssh root@167.71.217.49 'certbot --nginx -d care.maskpro.ph'
 - **`.env` is present** on server with all production creds including `BOOMERANGME_API_KEY`
 - **Phase 4 status corrected** from "Ready — first deploy pending" → ✅ Complete
 - **deploy.sh does NOT upload CHANGELOG.md** — only `package.json` and `server/`. Must manually scp CHANGELOG after deploy
-- **Lesson:** Always verify server state via SSH before claiming deployment status. Never assume from docs alone
+### 2026-10-20: Mobile Native App Parity & Admin Impersonation
+- **Dashboard Load Error on Cold Boot:** In Expo Router, `initialRouteName: '(tabs)'` can cause `(tabs)/index.tsx` to mount before `AuthContext` resolves credentials. Gated initial dashboard requests behind `if (user)` to prevent unauthenticated 401 calls and warning banners.
+- **Admin Login & Impersonation on Mobile:** Replicated web `AdminLogin.jsx` and `AdminPanel.jsx` in `mobile/app/admin-login.tsx` and `mobile/app/admin.tsx`. Admins authenticate using Unify username/password against `POST /api/admin/login` (zero SMS credits).
+- **Customer Impersonation Flow:** Calling `POST /api/admin/impersonate` returns customer JWT; mobile saves the admin token in `SecureStore` as `admin_token`, updates `AuthContext` to display the amber "Viewing as [Customer]" banner in `TopHeader.tsx`, and allows exiting back to the admin directory seamlessly.
+- **Secret 5-Tap Gesture:** Replicated the 5-tap gesture on the "Secured by MASKPRO" badge in `mobile/app/login.tsx` to instantly route to `/admin-login`.
 
 ### 2026-03-16: Version Display, Profile Photo, and BoomerangMe Terms
 - **Version bug root cause:** `Layout.jsx` had `const APP_VERSION = '1.5.0'` hardcoded — never synced with `package.json`. Fix: Vite `define: { __APP_VERSION__: JSON.stringify(pkg.version) }` in `vite.config.js` injects version at build time
