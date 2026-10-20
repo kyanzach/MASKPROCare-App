@@ -508,7 +508,7 @@ export default function BookingsScreen() {
                       style={styles.noVehiclesBtn}
                       onPress={() => {
                         setShowBookingModal(false);
-                        router.push('/vehicles');
+                        router.push('/(tabs)/vehicles');
                       }}
                     >
                       <Text style={styles.noVehiclesBtnText}>Add Vehicle</Text>

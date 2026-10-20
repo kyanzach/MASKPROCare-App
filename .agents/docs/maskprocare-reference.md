@@ -234,6 +234,17 @@ ssh root@167.71.217.49 'certbot --nginx -d care.maskpro.ph'
 
 ## 📝 Session Learnings Log
 
+### 2026-10-20: Mobile Native Polish, TopHeader & Parity Completion
+- **TopHeader & Real-Time Notification Polling:** Built `TopHeader.tsx` and `NotificationModal.tsx` using `useSafeAreaInsets` to provide pixel-for-pixel web topbar parity, polling `/api/notifications/count` every 60s and displaying an interactive native modal sheet for notifications with deep-links to `/bookings`, `/vehicles`, and `/profile`.
+- **Shop Screen:** Ported `Shop.jsx` ("Coming Soon" VIP experience) into native `shop.tsx` and mounted it in `TabLayout`.
+- **FlatList for Community Feed:** Replaced `ScrollView` + `.map()` in `community.tsx` with high-performance `FlatList` to prevent unbounded memory growth on long feeds. Added interactive post detail modal supporting real-time comments fetching, commenting, and SOS resolution (`/api/community/posts/:id/resolve`).
+- **6-Box OTP Input Parity:** Updated `mobile/app/login.tsx` to match `frontend/src/pages/Login.jsx` pixel-for-pixel with individual digit inputs, auto-advancing, paste, backspace handling, 30s resend timer, and corrected API payload keys (`mobile` and `otp`).
+- **Timeout on Axios Client:** Added 15s timeout to `mobile/api/client.ts` to avoid requests hanging indefinitely on unstable cellular networks.
+
+### 2026-04-25: Adopted GetSales Mobile App Rules
+- **UI/UX Strict Compliance:** Added Rule 17 to `.agents/rules/maskprocare-app.md` enforcing pixel-for-pixel replication of the original web app design for the React Native/Expo mobile app. We must not invent new layouts or aesthetics.
+- **Expo Auto-Restart:** Added Rule 18 requiring agents to automatically run terminal commands to clear cache or restart the Metro bundler when installing native modules or encountering cache issues, instead of asking the user to do it.
+
 ### 2026-03-25: Booking Status Derivation Bug Fix
 - **Root cause:** `bookings` table has no `status` column. Care derived status from `notes LIKE 'CANCELLED:'` prefix + date comparison. But Unify's cancellation workflow sets `bst.status = 'Cancelled'` (in `bookings_service_types`) WITHOUT modifying notes → 956 cancelled bookings appeared as "Done"
 - **Fix:** Added `GROUP_CONCAT(DISTINCT bst.status SEPARATOR ', ') as service_statuses` to the booking list query, then check `bst.status` for Cancelled/Done/Scheduled/Rescheduled before falling back to date-based logic

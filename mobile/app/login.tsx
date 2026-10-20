@@ -1,148 +1,392 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Image,
+  Linking,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useAuth } from '@/context/AuthContext';
 import client from '@/api/client';
 import AlertBanner from '@/components/ui/AlertBanner';
 
+const RESEND_COOLDOWN_SECONDS = 30;
+
 export default function LoginScreen() {
   const { login } = useAuth();
+  const [step, setStep] = useState<'mobile' | 'otp'>('mobile');
   const [mobile, setMobile] = useState('');
-  const [otp, setOtp] = useState('');
-  const [step, setStep] = useState(1); // 1 = mobile, 2 = otp
+  const [formattedMobile, setFormattedMobile] = useState('');
+  const [otp, setOtp] = useState<string[]>(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [devOtp, setDevOtp] = useState('');
+  const [resendTimer, setResendTimer] = useState(0);
 
-  const requestOTP = async () => {
-    if (!mobile || mobile.length < 10) {
-      setError('Please enter a valid mobile number');
+  const otpRefs = useRef<(TextInput | null)[]>([]);
+  const timerRef = useRef<any>(null);
+
+  // Clear timer on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
+  const startResendTimer = () => {
+    setResendTimer(RESEND_COOLDOWN_SECONDS);
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setResendTimer((prev) => {
+        if (prev <= 1) {
+          if (timerRef.current) clearInterval(timerRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const handleMobileSubmit = async () => {
+    setError('');
+    setSuccess('');
+
+    const cleaned = mobile.replace(/[^0-9]/g, '');
+    const mobilePattern = /^(0)?9\d{9}$/;
+    if (!mobilePattern.test(cleaned)) {
+      setError('Please enter a valid Philippine mobile number (e.g., 09XX XXX XXXX)');
       return;
     }
 
     setLoading(true);
-    setError('');
     try {
-      const response = await client.post('/auth/login', { mobile_number: mobile });
-      if (response.data.success) {
-        setStep(2);
+      const res = await client.post('/auth/login', { mobile: cleaned });
+      if (res.data?.success) {
+        const returnedMobile = res.data.data?.mobile || cleaned;
+        setFormattedMobile(returnedMobile);
+        if (res.data.data?.otp) {
+          setDevOtp(res.data.data.otp);
+        }
+        setStep('otp');
+        setSuccess(`OTP sent to ${returnedMobile}`);
+        startResendTimer();
+        setTimeout(() => {
+          otpRefs.current[0]?.focus();
+        }, 300);
       } else {
-        setError(response.data.message || 'Failed to send OTP');
+        setError(res.data?.message || 'Failed to send OTP. Please try again.');
       }
     } catch (err: any) {
-      const msg = err.response?.data?.message || 'Network error occurred';
+      const msg = err.response?.data?.message || 'Failed to send OTP. Please try again.';
       setError(msg);
     } finally {
       setLoading(false);
     }
   };
 
-  const verifyOTP = async () => {
-    if (!otp || otp.length < 6) {
+  const handleOtpChange = (index: number, value: string) => {
+    const cleaned = value.replace(/[^0-9]/g, '');
+    const newOtp = [...otp];
+
+    if (cleaned.length > 1) {
+      // User pasted multiple digits into one box
+      const digits = cleaned.slice(0, 6).split('');
+      for (let i = 0; i < 6; i++) {
+        newOtp[i] = digits[i] || '';
+      }
+      setOtp(newOtp);
+      const nextIndex = Math.min(digits.length, 5);
+      otpRefs.current[nextIndex]?.focus();
+      if (error) setError('');
+      return;
+    }
+
+    newOtp[index] = cleaned.slice(-1);
+    setOtp(newOtp);
+    if (error) setError('');
+
+    // Auto-focus next box
+    if (cleaned && index < 5) {
+      otpRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleOtpKeyPress = (index: number, e: any) => {
+    if (e.nativeEvent.key === 'Backspace' && !otp[index] && index > 0) {
+      otpRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleResend = async () => {
+    if (resendTimer > 0 || loading) return;
+    setError('');
+    setSuccess('');
+    setLoading(true);
+    try {
+      const cleaned = mobile.replace(/[^0-9]/g, '');
+      const res = await client.post('/auth/login', { mobile: cleaned });
+      if (res.data?.success) {
+        if (res.data.data?.otp) {
+          setDevOtp(res.data.data.otp);
+        }
+        setSuccess('New OTP sent successfully');
+        startResendTimer();
+      } else {
+        setError(res.data?.message || 'Failed to resend OTP.');
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to resend OTP.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    const otpCode = otp.join('');
+    if (otpCode.length < 6) {
       setError('Please enter the 6-digit OTP');
       return;
     }
 
     setLoading(true);
     setError('');
+    const cleaned = mobile.replace(/[^0-9]/g, '');
+
     try {
-      const response = await client.post('/auth/verify', { mobile_number: mobile, otp_code: otp });
-      if (response.data.success) {
-        // Log in the user by storing the token and user data
+      const response = await client.post('/auth/verify', {
+        mobile: cleaned,
+        otp: otpCode,
+      });
+
+      if (response.data?.success) {
         await login(response.data.data.token, response.data.data.customer);
-        // The AuthContext will automatically redirect to /(tabs)
       } else {
-        setError(response.data.message || 'Invalid OTP');
+        setError(response.data?.message || 'Invalid or expired OTP');
       }
     } catch (err: any) {
-      const msg = err.response?.data?.message || 'Verification failed';
+      const msg = err.response?.data?.message || 'Verification failed. Please try again.';
       setError(msg);
     } finally {
       setLoading(false);
     }
   };
 
+  const allFilled = otp.every((d) => d !== '');
+
   return (
-    <KeyboardAvoidingView 
-      style={styles.container} 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <LinearGradient
-        colors={['#4f46e5', '#06b6d4']}
+        colors={['#1e1b4b', '#312e81', '#1e3a5f', '#0f172a']}
+        locations={[0, 0.4, 0.7, 1]}
         style={styles.background}
       />
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.card}>
-          <Text style={styles.title}>Welcome Back 👋</Text>
+          {/* Top Gradient Accent Bar */}
+          <LinearGradient
+            colors={['#4f46e5', '#06b6d4']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.cardTopAccent}
+          />
+
+          {/* Logo */}
+          <View style={styles.logoContainer}>
+            <Image
+              source={require('@/assets/images/maskpro_logo.png')}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+          </View>
+
+          {/* Header Title & Subtitle */}
+          <Text style={styles.title}>
+            {step === 'mobile' ? 'MASKPRO Care' : 'Verify OTP'}
+          </Text>
           <Text style={styles.subtitle}>
-            {step === 1 ? 'Enter your mobile number to continue' : `We sent an OTP to ${mobile}`}
+            {step === 'mobile'
+              ? 'Enter your mobile number to access your account'
+              : 'Enter the verification code sent to your mobile'}
           </Text>
 
+          {/* Alerts */}
           {error ? (
             <AlertBanner message={error} type="error" onDismiss={() => setError('')} />
           ) : null}
+          {success ? (
+            <AlertBanner message={success} type="success" onDismiss={() => setSuccess('')} autoDismissMs={4000} />
+          ) : null}
+          {devOtp && step === 'otp' ? (
+            <View style={styles.devOtpBanner}>
+              <FontAwesome name="code" size={14} color="#6366f1" style={{ marginRight: 6 }} />
+              <Text style={styles.devOtpText}>
+                Dev OTP: <Text style={{ fontWeight: '800' }}>{devOtp}</Text>
+              </Text>
+            </View>
+          ) : null}
 
-          {step === 1 ? (
-            <>
-              <View style={styles.inputContainer}>
-                <Text style={styles.prefix}>+63</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="9XX XXX XXXX"
-                  placeholderTextColor="#9ca3af"
-                  keyboardType="phone-pad"
-                  value={mobile}
-                  onChangeText={(val) => {
-                    setMobile(val);
-                    if (error) setError('');
-                  }}
-                  maxLength={11}
-                />
-              </View>
-
-              <TouchableOpacity 
-                style={styles.button} 
-                onPress={requestOTP}
-                disabled={loading}
-              >
-                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Continue with Mobile</Text>}
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
+          {/* Step 1: Mobile Form */}
+          {step === 'mobile' ? (
+            <View style={styles.formSection}>
+              <Text style={styles.label}>Mobile Number</Text>
               <TextInput
-                style={[styles.input, { textAlign: 'center', letterSpacing: 8, fontSize: 24, borderWidth: 1, borderColor: '#d1d5db', borderRadius: 12, backgroundColor: '#fff', marginBottom: 24 }]}
-                placeholder="000000"
-                placeholderTextColor="#9ca3af"
-                keyboardType="number-pad"
-                value={otp}
+                style={styles.mobileInput}
+                placeholder="09XX XXX XXXX"
+                placeholderTextColor="#94a3b8"
+                keyboardType="phone-pad"
+                value={mobile}
                 onChangeText={(val) => {
-                  setOtp(val);
+                  setMobile(val.replace(/[^0-9]/g, '').slice(0, 11));
                   if (error) setError('');
                 }}
-                maxLength={6}
+                maxLength={11}
               />
+              <Text style={styles.helpText}>
+                Please use the mobile number registered for the service or from where you receive maintenance reminders
+              </Text>
 
-              <TouchableOpacity 
-                style={styles.button} 
-                onPress={verifyOTP}
+              <TouchableOpacity
+                style={[styles.primaryButton, loading && styles.buttonDisabled]}
+                onPress={handleMobileSubmit}
                 disabled={loading}
+                activeOpacity={0.85}
               >
-                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Verify OTP</Text>}
+                {loading ? (
+                  <ActivityIndicator color="#ffffff" size="small" />
+                ) : (
+                  <Text style={styles.primaryButtonText}>Continue with Mobile</Text>
+                )}
               </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.linkButton} 
-                onPress={() => {
-                  setStep(1);
-                  setError('');
-                }}
-                disabled={loading}
+            </View>
+          ) : (
+            /* Step 2: 6-Box OTP Form */
+            <View style={styles.formSection}>
+              <Text style={styles.label}>OTP Code</Text>
+              <View style={styles.otpBoxesContainer}>
+                {otp.map((digit, i) => (
+                  <TextInput
+                    key={i}
+                    ref={(el) => {
+                      otpRefs.current[i] = el;
+                    }}
+                    style={[
+                      styles.otpBox,
+                      digit ? styles.otpBoxFilled : null,
+                    ]}
+                    value={digit}
+                    onChangeText={(val) => handleOtpChange(i, val)}
+                    onKeyPress={(e) => handleOtpKeyPress(i, e)}
+                    keyboardType="number-pad"
+                    maxLength={1}
+                    selectTextOnFocus
+                  />
+                ))}
+              </View>
+              <Text style={styles.helpText}>
+                Enter the 6-digit OTP sent to {formattedMobile || mobile}
+              </Text>
+
+              <TouchableOpacity
+                style={[
+                  styles.primaryButton,
+                  (!allFilled || loading) && styles.buttonDisabled,
+                ]}
+                onPress={handleVerifyOtp}
+                disabled={loading || !allFilled}
+                activeOpacity={0.85}
               >
-                <Text style={styles.linkText}>Change Mobile Number</Text>
+                {loading ? (
+                  <ActivityIndicator color="#ffffff" size="small" />
+                ) : (
+                  <Text style={styles.primaryButtonText}>Verify & Continue</Text>
+                )}
               </TouchableOpacity>
-            </>
+
+              <View style={styles.secondaryButtonRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.secondaryButton,
+                    resendTimer > 0 && styles.secondaryButtonDisabled,
+                  ]}
+                  onPress={handleResend}
+                  disabled={resendTimer > 0 || loading}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.secondaryButtonText,
+                      resendTimer > 0 && styles.secondaryButtonTextDisabled,
+                    ]}
+                  >
+                    {resendTimer > 0 ? `Resend OTP (${resendTimer}s)` : 'Resend OTP'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.secondaryButton}
+                  onPress={() => {
+                    setStep('mobile');
+                    setOtp(['', '', '', '', '', '']);
+                    setError('');
+                    setSuccess('');
+                    setDevOtp('');
+                  }}
+                  disabled={loading}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.secondaryButtonText}>Use Different Number</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           )}
+
+          {/* Footer Terms & Security Badge */}
+          <View style={styles.cardFooter}>
+            <Text style={styles.termsText}>
+              By continuing, you agree to our{' '}
+              <Text style={styles.termsLink}>Terms of Service</Text> and{' '}
+              <Text style={styles.termsLink}>Privacy Policy</Text>
+            </Text>
+
+            <View style={styles.securityBadge}>
+              <FontAwesome name="shield" size={13} color="#6366f1" style={{ marginRight: 6 }} />
+              <Text style={styles.securityText}>
+                {step === 'mobile' ? 'Secured by MASKPRO' : 'Secured with 256-bit SSL encryption'}
+              </Text>
+              <FontAwesome name="lock" size={12} color="#6366f1" style={{ marginLeft: 6 }} />
+            </View>
+          </View>
         </View>
+
+        {/* Support Help Footer */}
+        <TouchableOpacity
+          style={styles.supportHelp}
+          onPress={() => Linking.openURL('tel:+63180015500037')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.supportText}>
+            Need help? Contact our support team at{' '}
+            <Text style={styles.supportPhone}>
+              <FontAwesome name="phone" size={12} color="#93c5fd" /> +63-1800-1-550-0037
+            </Text>
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -153,84 +397,223 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   background: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
+    ...StyleSheet.absoluteFillObject,
   },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    padding: 24,
+    alignItems: 'center',
+    padding: 20,
+    paddingVertical: 48,
   },
   card: {
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#ffffff',
     borderRadius: 24,
-    padding: 32,
+    paddingHorizontal: 28,
+    paddingTop: 36,
+    paddingBottom: 28,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.25,
+    shadowRadius: 32,
+    elevation: 12,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  cardTopAccent: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+  },
+  logoContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  logo: {
+    width: 64,
+    height: 64,
+    borderRadius: 14,
   },
   title: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#1f2937',
-    marginBottom: 8,
+    color: '#1e1b4b',
     textAlign: 'center',
+    marginBottom: 8,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#6b7280',
-    marginBottom: 32,
+    fontSize: 15,
+    color: '#64748b',
     textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 24,
   },
-  inputContainer: {
+  devOtpBanner: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#eef2ff',
+    borderColor: '#c7d2fe',
     borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    marginBottom: 24,
-    backgroundColor: '#fff',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginBottom: 16,
   },
-  prefix: {
-    fontSize: 16,
-    color: '#374151',
-    marginRight: 8,
+  devOtpText: {
+    color: '#4338ca',
+    fontSize: 13,
+  },
+  formSection: {
+    width: '100%',
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#4338ca',
+    marginBottom: 10,
+  },
+  mobileInput: {
+    width: '100%',
+    height: 56,
+    borderWidth: 2,
+    borderColor: '#e2e8f0',
+    borderRadius: 12,
+    backgroundColor: '#f8fafc',
+    fontSize: 18,
     fontWeight: '600',
+    color: '#1e293b',
+    textAlign: 'center',
+    paddingHorizontal: 16,
   },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    color: '#1f2937',
-    paddingVertical: 16,
+  helpText: {
+    fontSize: 12,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginTop: 8,
+    marginBottom: 20,
   },
-  button: {
-    backgroundColor: '#4f46e5',
+  otpBoxesContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 12,
+  },
+  otpBox: {
+    width: 46,
+    height: 54,
+    borderWidth: 2,
+    borderColor: '#e2e8f0',
     borderRadius: 12,
-    paddingVertical: 16,
+    backgroundColor: '#f8fafc',
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#1e1b4b',
+    textAlign: 'center',
+  },
+  otpBoxFilled: {
+    borderColor: '#4f46e5',
+    backgroundColor: '#ffffff',
+  },
+  primaryButton: {
+    backgroundColor: '#4f46e5',
+    height: 52,
+    borderRadius: 12,
     alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: '#4f46e5',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 4,
   },
-  buttonText: {
-    color: '#fff',
+  primaryButtonText: {
+    color: '#ffffff',
     fontSize: 16,
     fontWeight: '700',
   },
-  linkButton: {
-    marginTop: 16,
+  buttonDisabled: {
+    opacity: 0.55,
+  },
+  secondaryButtonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 14,
+    gap: 10,
+  },
+  secondaryButton: {
+    flex: 1,
+    height: 42,
+    borderRadius: 10,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  secondaryButtonDisabled: {
+    opacity: 0.5,
+  },
+  secondaryButtonText: {
+    color: '#475569',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  secondaryButtonTextDisabled: {
+    color: '#94a3b8',
+  },
+  cardFooter: {
+    marginTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+    paddingTop: 16,
     alignItems: 'center',
   },
-  linkText: {
-    color: '#4f46e5',
-    fontSize: 14,
+  termsText: {
+    fontSize: 12,
+    color: '#94a3b8',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  termsLink: {
+    color: '#6366f1',
     fontWeight: '600',
+  },
+  securityBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f8fafc',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  securityText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  supportHelp: {
+    marginTop: 24,
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  supportText: {
+    color: '#cbd5e1',
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  supportPhone: {
+    color: '#93c5fd',
+    fontWeight: '700',
   },
 });

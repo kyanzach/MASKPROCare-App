@@ -125,7 +125,7 @@ export default function DashboardScreen() {
         </View>
         <TouchableOpacity
           style={styles.bookButton}
-          onPress={() => router.push('/bookings?openBooking=true')}
+          onPress={() => router.push('/(tabs)/bookings?openBooking=true' as any)}
           activeOpacity={0.8}
         >
           <LinearGradient
@@ -236,7 +236,7 @@ export default function DashboardScreen() {
             title="No upcoming appointments"
             description="Schedule your next service appointment to keep your vehicles in top condition."
             actionText="Schedule Appointment"
-            onAction={() => router.push('/bookings')}
+            onAction={() => router.push('/(tabs)/bookings')}
           />
         )}
       </View>
@@ -268,14 +268,14 @@ export default function DashboardScreen() {
                   <View style={styles.vehicleCardActions}>
                     <TouchableOpacity
                       style={styles.vehicleCardBtnOutline}
-                      onPress={() => router.push('/vehicles')}
+                      onPress={() => router.push('/(tabs)/vehicles')}
                       activeOpacity={0.7}
                     >
                       <Text style={styles.vehicleCardBtnOutlineText}>Details</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.vehicleCardBtnGradient}
-                      onPress={() => router.push('/bookings?openBooking=true')}
+                      onPress={() => router.push('/(tabs)/bookings?openBooking=true' as any)}
                       activeOpacity={0.7}
                     >
                       <LinearGradient
@@ -296,7 +296,7 @@ export default function DashboardScreen() {
             title="No vehicles registered"
             description="Add your first vehicle to start managing maintenance schedules."
             actionText="Add Vehicle"
-            onAction={() => router.push('/vehicles')}
+            onAction={() => router.push('/(tabs)/vehicles')}
           />
         )}
       </View>

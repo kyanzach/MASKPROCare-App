@@ -6,6 +6,7 @@ const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://care.maskpro.ph/api
 
 const client = axios.create({
   baseURL: API_BASE,
+  timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
   },

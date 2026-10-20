@@ -1,5 +1,28 @@
 # Changelog
 
+## [v1.12.0] — 2026-10-20
+### Added
+- **TopHeader & Notification System** (`mobile/components/ui/TopHeader.tsx` & `NotificationModal.tsx`):
+  - Branded header bar with official MaskPro logo, MASKPRO Care typography, real-time unread notification badge polling (60s), and user avatar with profile shortcut.
+  - Interactive native Notification modal sheet to view recent notifications, filter by type (registration renewal, booking confirmed, reminder, system), mark single/all as read, and deep-link to relevant screens.
+- **MaskPro Shop Screen** (`mobile/app/(tabs)/shop.tsx`):
+  - Complete pixel-for-pixel parity with web Shop.jsx, featuring VIP preview categories (Detailing Kits, Microfiber Towels, Dashcams & Tech, Aromatherapy), animated floating bag, and VIP launch notification form.
+- **Community Comments & SOS Resolution** (`mobile/app/(tabs)/community.tsx`):
+  - Added full post detail modal with real-time comment fetching (`GET /api/community/posts/:id/comments`) and comment publishing (`POST /api/community/comments`).
+  - Added "Mark as Resolved" capability for SOS post authors (`PUT /api/community/posts/:id/resolve`).
+  - Interactive "Offer Help" quick-action on open SOS posts.
+
+### Changed
+- **High-Performance Native FlatList for Community**:
+  - Replaced un-virtualized `ScrollView` with performant `FlatList` with `initialNumToRender`, `maxToRenderPerBatch`, and `windowSize` to eliminate memory leaks and ensure fluid 60/120fps scrolling.
+- **Mobile Login Parity & 6-Box OTP**:
+  - Replaced generic single-input with pixel-for-pixel web parity (`frontend/src/pages/Login.jsx`): brand logo, top gradient accent border, centered Philippine mobile input, true 6-box OTP digits with auto-advancing, paste, and backspace handling, 30-second live resend countdown, "Use Different Number", and security badges.
+  - Fixed API payload keys (`mobile` instead of `mobile_number`, `otp` instead of `otp_code`) aligning with `server/routes/auth.js`.
+- **API Client Resilience** (`mobile/api/client.ts`):
+  - Added 15s timeout to prevent stalled requests on dropped cellular connections.
+- **TabLayout & Navigation Order** (`mobile/app/(tabs)/_layout.tsx`):
+  - Seamlessly mounted `TopHeader`, added `Shop` tab, and matched web app navigation order and icons.
+
 ## [v1.11.2] — 2026-05-26
 ### Fixed
 - **Fixed 401 Unauthorized handling** — implemented `setSignOutHandler` in `mobile/api/client.ts` to coordinate with `AuthProvider` in `mobile/context/AuthContext.tsx`. On receiving a 401 response, the client clears the SecureStore and resets the `user` state to `null`, triggering an immediate auto-redirect to the login screen instead of hanging on the dashboard with 401 console errors.
