@@ -44,8 +44,8 @@ export default function AdminLoginScreen() {
         await SecureStore.setItemAsync('admin_token', token);
         // Update AuthContext state
         await authLogin(token, customer);
-        // Navigate to Admin Panel
-        router.replace('/admin' as any);
+        // Navigate directly to the main app with full dock menus
+        router.replace('/(tabs)');
       } else {
         setError(res.data?.message || 'Login failed. Invalid credentials.');
       }

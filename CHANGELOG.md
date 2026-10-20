@@ -1,5 +1,14 @@
 # Changelog
 
+## [v1.12.2] — 2026-10-20
+### Fixed
+- **Bottom Dock Menu Safe Area Inset** (`mobile/app/(tabs)/_layout.tsx`):
+  - Applied `useSafeAreaInsets` to dynamic `tabBarStyle` padding and height to prevent bottom labels from clipping or overlapping the iOS home indicator bar.
+- **Scroll Padding Past Dock Bar** (`mobile/app/(tabs)/index.tsx`, `mobile/app/admin.tsx`):
+  - Increased `contentContainer` padding to 110px and added `style={{ flex: 1 }}` to ensure all screens scroll smoothly all the way down without content getting hidden behind the dock menu.
+- **Direct App Navigation on Admin Sign-In** (`mobile/app/admin-login.tsx`, `mobile/app/admin.tsx`):
+  - Updated admin login to take the user directly into the main app (`/(tabs)`) with all 7 tabs active, and added a quick "App" header shortcut in the Admin directory.
+
 ## [v1.12.1] — 2026-10-20
 ### Added
 - **Mobile Admin Login & Customer Impersonation** (`mobile/app/admin-login.tsx`, `mobile/app/admin.tsx`):

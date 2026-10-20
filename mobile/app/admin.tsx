@@ -202,14 +202,25 @@ export default function AdminPanelScreen() {
           </View>
         </View>
 
-        <TouchableOpacity
-          style={styles.exitAdminButton}
-          onPress={handleExitAdmin}
-          activeOpacity={0.7}
-        >
-          <FontAwesome name="sign-out" size={15} color="#94a3b8" />
-          <Text style={styles.exitAdminText}>Sign Out</Text>
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={styles.backToAppButton}
+            onPress={() => router.replace('/(tabs)')}
+            activeOpacity={0.7}
+          >
+            <FontAwesome name="arrow-left" size={13} color="#60a5fa" />
+            <Text style={styles.backToAppText}>App</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.exitAdminButton}
+            onPress={handleExitAdmin}
+            activeOpacity={0.7}
+          >
+            <FontAwesome name="sign-out" size={15} color="#94a3b8" />
+            <Text style={styles.exitAdminText}>Sign Out</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Error Toast */}
@@ -247,10 +258,11 @@ export default function AdminPanelScreen() {
         </View>
       ) : (
         <FlatList
+          style={{ flex: 1 }}
           data={customers}
           keyExtractor={(item) => String(item.id)}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 60 }]}
+          showsVerticalScrollIndicator={true}
           refreshing={refreshing}
           onRefresh={() => loadCustomers(1, search, true)}
           ListEmptyComponent={
@@ -424,6 +436,27 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#94a3b8',
     marginTop: 2,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  backToAppButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.4)',
+  },
+  backToAppText: {
+    color: '#60a5fa',
+    fontSize: 13,
+    fontWeight: '700',
   },
   exitAdminButton: {
     flexDirection: 'row',
