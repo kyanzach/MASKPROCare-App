@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import * as WebBrowser from 'expo-web-browser';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import client from '@/api/client';
@@ -378,8 +379,27 @@ export default function LoginScreen() {
           <View style={styles.cardFooter}>
             <Text style={styles.termsText}>
               By continuing, you agree to our{' '}
-              <Text style={styles.termsLink}>Terms of Service</Text> and{' '}
-              <Text style={styles.termsLink}>Privacy Policy</Text>
+              <Text
+                style={styles.termsLink}
+                onPress={() => {
+                  WebBrowser.openBrowserAsync('https://care.maskpro.ph/terms').catch(() => {
+                    Linking.openURL('https://care.maskpro.ph/terms').catch(() => {});
+                  });
+                }}
+              >
+                Terms of Service
+              </Text>{' '}
+              and{' '}
+              <Text
+                style={styles.termsLink}
+                onPress={() => {
+                  WebBrowser.openBrowserAsync('https://care.maskpro.ph/privacy').catch(() => {
+                    Linking.openURL('https://care.maskpro.ph/privacy').catch(() => {});
+                  });
+                }}
+              >
+                Privacy Policy
+              </Text>
             </Text>
 
             <TouchableOpacity

@@ -95,7 +95,7 @@ export default function DashboardScreen() {
     return <LoadingSpinner message="Loading dashboard..." />;
   }
 
-  const firstName = user?.full_name ? user.full_name.split(' ')[0] : 'there';
+  const firstName = user?.full_name?.trim() ? user.full_name.trim().split(' ')[0] : 'there';
   const upcomingBookings = bookings.filter(b => b.status === 'Scheduled' || new Date(b.booking_date) >= new Date());
 
   const formatBookingDate = (dateStr: string) => {

@@ -159,4 +159,49 @@ router.delete('/photo', async (req, res) => {
   }
 });
 
+// ─── POST /api/profile/delete-account ──────────────────────────────
+// App Store Guideline 5.1.1(v) — In-app account deletion
+router.post('/delete-account', async (req, res) => {
+  try {
+    const customerId = req.user.customer_id;
+    const mobile = req.user.mobile;
+
+    // Remove profile photo file
+    const [existing] = await pool.query("SELECT profile_photo FROM customers WHERE id = ?", [customerId]);
+    if (existing[0]?.profile_photo) {
+      const filePath = path.join(UPLOAD_DIR, existing[0].profile_photo);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    }
+
+    // Anonymize customer data & remove PII
+    const timestamp = new Date().toISOString();
+    await pool.query(
+      `UPDATE customers 
+       SET full_name = 'Deleted User', 
+           mobile_number = CONCAT('deleted_', id, '_', UNIX_TIMESTAMP()),
+           email = NULL, 
+           address = NULL, 
+           profile_photo = NULL,
+           notes = CONCAT(COALESCE(notes, ''), '\n[Account deleted by user on ', ?, ']')
+       WHERE id = ?`,
+      [timestamp, customerId]
+    );
+
+    // Delete any active OTP records
+    if (mobile) {
+      await pool.query("DELETE FROM login_otp WHERE mobile_number = ?", [mobile]);
+    }
+
+    return res.json({
+      success: true,
+      data: null,
+      message: 'Your account and personal data have been deleted successfully.',
+      errors: [],
+    });
+  } catch (err) {
+    console.error('Account deletion error:', err);
+    return res.status(500).json({ success: false, data: null, message: 'Failed to process account deletion', errors: [] });
+  }
+});
+
 module.exports = router;

@@ -1,5 +1,26 @@
 # Changelog
 
+## [v1.13.0] — 2026-10-20
+### Added
+- **Apple & Google Play Store Submission Compliance**:
+  - **Store-Compliant App Icons & Splash Assets** (`mobile/assets/images/`):
+    - Replaced blank Expo default grid placeholders with official MaskPro 1024x1024 solid RGB icon (`icon.png`), Android adaptive icon foreground (`adaptive-icon.png`), launch screen emblem (`splash-icon.png`), and web favicon (`favicon.png`).
+  - **Account Deletion Flow (Apple Guideline 5.1.1(v))**:
+    - Backend: Added `POST /api/profile/delete-account` endpoint in `server/routes/profile.js` to anonymize PII, delete avatar files, clear OTP records, and log action in audit notes.
+    - Mobile: Added "Delete Account" button and custom confirmation modal in `mobile/app/(tabs)/profile.tsx` under Account Details.
+  - **Interactive Legal Links & Public Policies**:
+    - Frontend: Created public, unauthenticated `Privacy.jsx` and `Terms.jsx` web pages served at `https://care.maskpro.ph/privacy` and `https://care.maskpro.ph/terms` to satisfy Google Play Console and App Store Connect review URL requirements.
+    - Mobile: Made "Terms of Service" and "Privacy Policy" links interactive on `mobile/app/login.tsx` and `mobile/app/(tabs)/profile.tsx` using `expo-web-browser`.
+  - **EAS Build Configuration (`mobile/eas.json`)**:
+    - Added production build profiles for iOS `.ipa` (`m-medium` resource class) and Android `.aab` (App Bundle with `EXPO_PUBLIC_API_URL: https://care.maskpro.ph/api`).
+  - **Production Manifest & Permissions (`mobile/app.json`)**:
+    - Configured `expo-image-picker` plugin permissions with clear purpose descriptions for camera and photo library usage (`NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription`).
+    - Added `ios.buildNumber: "1"` and `android.versionCode: 1`.
+
+### Fixed
+- **Dashboard Greeting Empty String** (`mobile/app/(tabs)/index.tsx`):
+  - Handled cases where customer `full_name` is empty or null by trimming before split and defaulting gracefully to "Welcome back, there! 👋".
+
 ## [v1.12.3] — 2026-10-20
 ### Added
 - **TopHeader Admin Shortcut Button** (`mobile/components/ui/TopHeader.tsx`):

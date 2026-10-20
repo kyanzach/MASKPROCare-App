@@ -11,6 +11,8 @@ import AdminPanel from './pages/AdminPanel';
 import AdminLogin from './pages/AdminLogin';
 import Shop from './pages/Shop';
 import Community from './pages/Community';
+import Privacy from './pages/Privacy';
+import Terms from './pages/Terms';
 import './index.css';
 
 function ProtectedRoute({ children }) {
@@ -27,6 +29,8 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={isAuthenticated ? <Navigate to="/" /> : <Login />} />
       <Route path="/admin-login" element={<AdminLogin />} />
+      <Route path="/privacy" element={<Privacy />} />
+      <Route path="/terms" element={<Terms />} />
       <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<Dashboard />} />
         <Route path="vehicles" element={<Vehicles />} />

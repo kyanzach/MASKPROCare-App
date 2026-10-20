@@ -14,12 +14,14 @@ import {
   Linking,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as WebBrowser from 'expo-web-browser';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import client from '@/api/client';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import EmptyState from '@/components/ui/EmptyState';
 import AlertBanner from '@/components/ui/AlertBanner';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import PDF417Barcode from '@/components/ui/PDF417Barcode';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -123,6 +125,33 @@ export default function ProfileScreen() {
   // Alerts
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
+
+  // Account Deletion state (Apple Guideline 5.1.1(v))
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+
+  const handleDeleteAccount = async () => {
+    setDeletingAccount(true);
+    try {
+      await client.post('/profile/delete-account');
+      setShowDeleteModal(false);
+      await logout();
+    } catch (err: any) {
+      console.error('Failed to delete account:', err);
+      setError(err.response?.data?.message || 'Failed to delete account. Please try again.');
+      setShowDeleteModal(false);
+    } finally {
+      setDeletingAccount(false);
+    }
+  };
+
+  const openLegalUrl = async (url: string) => {
+    try {
+      await WebBrowser.openBrowserAsync(url);
+    } catch {
+      Linking.openURL(url).catch(() => {});
+    }
+  };
 
   const triggerAlert = (type: 'success' | 'error', msg: string) => {
     if (type === 'success') {
@@ -581,6 +610,29 @@ export default function ProfileScreen() {
               <FontAwesome name="sign-out" size={16} color="#ef4444" style={styles.logoutIcon} />
               <Text style={styles.logoutBtnText}>Log Out</Text>
             </TouchableOpacity>
+
+            {/* Delete Account (Apple Guideline 5.1.1(v) Compliance) */}
+            <TouchableOpacity
+              style={styles.deleteAccountBtn}
+              onPress={() => setShowDeleteModal(true)}
+              activeOpacity={0.7}
+            >
+              <FontAwesome name="trash-o" size={13} color="#94a3b8" style={{ marginRight: 6 }} />
+              <Text style={styles.deleteAccountBtnText}>Delete Account</Text>
+            </TouchableOpacity>
+
+            {/* Legal Links (Terms & Privacy) */}
+            <View style={styles.legalLinksRow}>
+              <TouchableOpacity onPress={() => openLegalUrl('https://care.maskpro.ph/terms')} activeOpacity={0.7}>
+                <Text style={styles.legalLinkText}>Terms of Service</Text>
+              </TouchableOpacity>
+              <Text style={styles.legalDivider}>•</Text>
+              <TouchableOpacity onPress={() => openLegalUrl('https://care.maskpro.ph/privacy')} activeOpacity={0.7}>
+                <Text style={styles.legalLinkText}>Privacy Policy</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.versionFooter}>MASKPRO Care v1.12.3</Text>
           </View>
         ) : (
           /* ================= LOYALTY TAB ================= */
@@ -790,6 +842,18 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Account Deletion Confirmation Modal (Apple Guideline 5.1.1(v)) */}
+      <ConfirmModal
+        visible={showDeleteModal}
+        title="Delete Account"
+        message="Are you sure you want to permanently delete your MASKPRO Care account? All personal details and profile data will be permanently removed. This action cannot be undone."
+        confirmText="Delete Account"
+        confirmColor="#dc2626"
+        onConfirm={handleDeleteAccount}
+        onCancel={() => setShowDeleteModal(false)}
+        isLoading={deletingAccount}
+      />
     </View>
   );
 }
@@ -1505,5 +1569,44 @@ const styles = StyleSheet.create({
     color: '#3b82f6',
     fontSize: 12,
     fontWeight: '700',
+  },
+  deleteAccountBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  deleteAccountBtnText: {
+    color: '#94a3b8',
+    fontSize: 13,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  legalLinksRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 6,
+  },
+  legalLinkText: {
+    fontSize: 12,
+    color: '#6366f1',
+    fontWeight: '600',
+  },
+  legalDivider: {
+    fontSize: 12,
+    color: '#cbd5e1',
+  },
+  versionFooter: {
+    textAlign: 'center',
+    fontSize: 11,
+    color: '#94a3b8',
+    fontWeight: '500',
+    marginTop: 4,
+    marginBottom: 20,
   },
 });
