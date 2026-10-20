@@ -24,6 +24,25 @@ export default function TopHeader() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifLoading, setNotifLoading] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Check admin status
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const res = await client.get('/admin/check');
+        if (isMounted && res.data?.data?.isAdmin) {
+          setIsAdmin(true);
+        }
+      } catch {
+        // silent
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
 
   // Poll notification count every 60 seconds
   const fetchNotifCount = useCallback(async () => {
@@ -135,8 +154,19 @@ export default function TopHeader() {
             </Text>
           </TouchableOpacity>
 
-          {/* Right: Notification Bell & Profile Avatar */}
+          {/* Right: Admin Button, Notification Bell & Profile Avatar */}
           <View style={styles.actionsContainer}>
+            {isAdmin && !impersonation && (
+              <TouchableOpacity
+                style={styles.adminHeaderBtn}
+                onPress={() => router.push('/admin' as any)}
+                activeOpacity={0.75}
+              >
+                <FontAwesome name="shield" size={13} color="#b45309" style={{ marginRight: 4 }} />
+                <Text style={styles.adminHeaderBtnText}>Admin</Text>
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity
               style={styles.bellButton}
               onPress={openNotifications}
@@ -239,7 +269,23 @@ const styles = StyleSheet.create({
   actionsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
+  },
+  adminHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fef3c7',
+    borderWidth: 1,
+    borderColor: '#fcd34d',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  adminHeaderBtnText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#92400e',
+    letterSpacing: 0.3,
   },
   bellButton: {
     position: 'relative',

@@ -1,5 +1,16 @@
 # Changelog
 
+## [v1.12.3] — 2026-10-20
+### Added
+- **TopHeader Admin Shortcut Button** (`mobile/components/ui/TopHeader.tsx`):
+  - Added an exclusive, amber-accented `[ 🛡️ Admin ]` badge button directly in the universal top header (between brand title and bell notification icon).
+  - Automatically queries `/api/admin/check` to only show when the authenticated user is an administrator and not currently impersonating.
+  - Tapping routes directly to the Admin Panel / Customer Directory (`/admin`).
+- **Profile Page Admin Dashboard Menu Card & Role Badge** (`mobile/app/(tabs)/profile.tsx`):
+  - Added an elegant `🛡️ ADMINISTRATOR` role pill in the user header card beneath the customer's phone number when `isAdmin` is verified.
+  - Added a dedicated, full-width **Admin Dashboard** menu card situated right below the stats row (before Account Details): dark slate gradient background, amber shield icon badge, "ADMIN" role chip, subtitle "Directory & customer impersonation", and chevron right arrow.
+  - Tapping routes directly to `/admin` without requiring deep scrolling to the bottom of the profile.
+
 ## [v1.12.2] — 2026-10-20
 ### Fixed
 - **Bottom Dock Menu Safe Area Inset** (`mobile/app/(tabs)/_layout.tsx`):

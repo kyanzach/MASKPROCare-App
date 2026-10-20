@@ -14,6 +14,7 @@ import {
   Linking,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import client from '@/api/client';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
@@ -96,6 +97,7 @@ interface LoyaltyCard {
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://care.maskpro.ph/api';
 
 export default function ProfileScreen() {
+  const router = useRouter();
   const { logout } = useAuth();
   const [activeTab, setActiveTab] = useState<'profile' | 'loyalty'>('profile');
 
@@ -106,6 +108,7 @@ export default function ProfileScreen() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [profilePhotoUploading, setProfilePhotoUploading] = useState(false);
   const [stats, setStats] = useState({ vehicles: 0, bookings: 0, completed: 0 });
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // Profile Form state
   const [form, setForm] = useState({ full_name: '', email: '', address: '' });
@@ -152,6 +155,15 @@ export default function ProfileScreen() {
         bookings: profileStats?.total_bookings ?? (dashStats?.upcoming_bookings ?? 0) + (dashStats?.completed_services ?? 0),
         completed: profileStats?.completed_services ?? dashStats?.completed_services ?? 0,
       });
+
+      try {
+        const adminCheck = await client.get('/admin/check');
+        if (adminCheck.data?.data?.isAdmin) {
+          setIsAdmin(true);
+        }
+      } catch {
+        // silent
+      }
     } catch (err) {
       console.error('Failed to load profile:', err);
     } finally {
@@ -417,6 +429,12 @@ export default function ProfileScreen() {
 
               <Text style={styles.profileName}>{profile?.full_name}</Text>
               <Text style={styles.profileMobile}>{profile?.mobile_number}</Text>
+              {isAdmin && (
+                <View style={styles.adminBadgePill}>
+                  <FontAwesome name="shield" size={11} color="#b45309" />
+                  <Text style={styles.adminBadgePillText}>ADMINISTRATOR</Text>
+                </View>
+              )}
             </View>
 
             {/* Stats Row */}
@@ -436,6 +454,40 @@ export default function ProfileScreen() {
                 <Text style={styles.statsLabel}>Completed</Text>
               </View>
             </View>
+
+            {/* Exclusive Admin Dashboard Card for Admin Users */}
+            {isAdmin && (
+              <TouchableOpacity
+                style={styles.adminPanelCard}
+                onPress={() => router.push('/admin' as any)}
+                activeOpacity={0.85}
+              >
+                <LinearGradient
+                  colors={['#1e293b', '#0f172a']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.adminCardGradient}
+                >
+                  <View style={styles.adminCardLeft}>
+                    <View style={styles.adminIconBadge}>
+                      <FontAwesome name="shield" size={20} color="#f59e0b" />
+                    </View>
+                    <View style={styles.adminCardTextCol}>
+                      <View style={styles.adminTitleRow}>
+                        <Text style={styles.adminCardTitle}>Admin Dashboard</Text>
+                        <View style={styles.adminRoleChip}>
+                          <Text style={styles.adminRoleText}>ADMIN</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.adminCardSubtitle}>
+                        Directory & customer impersonation
+                      </Text>
+                    </View>
+                  </View>
+                  <FontAwesome name="chevron-right" size={14} color="#f59e0b" />
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
 
             {/* Profile Info Details */}
             {editing ? (
@@ -1005,6 +1057,92 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 13,
     fontWeight: '600',
+  },
+  adminBadgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fef3c7',
+    borderWidth: 1,
+    borderColor: '#fcd34d',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    marginTop: 6,
+    gap: 5,
+  },
+  adminBadgePillText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#92400e',
+    letterSpacing: 0.5,
+  },
+  adminPanelCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginTop: 12,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+    shadowColor: '#f59e0b',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  adminCardGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  adminCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
+  },
+  adminIconBadge: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+    marginRight: 14,
+  },
+  adminCardTextCol: {
+    flex: 1,
+  },
+  adminTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 2,
+  },
+  adminCardTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#ffffff',
+  },
+  adminRoleChip: {
+    backgroundColor: '#f59e0b',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  adminRoleText: {
+    color: '#78350f',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  adminCardSubtitle: {
+    fontSize: 12,
+    color: '#94a3b8',
+    fontWeight: '500',
   },
   logoutBtn: {
     flexDirection: 'row',
