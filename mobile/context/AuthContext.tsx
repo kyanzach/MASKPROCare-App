@@ -10,17 +10,28 @@ interface Customer {
   [key: string]: any;
 }
 
+export interface ImpersonationState {
+  originalToken: string;
+  originalCustomer: string;
+  impersonatedBy: string;
+  customerName: string;
+}
+
 interface AuthContextType {
   user: Customer | null;
   isLoading: boolean;
+  impersonation: ImpersonationState | null;
   login: (token: string, customer: Customer) => Promise<void>;
   logout: () => Promise<void>;
+  startImpersonation: (token: string, customer: Customer, meta: ImpersonationState) => Promise<void>;
+  exitImpersonation: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<Customer | null>(null);
+  const [impersonation, setImpersonation] = useState<ImpersonationState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const segments = useSegments();
   const router = useRouter();
@@ -28,6 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setSignOutHandler(() => {
       setUser(null);
+      setImpersonation(null);
     });
     return () => {
       setSignOutHandler(() => {});
@@ -35,14 +47,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // Load token and user from SecureStore on startup
+    // Load token, user, and impersonation state from SecureStore on startup
     const loadUser = async () => {
       try {
         const token = await SecureStore.getItemAsync('mpc_token');
         const customerData = await SecureStore.getItemAsync('mpc_customer');
+        const impData = await SecureStore.getItemAsync('mpc_impersonation');
 
         if (token && customerData) {
           setUser(JSON.parse(customerData));
+        }
+        if (impData) {
+          setImpersonation(JSON.parse(impData));
         }
       } catch (error) {
         console.error('Failed to load auth state', error);
@@ -58,13 +74,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (isLoading) return;
 
-    const inAuthGroup = (segments[0] as string) === '(auth)' || (segments[0] as string) === 'login';
-    
-    if (!user && !inAuthGroup) {
-      // Redirect to login if not logged in and not already in auth group
+    const currentRoute = (segments[0] as string) || '';
+    const isPublicRoute = currentRoute === 'login' || currentRoute === 'admin-login';
+
+    if (!user && !isPublicRoute) {
+      // Redirect to login if not logged in and not on public route
       router.replace('/login');
-    } else if (user && inAuthGroup) {
-      // Redirect to tabs if logged in and in auth group
+    } else if (user && currentRoute === 'login') {
+      // Redirect to tabs if logged in and on regular login route
       router.replace('/(tabs)');
     }
   }, [user, isLoading, segments]);
@@ -87,7 +104,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await SecureStore.deleteItemAsync('mpc_token');
       await SecureStore.deleteItemAsync('mpc_customer');
+      await SecureStore.deleteItemAsync('mpc_impersonation');
+      await SecureStore.deleteItemAsync('admin_token');
       setUser(null);
+      setImpersonation(null);
     } catch (error) {
       console.error('Error removing auth data', error);
     } finally {
@@ -95,8 +115,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const startImpersonation = async (token: string, customer: Customer, meta: ImpersonationState) => {
+    setIsLoading(true);
+    try {
+      await SecureStore.setItemAsync('mpc_token', token);
+      await SecureStore.setItemAsync('mpc_customer', JSON.stringify(customer));
+      await SecureStore.setItemAsync('mpc_impersonation', JSON.stringify(meta));
+      setImpersonation(meta);
+      setUser(customer);
+      router.replace('/(tabs)');
+    } catch (error) {
+      console.error('Error starting impersonation', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const exitImpersonation = async () => {
+    if (!impersonation) return;
+    setIsLoading(true);
+    try {
+      await SecureStore.setItemAsync('mpc_token', impersonation.originalToken);
+      if (impersonation.originalCustomer) {
+        await SecureStore.setItemAsync('mpc_customer', impersonation.originalCustomer);
+        setUser(JSON.parse(impersonation.originalCustomer));
+      }
+      await SecureStore.deleteItemAsync('mpc_impersonation');
+      setImpersonation(null);
+      router.replace('/admin' as any);
+    } catch (error) {
+      console.error('Error exiting impersonation', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isLoading,
+        impersonation,
+        login,
+        logout,
+        startImpersonation,
+        exitImpersonation,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

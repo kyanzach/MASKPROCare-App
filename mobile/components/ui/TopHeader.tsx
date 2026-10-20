@@ -18,7 +18,7 @@ const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://care.maskpro.ph/api
 export default function TopHeader() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, impersonation, exitImpersonation } = useAuth();
 
   const [notifCount, setNotifCount] = useState(0);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -169,6 +169,26 @@ export default function TopHeader() {
         </View>
       </View>
 
+      {/* Impersonation Banner */}
+      {impersonation && (
+        <View style={styles.impersonationBanner}>
+          <View style={styles.impersonationLeft}>
+            <FontAwesome name="eye" size={13} color="#78350f" style={{ marginRight: 6 }} />
+            <Text style={styles.impersonationText} numberOfLines={1}>
+              Viewing as <Text style={styles.impersonationName}>{impersonation.customerName}</Text>
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.exitImpButton}
+            onPress={exitImpersonation}
+            activeOpacity={0.8}
+          >
+            <FontAwesome name="sign-out" size={11} color="#ffffff" style={{ marginRight: 4 }} />
+            <Text style={styles.exitImpText}>Exit</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Notifications Modal Sheet */}
       <NotificationModal
         visible={notifOpen}
@@ -269,5 +289,43 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#4338ca',
+  },
+  impersonationBanner: {
+    backgroundColor: '#fbbf24',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f59e0b',
+  },
+  impersonationLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
+  },
+  impersonationText: {
+    color: '#78350f',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  impersonationName: {
+    fontWeight: '800',
+    color: '#78350f',
+  },
+  exitImpButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#78350f',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  exitImpText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

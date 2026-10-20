@@ -58,6 +58,7 @@ export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const loadData = async () => {
+    if (!user) return;
     try {
       const [statsRes, vehiclesRes, bookingsRes] = await Promise.all([
         client.get('/dashboard/stats'),
@@ -67,8 +68,10 @@ export default function DashboardScreen() {
       setStats(statsRes.data?.data?.stats || null);
       setVehicles(vehiclesRes.data?.data?.vehicles || []);
       setBookings(bookingsRes.data?.data?.bookings || []);
-    } catch (err) {
-      console.error('Dashboard load error:', err);
+    } catch (err: any) {
+      if (err?.response?.status !== 401) {
+        console.error('Dashboard load error:', err);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -76,8 +79,12 @@ export default function DashboardScreen() {
   };
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (user) {
+      loadData();
+    } else {
+      setLoading(false);
+    }
+  }, [user]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import client from '@/api/client';
 import AlertBanner from '@/components/ui/AlertBanner';
@@ -21,6 +22,7 @@ import AlertBanner from '@/components/ui/AlertBanner';
 const RESEND_COOLDOWN_SECONDS = 30;
 
 export default function LoginScreen() {
+  const router = useRouter();
   const { login } = useAuth();
   const [step, setStep] = useState<'mobile' | 'otp'>('mobile');
   const [mobile, setMobile] = useState('');
@@ -34,13 +36,29 @@ export default function LoginScreen() {
 
   const otpRefs = useRef<(TextInput | null)[]>([]);
   const timerRef = useRef<any>(null);
+  const secretTapRef = useRef<{ count: number; timer: any }>({ count: 0, timer: null });
 
-  // Clear timer on unmount
+  // Clear timers on unmount
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      if (secretTapRef.current.timer) clearTimeout(secretTapRef.current.timer);
     };
   }, []);
+
+  const handleSecurityBadgeTap = () => {
+    const s = secretTapRef.current;
+    if (s.timer) clearTimeout(s.timer);
+    s.count++;
+    if (s.count >= 5) {
+      s.count = 0;
+      router.push('/admin-login' as any);
+      return;
+    }
+    s.timer = setTimeout(() => {
+      s.count = 0;
+    }, 2000);
+  };
 
   const startResendTimer = () => {
     setResendTimer(RESEND_COOLDOWN_SECONDS);
@@ -364,13 +382,17 @@ export default function LoginScreen() {
               <Text style={styles.termsLink}>Privacy Policy</Text>
             </Text>
 
-            <View style={styles.securityBadge}>
+            <TouchableOpacity
+              style={styles.securityBadge}
+              onPress={handleSecurityBadgeTap}
+              activeOpacity={0.7}
+            >
               <FontAwesome name="shield" size={13} color="#6366f1" style={{ marginRight: 6 }} />
               <Text style={styles.securityText}>
                 {step === 'mobile' ? 'Secured by MASKPRO' : 'Secured with 256-bit SSL encryption'}
               </Text>
               <FontAwesome name="lock" size={12} color="#6366f1" style={{ marginLeft: 6 }} />
-            </View>
+            </TouchableOpacity>
           </View>
         </View>
 

@@ -1,5 +1,22 @@
 # Changelog
 
+## [v1.12.1] — 2026-10-20
+### Added
+- **Mobile Admin Login & Customer Impersonation** (`mobile/app/admin-login.tsx`, `mobile/app/admin.tsx`):
+  - Ported web `AdminLogin.jsx` pixel-for-pixel to mobile: dark slate gradient theme, gold shield lock emblem, Unify username/password authentication against `/api/admin/login` with zero OTP / SMS credit usage.
+  - Ported web `AdminPanel.jsx` pixel-for-pixel to mobile: real-time searchable customer directory, booking count chips, customer initials avatars, and instant 1-tap customer impersonation (`POST /api/admin/impersonate`).
+  - Added custom modal for impersonation confirmation complying with agent zero-native-alert rules.
+- **Top Impersonation Banner** (`mobile/components/ui/TopHeader.tsx`):
+  - Added persistent amber impersonation header banner ("Viewing as [Customer]" with "Exit" button) replicating web `Layout.jsx` parity.
+- **5-Tap Secret Gesture** (`mobile/app/login.tsx`):
+  - Added secret 5-tap gesture on "Secured by MASKPRO" badge to instantly route to `/admin-login`.
+
+### Fixed
+- **Dashboard Load Error on Cold Boot** (`mobile/app/(tabs)/index.tsx`):
+  - Guarded initial data fetch to only run when an authenticated `user` exists in `AuthContext`, eliminating the 401 Unauthorized `Dashboard load error` console warning banner on startup.
+- **Auth Context Routing & Route Guards** (`mobile/context/AuthContext.tsx`, `mobile/app/_layout.tsx`):
+  - Registered `/admin-login` and `/admin` as public and admin routes respectively, preventing premature redirects back to `/login` during admin flows.
+
 ## [v1.12.0] — 2026-10-20
 ### Added
 - **TopHeader & Notification System** (`mobile/components/ui/TopHeader.tsx` & `NotificationModal.tsx`):
