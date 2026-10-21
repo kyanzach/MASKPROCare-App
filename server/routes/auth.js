@@ -48,17 +48,21 @@ router.post('/login', async (req, res) => {
     const customerId = customer.id;
     const formattedMobile = standardizeMobile(customer.mobile_number);
 
-    // Rate limiting: max 3 OTP per mobile per 15 minutes
-    const [rateLimit] = await pool.query(
-      "SELECT COUNT(*) as otp_count FROM login_otp WHERE mobile_number = ? AND created_at > DATE_SUB(NOW(), INTERVAL 15 MINUTE)",
-      [formattedMobile]
-    );
-    if ((rateLimit[0]?.otp_count || 0) >= 3) {
-      return res.status(429).json({ success: false, data: null, message: 'Too many OTP requests. Please wait 15 minutes before trying again.', errors: [] });
+    const isReviewAccount = formattedMobile === '09852779777' || last10 === '9852779777';
+
+    // Rate limiting: max 3 OTP per mobile per 15 minutes (bypassed for App Store / Play Store review test account)
+    if (!isReviewAccount) {
+      const [rateLimit] = await pool.query(
+        "SELECT COUNT(*) as otp_count FROM login_otp WHERE mobile_number = ? AND created_at > DATE_SUB(NOW(), INTERVAL 15 MINUTE)",
+        [formattedMobile]
+      );
+      if ((rateLimit[0]?.otp_count || 0) >= 3) {
+        return res.status(429).json({ success: false, data: null, message: 'Too many OTP requests. Please wait 15 minutes before trying again.', errors: [] });
+      }
     }
 
-    // Generate 6-digit OTP
-    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    // Generate 6-digit OTP (fixed 777777 for App Store Review demo account)
+    const otp = isReviewAccount ? '777777' : String(Math.floor(100000 + Math.random() * 900000));
 
     // Store OTP — update if exists, insert if new
     // Use MySQL DATE_ADD(NOW(), ...) for timezone-consistent expiry (Asia/Manila)
@@ -67,17 +71,20 @@ router.post('/login', async (req, res) => {
     if (existing.length > 0) {
       await pool.query(
         "UPDATE login_otp SET otp_code = ?, otp_expires = DATE_ADD(NOW(), INTERVAL ? SECOND), updated_at = NOW() WHERE mobile_number = ?",
-        [otp, OTP_EXPIRY_SECONDS, formattedMobile]
+        [otp, isReviewAccount ? 86400 : OTP_EXPIRY_SECONDS, formattedMobile]
       );
     } else {
       await pool.query(
         "INSERT INTO login_otp (mobile_number, customer_id, otp_code, otp_expires, created_at) VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND), NOW())",
-        [formattedMobile, customerId, otp, OTP_EXPIRY_SECONDS]
+        [formattedMobile, customerId, otp, isReviewAccount ? 86400 : OTP_EXPIRY_SECONDS]
       );
     }
 
-    // Send OTP via SMS
-    const smsSent = await sendOtpSms(formattedMobile, otp, OTP_EXPIRY_SECONDS / 60, customerId);
+    // Send OTP via SMS (skip for review account to save credits and prevent delays)
+    let smsSent = true;
+    if (!isReviewAccount) {
+      smsSent = await sendOtpSms(formattedMobile, otp, OTP_EXPIRY_SECONDS / 60, customerId);
+    }
 
     // Build response
     const responseData = { sms_sent: smsSent };
@@ -128,13 +135,22 @@ router.post('/verify', async (req, res) => {
     const branchId = customer.branch_id || DEFAULT_BRANCH_ID;
     const formattedMobile = standardizeMobile(customer.mobile_number);
 
-    // Verify OTP
-    const [otpRecords] = await pool.query(
-      "SELECT * FROM login_otp WHERE mobile_number = ? AND otp_code = ? AND otp_expires > NOW()",
-      [formattedMobile, String(otp).trim()]
-    );
+    const isReviewAccount = formattedMobile === '09852779777' || last10 === '9852779777';
+    const isReviewOtp = isReviewAccount && String(otp).trim() === '777777';
 
-    if (otpRecords.length === 0) {
+    // Verify OTP
+    let isValidOtp = false;
+    if (isReviewOtp) {
+      isValidOtp = true;
+    } else {
+      const [otpRecords] = await pool.query(
+        "SELECT * FROM login_otp WHERE mobile_number = ? AND otp_code = ? AND otp_expires > NOW()",
+        [formattedMobile, String(otp).trim()]
+      );
+      if (otpRecords.length > 0) isValidOtp = true;
+    }
+
+    if (!isValidOtp) {
       return res.status(401).json({ success: false, data: null, message: 'Invalid or expired OTP. Please request a new one.', errors: [] });
     }
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## [v1.13.1] — 2026-10-21
+### Security & Compliance
+- **OS-Level Permissions Hardening (`mobile/app.json`)**:
+  - Explicitly blocked `android.permission.RECORD_AUDIO` on Android builds via `blockedPermissions` and `microphonePermission: false` in `expo-image-picker` plugin configuration, eliminating undeclared microphone access rejections from Google Play Console.
+  - Confirmed and restricted OS permissions to only camera (`NSCameraUsageDescription`, `android.permission.CAMERA`) and photo library (`NSPhotoLibraryUsageDescription`, `READ_MEDIA_IMAGES`, `READ_EXTERNAL_STORAGE`) used exclusively for customer vehicle photos and profile avatars.
+- **Reviewer Demo Bypass for App Store & Google Play (`server/routes/auth.js`)**:
+  - Added review credentials bypass for test phone number `09852779777` with fixed OTP `777777`, bypassing SMS rate limits and international carrier delivery blocks for Apple & Google App Review teams.
+- **Deployment Hardening (`deploy.sh`)**:
+  - Replaced `jq`-dependent PM2 lookup with direct `pm2 describe` check, ensuring reliable PM2 restarts across low-dependency server environments.
+  - Sourced credentials securely via `.ssh_helper.sh`.
+
 ## [v1.13.0] — 2026-10-20
 ### Added
 - **Apple & Google Play Store Submission Compliance**:

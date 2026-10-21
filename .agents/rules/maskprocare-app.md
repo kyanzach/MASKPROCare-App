@@ -28,7 +28,7 @@ description: Critical guardrails for MaskPro Care App (customer-facing vehicle m
 5. **Never modify Unify code** from this workspace — use handoff prompts instead
 6. **Always use parameterized queries** — no string concatenation in SQL (use mysql2 `?` placeholders)
 7. **NEVER modify files outside `/var/www/care/`** on the server
-8. **NEVER touch ports 3002, 3003, 3005** — those belong to sister apps (GetSales, GAQ, GetSales SSR)
+8. **NEVER touch ports 3001, 3002, 3003, 3005** — those belong to sister apps (HRIS, GetSales, GAQ, GetSales SSR)
 9. **NEVER modify other apps' databases** — `maskpro_commissions` (GetSales), `maskpro_quotations` (GAQ)
 10. **NEVER run bare `pm2 restart`** — always use `pm2 restart maskpro-care`
 11. **NEVER modify Nginx configs** other than `/etc/nginx/sites-available/care`
@@ -37,6 +37,8 @@ description: Critical guardrails for MaskPro Care App (customer-facing vehicle m
 14. NEVER use native system dialogs (`alert()`, `confirm()`, `prompt()`) — use modals instead
 15. Always read `CREDENTIALS_REFERENCE.md` for SSH, MySQL, API keys, and server details — never ask for credentials
 16. **NEVER send SMS/OTP to any number except these approved test numbers:** `09992216923`, `09173333589`, `09852779777` — other numbers in the DB are REAL customers and sending OTP could alarm them
+17. **NEVER invent new UI/UX designs for the mobile app.** You must strictly observe, replicate, and preserve the original web app design, layout, spacing, colors, and UX pixel-for-pixel when building native screens. Do not skip details and do not assume; match the original web app exactly.
+18. **Always automatically restart Expo when necessary.** If a change requires clearing the Metro bundler cache (e.g. native module installs, bizarre caching errors), use terminal commands to restart the development server process yourself. Do not ask the user to do it.
 
 ## Schema Gotchas
 - `bookings.booking_id` is PK (NOT `id`), FK is `customer_vehicle_id` (NOT `vehicle_id`)
@@ -51,6 +53,7 @@ description: Critical guardrails for MaskPro Care App (customer-facing vehicle m
 | GAQ | `gaq-api` | 3003 | `maskpro_quotations` | `/var/www/gaq/` |
 | GetSales SSR | `getsales-public` | 3005 | `maskpro_commissions` | `/var/www/getsales/public-web/` |
 | Unify | PHP-FPM | — | `unify_maskpro` (shared!) | `/var/www/unify/` |
+| HRIS | `hris-api` | 3001 | `unify_maskpro` (shared!) | `/var/www/hris.maskpro.ph/` |
 
 ## Git & Versioning
 - Check `CHANGELOG.md` at session start for recall
@@ -72,3 +75,4 @@ description: Critical guardrails for MaskPro Care App (customer-facing vehicle m
 - API health check: `https://care.maskpro.ph/api/health`
 - **After deploy, ALWAYS verify**: check version in PM2, grep for expected strings in deployed JS, confirm API health
 - See `maskprocare-reference.md` for first-time server setup (production `.env` values)
+- Requires `sshpass` installed locally: `brew install hudochenkov/sshpass/sshpass` OR if brew is missing, compile it from source: `mkdir -p /tmp/sshpass_build && cd /tmp/sshpass_build && curl -sSLk -O https://sourceforge.net/projects/sshpass/files/sshpass/1.10/sshpass-1.10.tar.gz && tar xzf sshpass-1.10.tar.gz && cd sshpass-1.10 && ./configure --prefix=/tmp/ssh && make && make install && export PATH="/tmp/ssh/bin:$PATH"`

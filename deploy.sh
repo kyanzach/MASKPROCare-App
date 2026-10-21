@@ -24,13 +24,26 @@ set -euo pipefail
 
 DROPLET_IP="167.71.217.49"
 REMOTE_USER="root"
-SSH_PASS="${DEPLOY_SSH_PASS:-777Godisgood}"
 APP_DIR="/var/www/care"
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DOMAIN="https://care.maskpro.ph"
 PM2_PROCESS="maskpro-care"
 PORT="3004"
 SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10"
+
+# Source credentials from .ssh_helper.sh (gitignored — never committed)
+if [ -f "$PROJECT_DIR/.ssh_helper.sh" ]; then
+  source "$PROJECT_DIR/.ssh_helper.sh" __source_only 2>/dev/null || true
+  SSH_PASS="$SSHPASS"
+else
+  SSH_PASS="${DEPLOY_SSH_PASS:-}"
+  if [ -z "$SSH_PASS" ]; then
+    echo -e "\033[0;31m[✗]\033[0m Missing .ssh_helper.sh and no DEPLOY_SSH_PASS env var set."
+    echo "   Create .ssh_helper.sh with: export SSHPASS=\"your-password\""
+    exit 1
+  fi
+  export SSHPASS="$SSH_PASS"
+fi
 
 # Colors
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
@@ -60,9 +73,7 @@ preflight() {
     fi
   done
 
-  if [ "${SSH_PASS}" = "777Godisgood" ]; then
-    warn "Using hardcoded password. Set DEPLOY_SSH_PASS env var for security."
-  fi
+  ok "Credentials sourced from .ssh_helper.sh"
 
   # Quick SSH test
   ssh_cmd "echo ok" >/dev/null 2>&1 || fail "Cannot SSH to $DROPLET_IP. Check credentials."
@@ -164,10 +175,9 @@ deploy_backend() {
   ssh_cmd "cd $APP_DIR && npm install --production --silent 2>&1 | tail -3"
 
   log "Restarting PM2 process '$PM2_PROCESS'..."
-  # Check if process exists, start or restart accordingly
-  local EXISTS=$(ssh_cmd "pm2 jlist 2>/dev/null | jq -r '.[] | select(.name==\"$PM2_PROCESS\") | .name' 2>/dev/null" || echo "")
-  if [ -n "$EXISTS" ]; then
+  if ssh_cmd "pm2 describe $PM2_PROCESS >/dev/null 2>&1"; then
     ssh_cmd "pm2 restart $PM2_PROCESS --update-env 2>&1 | head -5"
+    ok "PM2 process '$PM2_PROCESS' restarted"
   else
     ssh_cmd "cd $APP_DIR && pm2 start server/index.js --name $PM2_PROCESS 2>&1 | head -5"
     ssh_cmd "pm2 save"

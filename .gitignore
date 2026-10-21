@@ -32,3 +32,6 @@ backups/
 
 # Build output
 frontend/dist/
+
+# SSH credentials (never commit)
+.ssh_helper.sh

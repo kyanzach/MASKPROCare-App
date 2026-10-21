@@ -2,7 +2,7 @@
   "expo": {
     "name": "MASKPROCare",
     "slug": "maskpro-care",
-    "version": "1.13.0",
+    "version": "1.13.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "mobile",
@@ -35,6 +35,9 @@
         "CAMERA",
         "READ_MEDIA_IMAGES",
         "READ_EXTERNAL_STORAGE"
+      ],
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -49,7 +52,8 @@
         "expo-image-picker",
         {
           "photosPermission": "MASKPRO Care requires access to your photo library to select photos for your profile avatar and vehicle documentation.",
-          "cameraPermission": "MASKPRO Care requires access to your camera to take photos for your profile avatar and vehicle service documentation."
+          "cameraPermission": "MASKPRO Care requires access to your camera to take photos for your profile avatar and vehicle service documentation.",
+          "microphonePermission": false
         }
       ]
     ],
