@@ -2,7 +2,7 @@
   "expo": {
     "name": "MASKPROCare",
     "slug": "maskpro-care",
-    "version": "1.13.2",
+    "version": "1.13.3",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "mobile",
@@ -55,7 +55,9 @@
           "cameraPermission": "MASKPRO Care requires access to your camera to take photos for your profile avatar and vehicle service documentation.",
           "microphonePermission": false
         }
-      ]
+      ],
+      "expo-font",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true

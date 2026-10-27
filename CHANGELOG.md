@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.13.3] — 2026-10-27
+### Fixed & Hardened
+- **Expo SDK 54 Dependency Alignment (`mobile/package.json`)**:
+  - Aligned 6 core native packages (`expo@~54.0.37`, `expo-constants@~18.0.14`, `expo-font@~14.0.12`, `expo-linking@~8.0.12`, `expo-router@~6.0.24`, `expo-web-browser@~15.0.11`).
+  - Successfully validated 18/18 checks on `expo-doctor` with 0 warnings or errors.
+
 ## [v1.13.2] — 2026-10-27
 ### Added
 - **Mobile Store Audit & Vulnerability Compliance Skill (`skills/mobile-audit/SKILL.md`)**:
