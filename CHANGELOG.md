@@ -14,6 +14,10 @@
   - Created a sticky floating alert toast stack on all Unify pages (matching the inventory reorder forecast toast style) for sales agents, accounting, managers, and Ryan Paco.
   - Surfaces real-time alerts for booking requests and customer offer declines with reasons, pulsating blue glow, live badge counts, and direct 1-click links to `booking_requests.php`.
   - Added 25s auto-polling loop via `notification_api.php?action=care_alerts` so alerts appear dynamically without requiring page refreshes.
+- **Smart Toast Deep-Linking & Tab State Resolution (`booking_requests.php`, `booking_request_card.php`, `includes/care_booking_requests_alert.php`)**:
+  - Resolved issue where clicking "Review Requests" on a declined offer opened the empty "Pending (0)" tab, causing agent confusion.
+  - Enabled intelligent deep-linking (`?tab=rejected&request_id=X`) that automatically activates the Rejected tab on page load, smoothly scrolls to the card, and pulses it with a glowing border.
+  - Added in-page tab switching without full reload when the agent is already viewing `booking_requests.php`, and added live counter badges for declined offers (`1 Declined`) right on the tab header.
 
 ## [v1.13.7] — 2026-10-27
 ### Added & Enhanced
