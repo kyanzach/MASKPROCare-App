@@ -257,7 +257,7 @@ router.get('/list', async (req, res) => {
         FROM booking_requests br
         LEFT JOIN vehicles v ON br.customer_vehicle_id = v.id
         LEFT JOIN booking_request_services brs ON br.request_id = brs.request_id
-        WHERE br.customer_id = ? AND br.status IN ('pending', 'cancelled', 'rejected')
+        WHERE br.customer_id = ? AND br.status IN ('pending', 'cancelled', 'rejected', 'negotiating')
         GROUP BY br.request_id
         ORDER BY br.time_added DESC
       `, [customerId]);
@@ -888,32 +888,100 @@ router.post('/respond-offer', async (req, res) => {
     }
 
     const now = new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila' });
+    const counterDate = req.body.counter_date ? String(req.body.counter_date).trim() : null;
 
     if (action === 'accept') {
-      // Customer accepted the proposed date:
-      // Update booking_date to offered_date, return status to 'pending', set offer_status to 'accepted'
-      const noteAppend = `Offer accepted by customer on ${now}: Scheduled on ${request.offered_date}.`;
+      // Customer approved / accepted the proposed agreed date:
+      // 1. Create confirmed booking in bookings table
+      const confirmedDate = request.offered_date;
+      const noteAppend = `Agreed schedule accepted by customer on ${now}: Confirmed on ${confirmedDate}.`;
       const updatedNotes = request.notes ? `${request.notes}\n${noteAppend}` : noteAppend;
 
+      let bookingId = null;
+      try {
+        const [insertBookingRes] = await pool.query(
+          `INSERT INTO bookings (branch_id, booking_date, customer_id, customer_vehicle_id, latest_service, referred_by, service_order, created_by, notes, time_added)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+          [
+            request.branch_id,
+            confirmedDate,
+            request.customer_id,
+            request.customer_vehicle_id,
+            request.latest_service,
+            request.referred_by || null,
+            request.service_order || null,
+            request.created_by || 1,
+            updatedNotes
+          ]
+        );
+        bookingId = insertBookingRes.insertId;
+
+        // Copy services to bookings_service_types
+        const [reqServices] = await pool.query(
+          "SELECT * FROM booking_request_services WHERE request_id = ?",
+          [reqId]
+        );
+        for (const svc of reqServices) {
+          const bookingDateOnly = new Date(confirmedDate).toISOString().split('T')[0];
+          const todayOnly = new Date().toISOString().split('T')[0];
+          const svcStatus = bookingDateOnly >= todayOnly ? 'Scheduled' : 'Done';
+
+          const [insSvcRes] = await pool.query(
+            "INSERT INTO bookings_service_types (booking_id, service_name, price, status) VALUES (?, ?, ?, ?)",
+            [bookingId, svc.service_name, svc.price, svcStatus]
+          );
+          const newSvcId = insSvcRes.insertId;
+
+          // Copy packages if any
+          const [reqPkgs] = await pool.query(
+            "SELECT * FROM booking_request_packages WHERE service_id = ?",
+            [svc.service_id]
+          );
+          for (const pkg of reqPkgs) {
+            await pool.query(
+              "INSERT INTO bookings_service_type_packages (service_id, package_name) VALUES (?, ?)",
+              [newSvcId, pkg.package_name]
+            );
+          }
+        }
+      } catch (bkErr) {
+        console.warn('Auto booking creation on offer accept error:', bkErr);
+      }
+
+      // 2. Mark request as approved!
       await pool.query(
         `UPDATE booking_requests 
-         SET status = 'pending', booking_date = offered_date, offer_status = 'accepted', 
-             customer_offer_reply = ?, notes = ?
+         SET status = 'approved', booking_date = offered_date, offer_status = 'accepted', 
+             customer_offer_reply = ?, notes = ?, approved_at = NOW()
          WHERE request_id = ? AND customer_id = ?`,
         [reply_reason || 'Accepted proposed alternative date', updatedNotes, reqId, customerId]
       );
     } else {
-      // Customer declined:
-      const declineReason = String(reply_reason || 'Customer declined alternative date offer').trim();
-      const noteAppend = `Offer declined by customer on ${now}. Reason: ${declineReason}`;
-      const updatedNotes = request.notes ? `${request.notes}\n${noteAppend}` : noteAppend;
+      // Customer declined or proposed a counter date:
+      const declineReason = String(reply_reason || 'Customer requested date change').trim();
+      let noteAppend = '';
+      
+      if (counterDate) {
+        noteAppend = `Customer requested alternative date on ${now}: Counter-proposed ${counterDate}. Reason: ${declineReason}`;
+        const updatedNotes = request.notes ? `${request.notes}\n${noteAppend}` : noteAppend;
 
-      await pool.query(
-        `UPDATE booking_requests 
-         SET offer_status = 'declined', customer_offer_reply = ?, notes = ?
-         WHERE request_id = ? AND customer_id = ?`,
-        [declineReason, updatedNotes, reqId, customerId]
-      );
+        await pool.query(
+          `UPDATE booking_requests 
+           SET status = 'negotiating', offered_date = ?, offer_status = 'countered', customer_offer_reply = ?, notes = ?
+           WHERE request_id = ? AND customer_id = ?`,
+          [counterDate, declineReason, updatedNotes, reqId, customerId]
+        );
+      } else {
+        noteAppend = `Offer declined by customer on ${now}. Reason: ${declineReason}`;
+        const updatedNotes = request.notes ? `${request.notes}\n${noteAppend}` : noteAppend;
+
+        await pool.query(
+          `UPDATE booking_requests 
+           SET status = 'negotiating', offer_status = 'declined', customer_offer_reply = ?, notes = ?
+           WHERE request_id = ? AND customer_id = ?`,
+          [declineReason, updatedNotes, reqId, customerId]
+        );
+      }
     }
 
     // Return updated request
@@ -943,32 +1011,37 @@ router.post('/respond-offer', async (req, res) => {
         const offeredStr = new Date(request.offered_date).toLocaleString();
         await createCustomerNotification(
           customerId,
-          'offer_accepted',
-          'Alternative Date Accepted ✓',
-          `You accepted the proposed appointment date for ${vehName} on ${offeredStr}. Awaiting branch confirmation.`
+          'booking_approved',
+          'Booking Confirmed & Approved! 🎉',
+          `Your appointment for ${vehName} on ${offeredStr} is confirmed. We look forward to welcoming you!`
         );
         await notifyUnifyStaff(
           request.branch_id,
           'care_offer_accepted',
-          `Offer Accepted: ${custName} (${vehName})`,
-          `${custName} accepted the proposed date (${offeredStr}). Booking request is ready for approval.`,
-          'booking_requests.php',
+          `Booking Approved: ${custName} (${vehName})`,
+          `${custName} accepted the agreed date (${offeredStr}). Booking has been moved to Approved.`,
+          'booking_requests.php?tab=approved',
           reqId
         );
       } else {
         const declineReason = String(reply_reason || 'Declined proposed date').trim();
+        const isCounter = !!counterDate;
         await createCustomerNotification(
           customerId,
           'offer_declined',
-          'Alternative Date Declined',
-          `You declined the proposed date for ${vehName}. Reason: "${declineReason}".`
+          isCounter ? 'Counter-Date Proposed' : 'Alternative Date Declined',
+          isCounter 
+            ? `You proposed ${counterDate} for ${vehName}. Our branch team will review and confirm.` 
+            : `You declined the proposed date for ${vehName}. Reason: "${declineReason}". Our team will reach out to reschedule.`
         );
         await notifyUnifyStaff(
           request.branch_id,
-          'care_offer_declined',
-          `Offer Declined: ${custName} (${vehName})`,
-          `${custName} declined the proposed date. Reason: "${declineReason}".`,
-          'booking_requests.php?tab=rejected',
+          isCounter ? 'care_offer_countered' : 'care_offer_declined',
+          isCounter ? `Schedule Counter-Offer: ${custName}` : `Date Offer Declined: ${custName}`,
+          isCounter 
+            ? `${custName} (${vehName}) counter-proposed ${counterDate}. Reason: "${declineReason}".`
+            : `${custName} declined the date offer. Reason: "${declineReason}". Open Negotiating tab to set agreed date.`,
+          'booking_requests.php?tab=negotiating',
           reqId
         );
       }

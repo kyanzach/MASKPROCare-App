@@ -104,20 +104,21 @@ router.get('/stats', async (req, res) => {
         LEFT JOIN vehicles v ON br.customer_vehicle_id = v.id
         LEFT JOIN booking_request_services brs ON br.request_id = brs.request_id
         WHERE br.customer_id = ? 
-          AND (br.status = 'pending' OR (br.status = 'rejected' AND (br.offered_date IS NOT NULL OR br.time_added >= DATE_SUB(NOW(), INTERVAL 30 DAY))))
+          AND (br.status = 'pending' OR br.status = 'negotiating' OR (br.status = 'rejected' AND (br.offered_date IS NOT NULL OR br.time_added >= DATE_SUB(NOW(), INTERVAL 30 DAY))))
         GROUP BY br.request_id
         ORDER BY 
           CASE 
-            WHEN br.status = 'rejected' AND br.offer_status = 'offered' THEN 1
-            WHEN br.status = 'pending' THEN 2
-            ELSE 3
+            WHEN (br.status = 'negotiating' OR br.status = 'rejected') AND br.offer_status = 'offered' THEN 1
+            WHEN br.status = 'negotiating' THEN 2
+            WHEN br.status = 'pending' THEN 3
+            ELSE 4
           END,
           br.time_added DESC
         LIMIT 10
       `, [customerId]);
       pendingRequests = rows;
 
-      pendingCount = rows.filter(r => r.status === 'pending' || (r.status === 'rejected' && r.offer_status === 'offered')).length;
+      pendingCount = rows.filter(r => r.status === 'pending' || r.status === 'negotiating' || (r.status === 'rejected' && r.offer_status === 'offered')).length;
     } catch { /* ignore */ }
 
     // Completed services count

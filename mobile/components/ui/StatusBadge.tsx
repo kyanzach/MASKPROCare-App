@@ -46,6 +46,13 @@ export const STATUS_CONFIG: Record<string, StatusConfig> = {
     border: '#ef4444',
     icon: 'ban',
   },
+  negotiating: {
+    label: 'Negotiating',
+    bg: '#ede9fe',
+    color: '#6d28d9',
+    border: '#a78bfa',
+    icon: 'handshake-o',
+  },
 };
 
 interface StatusBadgeProps {

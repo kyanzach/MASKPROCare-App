@@ -1,5 +1,25 @@
 # Changelog
 
+## [v1.13.9] — 2026-10-28
+### Added & Enhanced
+- **Dedicated Negotiations Flow & Tab Lifecycle (`booking_requests.php`, `booking_request_card.php`, `server/routes/bookings.js`, `mobile/`, `frontend/`)**:
+  - Upgraded database schema for `booking_requests.status` to include `'negotiating'` (`ENUM('pending','approved','rejected','cancelled','negotiating')`).
+  - Added new "Negotiating" tab in Unify `booking_requests.php` with live count badge and counter proposal alerts (`Need Action`).
+  - Customer decline modal now allows the client to propose an optional counter date/time (`counter_date`), instantly moving the request into active negotiation (`offer_status = 'countered'`).
+  - Added "Set Agreed Date" action button and dedicated modal (`#setAgreedDateModal`) for agents to record dates agreed via phone call or Facebook chat, automatically dispatching push notifications and in-app bell alerts to the client.
+  - Client acceptance of an agreed date in Care App directly confirms and settles the booking, inserting into `bookings` and moving the request to the "Approved" tab.
+- **Purposeful KPI Summary Widgets in Unify (`booking_requests.php`)**:
+  - Replaced dull interface with 4 modern, non-crowded KPI widget cards:
+    1. **Pending Review**: Amber clock badge displaying new unreviewed booking requests.
+    2. **Active Negotiations**: Purple handshake badge tracking in-progress date agreements.
+    3. **Approved (This Month)**: Emerald checkmark badge counting converted live appointments.
+    4. **Follow-ups Needed**: Rose phone badge showing customer declines/counters needing call or FB inbox outreach.
+  - Cards feature smooth hover lift and one-click quick navigation to their respective tabs.
+- **Smart Toast Disappearance Upon Settlement (`includes/care_booking_requests_alert.php`, `notification_api.php`)**:
+  - Refined floating toast trigger conditions to strictly exclude approved or cancelled requests (`status NOT IN ('approved', 'cancelled')`).
+  - Settling an item by setting an agreed date or approving immediately removes it from the toast stack, eliminating nagging alerts.
+  - Dynamically mapped toast primary button and deep-link parameters to exact target state (`tab=negotiating`, `tab=rejected`, or `tab=pending`).
+
 ## [v1.13.8] — 2026-10-28
 ### Added & Enhanced
 - **Client-Side Notification Bell & Push Notification System (`mobile/services/notificationService.ts`, `mobile/app/_layout.tsx`, `mobile/components/ui/TopHeader.tsx`, `mobile/app.json`, `mobile/package.json`)**:

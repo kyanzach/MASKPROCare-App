@@ -57,11 +57,11 @@ interface BookingRequest {
   service_names?: string;
   notes?: string;
   branch_id?: number;
-  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'negotiating';
   rejection_reason?: string;
   cancellation_reason?: string;
   offered_date?: string;
-  offer_status?: 'offered' | 'accepted' | 'declined';
+  offer_status?: 'offered' | 'accepted' | 'declined' | 'countered';
   customer_offer_reply?: string;
   time_added: string;
   make: string;
@@ -101,10 +101,12 @@ export default function DashboardScreen() {
     visible: boolean;
     request: BookingRequest | null;
     reason: string;
+    counterDate: string;
   }>({
     visible: false,
     request: null,
     reason: '',
+    counterDate: '',
   });
 
   // Prompt Alert Modal
@@ -185,8 +187,8 @@ export default function DashboardScreen() {
       });
       showPrompt(
         'success',
-        'Proposed Date Accepted',
-        'You have accepted the alternative schedule. Your request is now pending branch confirmation.'
+        'Booking Confirmed! 🎉',
+        'You approved the agreed schedule. Your booking is now confirmed!'
       );
       loadData();
     } catch (err: any) {
@@ -202,14 +204,16 @@ export default function DashboardScreen() {
       visible: true,
       request: req,
       reason: '',
+      counterDate: '',
     });
   };
 
   const handleDeclineSubmit = async () => {
     if (!declineModal.request) return;
     const reason = declineModal.reason.trim();
-    if (!reason) {
-      showPrompt('warning', 'Reason Required', 'Please provide a brief reason why this date does not work so our agent can offer a better alternative.');
+    const counterDate = declineModal.counterDate.trim();
+    if (!reason && !counterDate) {
+      showPrompt('warning', 'Input Required', 'Please provide a reason or suggest your preferred alternative date.');
       return;
     }
 
@@ -218,13 +222,16 @@ export default function DashboardScreen() {
       await client.post('/bookings/respond-offer', {
         request_id: declineModal.request.request_id,
         action: 'decline',
-        reply_reason: reason,
+        reply_reason: reason || 'Customer requested reschedule',
+        counter_date: counterDate || undefined,
       });
-      setDeclineModal({ visible: false, request: null, reason: '' });
+      setDeclineModal({ visible: false, request: null, reason: '', counterDate: '' });
       showPrompt(
-        'info',
-        'Offer Declined',
-        'Your response and reason have been submitted to the branch agent for review.'
+        'success',
+        counterDate ? 'New Date Proposed 📅' : 'Response Sent',
+        counterDate
+          ? 'Your preferred date has been submitted. Our branch agent will review and confirm.'
+          : 'Your response and reason have been submitted to the branch agent for review.'
       );
       loadData();
     } catch (err: any) {
@@ -278,12 +285,14 @@ export default function DashboardScreen() {
 
   const renderPendingCard = (req: BookingRequest) => {
     const isRejected = req.status === 'rejected';
+    const isNegotiating = req.status === 'negotiating';
     const photoUrl = getPhotoUrl(req.vehicle_photo);
     const hasOffer = !!req.offered_date;
     const isOfferPending =
-      isRejected && hasOffer && (!req.offer_status || req.offer_status === 'offered');
+      (isRejected || isNegotiating) && hasOffer && (!req.offer_status || req.offer_status === 'offered');
     const isOfferAccepted = req.offer_status === 'accepted';
     const isOfferDeclined = req.offer_status === 'declined';
+    const isOfferCountered = req.offer_status === 'countered';
 
     return (
       <View
@@ -304,22 +313,26 @@ export default function DashboardScreen() {
           <View
             style={[
               styles.pendingStatusBadge,
-              isRejected ? styles.rejectedBadgeBg : styles.pendingBadgeBg,
+              isNegotiating
+                ? { backgroundColor: '#ede9fe', borderColor: '#a78bfa' }
+                : isRejected
+                ? styles.rejectedBadgeBg
+                : styles.pendingBadgeBg,
             ]}
           >
             <FontAwesome
-              name={isRejected ? 'times-circle' : 'hourglass-half'}
+              name={isNegotiating ? 'handshake-o' : isRejected ? 'times-circle' : 'hourglass-half'}
               size={11}
-              color={isRejected ? '#b91c1c' : '#b45309'}
+              color={isNegotiating ? '#6d28d9' : isRejected ? '#b91c1c' : '#b45309'}
               style={{ marginRight: 4 }}
             />
             <Text
               style={[
                 styles.pendingStatusText,
-                { color: isRejected ? '#b91c1c' : '#b45309' },
+                { color: isNegotiating ? '#6d28d9' : isRejected ? '#b91c1c' : '#b45309' },
               ]}
             >
-              {isRejected ? 'Declined by Branch' : 'Pending Approval'}
+              {isNegotiating ? 'Negotiating' : isRejected ? 'Declined by Branch' : 'Pending Approval'}
             </Text>
           </View>
         </View>
@@ -411,15 +424,32 @@ export default function DashboardScreen() {
                   disabled={respondingOffer}
                   activeOpacity={0.8}
                 >
-                  <FontAwesome name="times" size={12} color="#dc2626" style={{ marginRight: 6 }} />
-                  <Text style={styles.declineOfferBtnText}>Decline Offer</Text>
+                  <FontAwesome name="exchange" size={12} color="#dc2626" style={{ marginRight: 6 }} />
+                  <Text style={styles.declineOfferBtnText}>Decline / Counter</Text>
                 </TouchableOpacity>
+              </View>
+            ) : isOfferCountered ? (
+              <View style={[styles.offerStatusBannerDeclined, { backgroundColor: '#f5f3ff', borderColor: '#c4b5fd' }]}>
+                <FontAwesome name="hourglass-half" size={14} color="#6d28d9" style={{ marginRight: 6 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.offerStatusBannerDeclinedText, { color: '#5b21b6', fontWeight: '700' }]}>
+                    Counter proposal submitted.
+                  </Text>
+                  {req.offered_date ? (
+                    <Text style={{ fontSize: 11, color: '#6d28d9', marginTop: 2 }}>
+                      You proposed: {req.offered_date}
+                    </Text>
+                  ) : null}
+                  <Text style={{ fontSize: 11, color: '#7c3aed', marginTop: 2 }}>
+                    Branch is reviewing your preferred schedule.
+                  </Text>
+                </View>
               </View>
             ) : isOfferAccepted ? (
               <View style={styles.offerStatusBannerAccepted}>
                 <FontAwesome name="check-circle" size={14} color="#15803d" style={{ marginRight: 6 }} />
                 <Text style={styles.offerStatusBannerAcceptedText}>
-                  You accepted this alternative date. Awaiting branch approval.
+                  You accepted this agreed date. Processing booking.
                 </Text>
               </View>
             ) : isOfferDeclined ? (
@@ -720,7 +750,7 @@ export default function DashboardScreen() {
         visible={declineModal.visible}
         transparent={true}
         animationType="fade"
-        onRequestClose={() => setDeclineModal({ visible: false, request: null, reason: '' })}
+        onRequestClose={() => setDeclineModal({ visible: false, request: null, reason: '', counterDate: '' })}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -740,37 +770,50 @@ export default function DashboardScreen() {
             </View>
 
             <Text style={styles.declineInstructionText}>
-              Please state why this date does not work for you so our branch agent can adjust and offer a suitable schedule:
+              Please state why this date does not work for you, or suggest an alternative:
             </Text>
 
             <TextInput
               style={styles.declineInput}
-              placeholder="e.g. Not available on this day, prefer weekends instead..."
+              placeholder="Reason (e.g. Schedule conflict, out of town...)"
               placeholderTextColor="#9ca3af"
               multiline
-              numberOfLines={3}
+              numberOfLines={2}
               value={declineModal.reason}
               onChangeText={(text) => setDeclineModal((prev) => ({ ...prev, reason: text }))}
+            />
+
+            <Text style={[styles.declineInstructionText, { marginTop: 8, marginBottom: 4, fontWeight: '700', color: '#374151' }]}>
+              Suggest Preferred Date & Time (Optional):
+            </Text>
+            <TextInput
+              style={[styles.declineInput, { height: 42, textAlignVertical: 'center', marginBottom: 12 }]}
+              placeholder="e.g. Next Saturday Nov 5 at 10:00 AM"
+              placeholderTextColor="#9ca3af"
+              value={declineModal.counterDate}
+              onChangeText={(text) => setDeclineModal((prev) => ({ ...prev, counterDate: text }))}
             />
 
             <View style={styles.declineModalActions}>
               <TouchableOpacity
                 style={styles.cancelDeclineBtn}
-                onPress={() => setDeclineModal({ visible: false, request: null, reason: '' })}
+                onPress={() => setDeclineModal({ visible: false, request: null, reason: '', counterDate: '' })}
                 disabled={respondingOffer}
               >
                 <Text style={styles.cancelDeclineBtnText}>Cancel</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.confirmDeclineBtn}
+                style={[styles.confirmDeclineBtn, declineModal.counterDate?.trim() ? { backgroundColor: '#4f46e5' } : null]}
                 onPress={handleDeclineSubmit}
                 disabled={respondingOffer}
               >
                 {respondingOffer ? (
                   <ActivityIndicator size="small" color="#ffffff" />
                 ) : (
-                  <Text style={styles.confirmDeclineBtnText}>Submit & Decline</Text>
+                  <Text style={styles.confirmDeclineBtnText}>
+                    {declineModal.counterDate?.trim() ? 'Propose New Date' : 'Submit & Decline'}
+                  </Text>
                 )}
               </TouchableOpacity>
             </View>
