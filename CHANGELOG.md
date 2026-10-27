@@ -1,5 +1,14 @@
 # Changelog
 
+## [v1.13.4] — 2026-10-27
+### Changed & Improved
+- **Booking Calendar Full-Color Accessibility Badges (`mobile/components/ui/CalendarPicker.tsx`, `frontend/src/pages/Bookings.jsx`)**:
+  - Replaced tiny dots with high-contrast, full-color rounded background badges for date numbers (Green for Available, Amber for Almost Full, Red with strikethrough for Full, Solid Blue for Selected) for accessibility and elderly readability.
+  - Replaced dot legend with matching rounded status pill badges.
+- **Unify Booking Requests & Service Name Synchronization (`booking_requests.php`)**:
+  - Migrated `unify_maskpro.booking_request_services` by adding missing `service_name varchar(100)` column, resolving the HTTP 500 fatal exception (`Unknown column 'brs.service_name'`).
+  - Added multi-layered `COALESCE(brs.service_name, br.latest_service)` fallback to booking requests query in both server `/var/www/unify/booking_requests.php` and local workspace.
+
 ## [v1.13.3] — 2026-10-27
 ### Fixed & Hardened
 - **Expo SDK 54 Dependency Alignment (`mobile/package.json`)**:

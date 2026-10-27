@@ -140,41 +140,51 @@ export default function CalendarPicker({
             const { day, dateStr, isToday, isPast, isSunday, isAvailable, isLimited, isUnavailable, isSelected } = dayInfo;
             const disabled = isPast || isSunday || isUnavailable;
 
+            // Determine status styles
+            let statusCellStyle = null;
+            let statusTextStyle = null;
+
+            if (isSelected) {
+              statusCellStyle = styles.selectedDayCell;
+              statusTextStyle = styles.selectedDayText;
+            } else if (isPast) {
+              statusCellStyle = styles.disabledDayCell;
+              statusTextStyle = styles.disabledDayText;
+            } else if (isSunday) {
+              statusCellStyle = styles.disabledDayCell;
+              statusTextStyle = styles.sundayDayText;
+            } else if (isUnavailable) {
+              statusCellStyle = styles.fullDayCell;
+              statusTextStyle = styles.fullDayText;
+            } else if (isLimited) {
+              statusCellStyle = styles.limitedDayCell;
+              statusTextStyle = styles.limitedDayText;
+            } else if (isAvailable) {
+              statusCellStyle = styles.availableDayCell;
+              statusTextStyle = styles.availableDayText;
+            }
+
             return (
               <TouchableOpacity
                 key={dateStr}
                 disabled={disabled}
                 onPress={() => onSelectDate(dateStr)}
+                activeOpacity={0.7}
                 style={[
                   styles.dayCell,
-                  isSelected && styles.selectedDayCell,
+                  statusCellStyle,
                   isToday && !isSelected && styles.todayDayCell,
-                  disabled && styles.disabledDayCell,
                 ]}
               >
                 <Text
                   style={[
                     styles.dayText,
-                    isSelected && styles.selectedDayText,
+                    statusTextStyle,
                     isToday && !isSelected && styles.todayDayText,
-                    disabled && styles.disabledDayText,
                   ]}
                 >
                   {day}
                 </Text>
-                
-                {/* Availability Dots */}
-                {!isPast && !isSunday ? (
-                  <View style={styles.dotContainer}>
-                    {isUnavailable ? (
-                      <View style={[styles.dot, styles.dotFull]} />
-                    ) : isLimited ? (
-                      <View style={[styles.dot, styles.dotLimited]} />
-                    ) : isAvailable ? (
-                      <View style={[styles.dot, styles.dotAvailable]} />
-                    ) : null}
-                  </View>
-                ) : null}
               </TouchableOpacity>
             );
           })}
@@ -183,17 +193,19 @@ export default function CalendarPicker({
 
       {/* Calendar Legend */}
       <View style={styles.legend}>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, styles.dotAvailable]} />
-          <Text style={styles.legendText}>Available</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, styles.dotLimited]} />
-          <Text style={styles.legendText}>Almost Full</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, styles.dotFull]} />
-          <Text style={styles.legendText}>Full</Text>
+        <View style={styles.legendBadgeContainer}>
+          <View style={[styles.legendBadge, styles.legendBadgeAvailable]}>
+            <View style={[styles.legendDot, { backgroundColor: '#16a34a' }]} />
+            <Text style={[styles.legendText, { color: '#15803d' }]}>Available</Text>
+          </View>
+          <View style={[styles.legendBadge, styles.legendBadgeLimited]}>
+            <View style={[styles.legendDot, { backgroundColor: '#d97706' }]} />
+            <Text style={[styles.legendText, { color: '#b45309' }]}>Almost Full</Text>
+          </View>
+          <View style={[styles.legendBadge, styles.legendBadgeFull]}>
+            <View style={[styles.legendDot, { backgroundColor: '#dc2626' }]} />
+            <Text style={[styles.legendText, { color: '#b91c1c' }]}>Full</Text>
+          </View>
         </View>
       </View>
     </View>
@@ -246,61 +258,80 @@ const styles = StyleSheet.create({
   },
   dayCellPlaceholder: {
     width: '14.28%',
-    height: 48,
+    height: 46,
   },
   dayCell: {
-    width: '14.28%',
-    height: 48,
+    width: '13.8%',
+    height: 44,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 8,
-    marginVertical: 2,
+    borderRadius: 10,
+    marginVertical: 3,
+    marginHorizontal: '0.24%',
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  availableDayCell: {
+    backgroundColor: '#dcfce7',
+    borderColor: '#86efac',
+  },
+  limitedDayCell: {
+    backgroundColor: '#fef3c7',
+    borderColor: '#fcd34d',
+  },
+  fullDayCell: {
+    backgroundColor: '#fee2e2',
+    borderColor: '#fca5a5',
   },
   selectedDayCell: {
     backgroundColor: '#4f46e5',
+    borderColor: '#4338ca',
+    shadowColor: '#4f46e5',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
   },
   todayDayCell: {
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#4f46e5',
   },
   disabledDayCell: {
     backgroundColor: '#f9fafb',
+    borderColor: '#f3f4f6',
   },
   dayText: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 15,
+    fontWeight: '600',
     color: '#1f2937',
+  },
+  availableDayText: {
+    color: '#15803d',
+    fontWeight: '700',
+  },
+  limitedDayText: {
+    color: '#b45309',
+    fontWeight: '700',
+  },
+  fullDayText: {
+    color: '#b91c1c',
+    fontWeight: '700',
+    textDecorationLine: 'line-through',
   },
   selectedDayText: {
     color: '#ffffff',
-    fontWeight: '700',
+    fontWeight: '800',
   },
   todayDayText: {
-    color: '#4f46e5',
-    fontWeight: '700',
+    fontWeight: '800',
   },
   disabledDayText: {
     color: '#d1d5db',
+    fontWeight: '400',
   },
-  dotContainer: {
-    position: 'absolute',
-    bottom: 4,
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  dot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-  },
-  dotAvailable: {
-    backgroundColor: '#10b981',
-  },
-  dotLimited: {
-    backgroundColor: '#f59e0b',
-  },
-  dotFull: {
-    backgroundColor: '#ef4444',
+  sundayDayText: {
+    color: '#f87171',
+    fontWeight: '500',
   },
   loaderContainer: {
     height: 180,
@@ -313,27 +344,45 @@ const styles = StyleSheet.create({
     color: '#6b7280',
   },
   legend: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 16,
-    marginTop: 16,
+    marginTop: 14,
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: '#f3f4f6',
   },
-  legendItem: {
+  legendBadgeContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  legendBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  legendBadgeAvailable: {
+    backgroundColor: '#dcfce7',
+    borderColor: '#86efac',
+  },
+  legendBadgeLimited: {
+    backgroundColor: '#fef3c7',
+    borderColor: '#fcd34d',
+  },
+  legendBadgeFull: {
+    backgroundColor: '#fee2e2',
+    borderColor: '#fca5a5',
   },
   legendDot: {
-    width: 8,
-    height: 8,
+    width: 7,
+    height: 7,
     borderRadius: 4,
   },
   legendText: {
     fontSize: 11,
-    color: '#4b5563',
-    fontWeight: '500',
+    fontWeight: '700',
   },
 });
