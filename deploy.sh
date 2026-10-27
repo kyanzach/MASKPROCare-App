@@ -224,7 +224,8 @@ server {
         proxy_cache_bypass $http_upgrade;
     }
 
-    location /uploads/ {
+    # Uploads directory — ^~ gives prefix priority over regex
+    location ^~ /uploads/ {
         alias /var/www/care/uploads/;
         expires 30d;
         add_header Cache-Control "public, immutable";

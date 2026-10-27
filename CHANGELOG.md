@@ -1,5 +1,22 @@
 # Changelog
 
+## [v1.13.6] — 2026-10-27
+### Added, Changed & Fixed
+- **Nginx Vehicle Photo 404 Resolution (`/etc/nginx/sites-available/care`, `deploy.sh`)**:
+  - Resolved vehicle photo missing issue after upload (s1–s2) by adding `^~` modifier to `location ^~ /uploads/` in Nginx configuration, preventing static file regex location blocks (`.(webp)$`) from overriding uploaded vehicle media paths.
+  - Updated `deploy.sh` Nginx template so future deployments preserve this rule.
+- **Unify App Customer Vehicles Photo Thumbnail & Lightbox (`customers_view_details_fetch_vehicle.php`, `cvd_vehicle_cards.php`)**:
+  - Added vehicle photo thumbnail directly beside the vehicle make and model (under the `VEHICLE` column, addressing s4) in both table and mobile card views on Unify.
+  - Clicking/tapping the vehicle photo opens a sleek Bootstrap modal lightbox displaying the full resolution photo, vehicle name, and plate number with an instant Close button, returning without refreshing the page.
+- **Mobile & Web Vehicle Photo Expansion Lightbox (`mobile/app/(tabs)/vehicles.tsx`, `frontend/src/pages/Vehicles.jsx`)**:
+  - Implemented full-screen image viewer modals on both mobile and web with clean dark backdrops and close buttons.
+  - Added dedicated camera icon button for seamless photo replacement/re-upload without conflicting with photo view gestures.
+- **Booking Requests Double-Entry Gating & Denial Prompts (`server/routes/bookings.js`, `mobile/app/(tabs)/bookings.tsx`)**:
+  - Implemented strict database gating checks in `POST /api/bookings/create` and `POST /api/bookings/reschedule` to prevent duplicate submissions when a pending request, approved request, or confirmed booking already exists for the same vehicle on the same date.
+  - Added proactive client-side gating and warning prompt modals (`AlertPromptModal`) displaying `"Booking Already Exists"` with descriptive branch guidance.
+- **Database Clean-up & Backfill (`unify_maskpro.booking_requests`)**:
+  - Cleaned up redundant pending duplicate entries (Requests #2 through #7) for customer `1924` / vehicle `8630` on `2026-10-30` in both `booking_requests` and `booking_request_services`, retaining only the single canonical active booking request (#1).
+
 ## [v1.13.5] — 2026-10-27
 ### Changed & Fixed
 - **Mobile UX Modal Alert Architecture (`mobile/components/ui/AlertPromptModal.tsx`)**:

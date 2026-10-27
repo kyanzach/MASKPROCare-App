@@ -319,6 +319,41 @@ router.post('/create', async (req, res) => {
       return res.status(422).json({ success: false, data: null, message: 'Please select a future date and time.', errors: [] });
     }
 
+    // Check for duplicate / existing active booking request or confirmed booking
+    const [existingRequests] = await pool.query(
+      `SELECT request_id, status FROM booking_requests 
+       WHERE customer_id = ? AND customer_vehicle_id = ? AND DATE(booking_date) = ? AND status IN ('pending', 'approved') 
+       LIMIT 1`,
+      [customerId, parseInt(vehicle_id, 10), booking_date]
+    );
+
+    if (existingRequests.length > 0) {
+      const existingStatus = existingRequests[0].status;
+      const statusLabel = existingStatus === 'approved' ? 'an approved' : 'a pending';
+      return res.status(409).json({
+        success: false,
+        data: null,
+        message: `You already have ${statusLabel} booking request for this vehicle on this date. Please check your existing bookings.`,
+        errors: []
+      });
+    }
+
+    const [existingBookings] = await pool.query(
+      `SELECT booking_id FROM bookings 
+       WHERE customer_vehicle_id = ? AND DATE(booking_date) = ? AND (notes NOT LIKE 'CANCELLED:%' OR notes IS NULL)
+       LIMIT 1`,
+      [parseInt(vehicle_id, 10), booking_date]
+    );
+
+    if (existingBookings.length > 0) {
+      return res.status(409).json({
+        success: false,
+        data: null,
+        message: 'You already have a confirmed appointment for this vehicle on this date. Please check your existing bookings.',
+        errors: []
+      });
+    }
+
     // Create booking request
     const [result] = await pool.query(
       "INSERT INTO booking_requests (customer_id, customer_vehicle_id, booking_date, latest_service, notes, branch_id, status) VALUES (?, ?, ?, ?, ?, ?, 'pending')",
@@ -637,6 +672,27 @@ router.post('/edit-request', async (req, res) => {
     const request = requests[0];
     if (request.status !== 'pending') {
       return res.status(409).json({ success: false, data: null, message: `This request has already been ${request.status} and cannot be edited`, errors: [] });
+    }
+
+    // Check if another request or booking already exists for this vehicle on new_date
+    const [clashingRequests] = await pool.query(
+      `SELECT request_id FROM booking_requests 
+       WHERE customer_id = ? AND customer_vehicle_id = ? AND DATE(booking_date) = ? AND request_id != ? AND status IN ('pending', 'approved') 
+       LIMIT 1`,
+      [req.user.customer_id, request.customer_vehicle_id, new_date, reqId]
+    );
+    if (clashingRequests.length > 0) {
+      return res.status(409).json({ success: false, data: null, message: 'You already have another active request for this vehicle on this date.', errors: [] });
+    }
+
+    const [clashingBookings] = await pool.query(
+      `SELECT booking_id FROM bookings 
+       WHERE customer_vehicle_id = ? AND DATE(booking_date) = ? AND (notes NOT LIKE 'CANCELLED:%' OR notes IS NULL)
+       LIMIT 1`,
+      [request.customer_vehicle_id, new_date]
+    );
+    if (clashingBookings.length > 0) {
+      return res.status(409).json({ success: false, data: null, message: 'You already have a confirmed appointment for this vehicle on this date.', errors: [] });
     }
 
     // Build edit history

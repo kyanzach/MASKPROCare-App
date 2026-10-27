@@ -57,6 +57,8 @@ interface BookingItem {
   id: number;
   booking_id?: number;
   request_id?: number;
+  customer_vehicle_id?: number;
+  vehicle_id?: number;
   type: 'booking' | 'request';
   booking_date: string;
   latest_service: string;
@@ -269,6 +271,20 @@ export default function BookingsScreen() {
       showPrompt('warning', 'Date Required', 'Please pick an available date on the calendar.');
       return;
     }
+
+    // Proactive client-side double entry gating
+    const isDuplicate = unifiedList.some((b: BookingItem) => {
+      if (b.status === 'cancelled' || b.status === 'rejected') return false;
+      const bDate = (b.booking_date || '').slice(0, 10);
+      const bVehicleId = b.customer_vehicle_id || (b as any).vehicle_id;
+      return String(bVehicleId) === String(bookingForm.vehicle_id) && bDate === bookingForm.booking_date;
+    });
+
+    if (isDuplicate) {
+      showPrompt('warning', 'Booking Already Exists', 'You already have an active booking or pending request for this vehicle on this date.');
+      return;
+    }
+
     setSubmitting(true);
     setError('');
     try {
@@ -278,7 +294,8 @@ export default function BookingsScreen() {
       loadData();
     } catch (err: any) {
       const msg = err.response?.data?.message || 'Failed to submit booking. Please try again.';
-      showPrompt('error', 'Booking Request Failed', msg);
+      const isConflict = err.response?.status === 409;
+      showPrompt(isConflict ? 'warning' : 'error', isConflict ? 'Booking Already Exists' : 'Booking Request Failed', msg);
     } finally {
       setSubmitting(false);
     }
@@ -362,7 +379,9 @@ export default function BookingsScreen() {
       showPrompt('success', 'Request Rescheduled', 'Your booking request has been updated successfully.');
       loadData();
     } catch (err: any) {
-      showPrompt('error', 'Update Failed', err.response?.data?.message || 'Failed to update booking.');
+      const msg = err.response?.data?.message || 'Failed to update booking.';
+      const isConflict = err.response?.status === 409;
+      showPrompt(isConflict ? 'warning' : 'error', isConflict ? 'Reschedule Conflict' : 'Update Failed', msg);
     } finally {
       setEditing(false);
     }

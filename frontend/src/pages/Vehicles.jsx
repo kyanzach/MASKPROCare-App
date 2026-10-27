@@ -71,6 +71,7 @@ export default function Vehicles() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [uploading, setUploading] = useState(null); // vehicle id being uploaded
+  const [viewingPhoto, setViewingPhoto] = useState(null); // { url, title, plate }
   const [modalPhoto, setModalPhoto] = useState(null); // file selected in modal
   const [modalPhotoPreview, setModalPhotoPreview] = useState(null);
   const fileInputRef = useRef(null);
@@ -260,9 +261,9 @@ export default function Vehicles() {
             const isUploadingThis = uploading === v.id;
             return (
               <div className="vehicle-card" key={v.id} style={{ position: 'relative' }}>
-                {/* Photo area — clickable to upload */}
+                {/* Photo area — clickable to expand photo or upload */}
                 <div
-                  onClick={() => !isUploadingThis && handleCardPhotoUpload(v.id)}
+                  onClick={() => !isUploadingThis && (photoUrl ? setViewingPhoto({ url: photoUrl, title: `${v.make} ${v.model}`, plate: v.plate_no || 'No Plate Number' }) : handleCardPhotoUpload(v.id))}
                   style={{
                     height: '160px',
                     background: photoUrl ? `url(${photoUrl}) center/cover no-repeat` : 'linear-gradient(135deg, #f1f5f9, #e2e8f0)',
@@ -270,6 +271,7 @@ export default function Vehicles() {
                     borderRadius: '16px 16px 0 0', position: 'relative', cursor: 'pointer',
                     transition: 'opacity 0.2s',
                   }}
+                  title={photoUrl ? 'Click to view full photo' : 'Click to add photo'}
                 >
                   {isUploadingThis && (
                     <div style={{
@@ -290,13 +292,31 @@ export default function Vehicles() {
                     </>
                   )}
                   {photoUrl && !isUploadingThis && (
-                    <div style={{
-                      position: 'absolute', bottom: '8px', right: '8px',
-                      background: 'rgba(0,0,0,0.5)', borderRadius: '50%',
-                      width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      <i className="fas fa-camera" style={{ fontSize: '11px', color: 'white' }}></i>
-                    </div>
+                    <>
+                      <div style={{
+                        position: 'absolute', bottom: '8px', left: '8px',
+                        background: 'rgba(15,23,42,0.7)', borderRadius: '20px',
+                        padding: '3px 8px', display: 'flex', alignItems: 'center', gap: '4px',
+                        color: '#ffffff', fontSize: '11px', fontWeight: 600,
+                      }}>
+                        <i className="fas fa-search-plus" style={{ fontSize: '10px' }}></i> View
+                      </div>
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCardPhotoUpload(v.id);
+                        }}
+                        title="Change photo"
+                        style={{
+                          position: 'absolute', bottom: '8px', right: '8px',
+                          background: '#3b82f6', borderRadius: '50%',
+                          width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.2)', cursor: 'pointer',
+                        }}
+                      >
+                        <i className="fas fa-camera" style={{ fontSize: '11px', color: 'white' }}></i>
+                      </div>
+                    </>
                   )}
                 </div>
 
@@ -498,6 +518,29 @@ export default function Vehicles() {
               <button className="btn-danger" onClick={() => handleDelete(deleteConfirm.id)}>
                 <i className="fas fa-trash"></i> Delete
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Full Vehicle Photo Lightbox Modal */}
+      {viewingPhoto && (
+        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && setViewingPhoto(null)}>
+          <div className="modal-content" style={{ maxWidth: '720px', padding: 0, overflow: 'hidden', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <div className="modal-header" style={{ background: '#1e293b', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ color: '#ffffff', fontSize: '16px', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <i className="fas fa-car" style={{ color: '#38bdf8' }}></i> {viewingPhoto.title}
+                </h3>
+                <span style={{ color: '#94a3b8', fontSize: '12px' }}>{viewingPhoto.plate}</span>
+              </div>
+              <button className="modal-close" onClick={() => setViewingPhoto(null)} style={{ color: '#ffffff', fontSize: '24px', background: 'none', border: 'none', cursor: 'pointer' }}>×</button>
+            </div>
+            <div className="modal-body" style={{ padding: 0, background: '#050811', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '360px', maxHeight: '75vh' }}>
+              <img src={viewingPhoto.url} alt={viewingPhoto.title} style={{ maxWidth: '100%', maxHeight: '75vh', objectFit: 'contain' }} />
+            </div>
+            <div className="modal-footer" style={{ background: '#1e293b', borderTop: '1px solid rgba(255,255,255,0.08)', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '12px', color: '#94a3b8' }}><i className="fas fa-camera"></i> Vehicle Photo</span>
+              <button className="btn-outline" onClick={() => setViewingPhoto(null)} style={{ color: '#ffffff', borderColor: '#475569' }}>Close</button>
             </div>
           </div>
         </div>

@@ -176,6 +176,12 @@ export default function VehiclesScreen() {
     message: '',
   });
 
+  const [viewingPhoto, setViewingPhoto] = useState<{
+    url: string;
+    title: string;
+    plate: string;
+  } | null>(null);
+
   const showPrompt = (type: AlertType, title: string, message: string) => {
     setPromptModal({ visible: true, type, title, message });
   };
@@ -385,25 +391,55 @@ export default function VehiclesScreen() {
               return (
                 <View key={v.id} style={styles.vehicleCard}>
                   {/* Photo area */}
-                  <TouchableOpacity
-                    style={styles.photoContainer}
-                    onPress={() => handleCardPhotoUpload(v.id)}
-                    disabled={uploadingId === v.id}
-                  >
+                  <View style={styles.photoContainer}>
                     {uploadingId === v.id ? (
                       <View style={styles.photoOverlay}>
                         <ActivityIndicator size="small" color="#ffffff" />
                         <Text style={styles.uploadText}>Uploading...</Text>
                       </View>
                     ) : photoUrl ? (
-                      <Image source={{ uri: photoUrl }} style={styles.photo} resizeMode="cover" />
+                      <>
+                        <TouchableOpacity
+                          style={styles.photoTouchArea}
+                          activeOpacity={0.9}
+                          onPress={() =>
+                            setViewingPhoto({
+                              url: photoUrl,
+                              title: `${v.make} ${v.model}`,
+                              plate: v.plate_no || 'No Plate Number',
+                            })
+                          }
+                        >
+                          <Image source={{ uri: photoUrl }} style={styles.photo} resizeMode="cover" />
+                          <View style={styles.photoExpandBadge}>
+                            <FontAwesome name="search-plus" size={11} color="#ffffff" />
+                            <Text style={styles.photoExpandText}>Tap to view</Text>
+                          </View>
+                        </TouchableOpacity>
+
+                        {/* Camera change button */}
+                        <TouchableOpacity
+                          style={styles.photoChangeBtn}
+                          activeOpacity={0.8}
+                          onPress={() => handleCardPhotoUpload(v.id)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <FontAwesome name="camera" size={12} color="#ffffff" />
+                        </TouchableOpacity>
+                      </>
                     ) : (
-                      <View style={styles.photoPlaceholder}>
-                        <FontAwesome name="car" size={32} color="#cbd5e1" />
-                        <Text style={styles.photoPlaceholderText}>Tap to add photo</Text>
-                      </View>
+                      <TouchableOpacity
+                        style={styles.photoTouchArea}
+                        activeOpacity={0.8}
+                        onPress={() => handleCardPhotoUpload(v.id)}
+                      >
+                        <View style={styles.photoPlaceholder}>
+                          <FontAwesome name="car" size={32} color="#cbd5e1" />
+                          <Text style={styles.photoPlaceholderText}>Tap to add photo</Text>
+                        </View>
+                      </TouchableOpacity>
                     )}
-                  </TouchableOpacity>
+                  </View>
 
                   {/* Body Info */}
                   <View style={styles.cardBody}>
@@ -616,14 +652,59 @@ export default function VehiclesScreen() {
         isLoading={deleting}
       />
 
-      {/* ALERT PROMPT MODAL */}
-      <AlertPromptModal
-        visible={promptModal.visible}
-        type={promptModal.type}
-        title={promptModal.title}
-        message={promptModal.message}
-        onConfirm={() => setPromptModal((prev) => ({ ...prev, visible: false }))}
-      />
+      {/* FULL VEHICLE PHOTO LIGHTBOX MODAL */}
+      <Modal
+        visible={!!viewingPhoto}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setViewingPhoto(null)}
+      >
+        <View style={styles.lightboxBackdrop}>
+          <View style={styles.lightboxCard}>
+            {/* Header */}
+            <View style={styles.lightboxHeader}>
+              <View style={styles.lightboxTitleWrap}>
+                <FontAwesome name="car" size={16} color="#6366f1" style={{ marginRight: 8 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.lightboxTitle} numberOfLines={1}>
+                    {viewingPhoto?.title}
+                  </Text>
+                  <Text style={styles.lightboxSubtitle}>{viewingPhoto?.plate}</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={styles.lightboxCloseBtn}
+                onPress={() => setViewingPhoto(null)}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <FontAwesome name="times" size={18} color="#ffffff" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Photo Body */}
+            <View style={styles.lightboxImageWrap}>
+              {viewingPhoto?.url && (
+                <Image
+                  source={{ uri: viewingPhoto.url }}
+                  style={styles.lightboxImage}
+                  resizeMode="contain"
+                />
+              )}
+            </View>
+
+            {/* Footer */}
+            <View style={styles.lightboxFooter}>
+              <TouchableOpacity
+                style={styles.lightboxCloseBarBtn}
+                onPress={() => setViewingPhoto(null)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.lightboxCloseBarText}>Close Full View</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -909,5 +990,124 @@ const styles = StyleSheet.create({
   },
   actionBtnIcon: {
     marginRight: 6,
+  },
+  photoTouchArea: {
+    width: '100%',
+    height: '100%',
+  },
+  photoExpandBadge: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    gap: 4,
+  },
+  photoExpandText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  photoChangeBtn: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    backgroundColor: '#4f46e5',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  lightboxBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  lightboxCard: {
+    width: '100%',
+    maxHeight: '90%',
+    backgroundColor: '#0f172a',
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  lightboxHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    backgroundColor: '#1e293b',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  lightboxTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 12,
+  },
+  lightboxTitle: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  lightboxSubtitle: {
+    color: '#94a3b8',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  lightboxCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lightboxImageWrap: {
+    width: '100%',
+    height: 320,
+    backgroundColor: '#050811',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lightboxImage: {
+    width: '100%',
+    height: '100%',
+  },
+  lightboxFooter: {
+    padding: 14,
+    backgroundColor: '#1e293b',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  lightboxCloseBarBtn: {
+    backgroundColor: '#334155',
+    borderRadius: 10,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lightboxCloseBarText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
