@@ -39,6 +39,7 @@ description: Critical guardrails for MaskPro Care App (customer-facing vehicle m
 16. **NEVER send SMS/OTP to any number except these approved test numbers:** `09992216923`, `09173333589`, `09852779777` — other numbers in the DB are REAL customers and sending OTP could alarm them
 17. **NEVER invent new UI/UX designs for the mobile app.** You must strictly observe, replicate, and preserve the original web app design, layout, spacing, colors, and UX pixel-for-pixel when building native screens. Do not skip details and do not assume; match the original web app exactly.
 18. **Always automatically restart Expo when necessary.** If a change requires clearing the Metro bundler cache (e.g. native module installs, bizarre caching errors), use terminal commands to restart the development server process yourself. Do not ask the user to do it.
+19. **Every mobile app audit and pre-submission review MUST strictly follow the `mobile-audit` skill (`skills/mobile-audit/SKILL.md`).** You must systematically evaluate all 6 pillars (OS Permission Hardening, Apple App Store Review Guidelines, Google Play Policies, OWASP MASVS Security, Store Asset Formats, and Expo/RN Engine Diagnostics) before approving any binary build or claiming submission readiness.
 
 ## Schema Gotchas
 - `bookings.booking_id` is PK (NOT `id`), FK is `customer_vehicle_id` (NOT `vehicle_id`)

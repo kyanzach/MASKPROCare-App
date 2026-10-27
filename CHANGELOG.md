@@ -1,5 +1,12 @@
 # Changelog
 
+## [v1.13.2] — 2026-10-27
+### Added
+- **Mobile Store Audit & Vulnerability Compliance Skill (`skills/mobile-audit/SKILL.md`)**:
+  - Implemented 6-pillar automated audit protocol (OS Permission Hardening, Apple App Store Guidelines, Google Play Policies, OWASP MASVS Security, Store Asset Formats, Expo/RN Diagnostics).
+  - Deployed globally in `~/.gemini/config/skills/mobile-audit/` and locally across `care.maskpro.ph`, `gaq.maskpro.ph`, and `getsales.maskpro.ph`.
+  - Added Rule 19 to `.agents/rules/maskprocare-app.md`, requiring all future mobile app audits and pre-submission checks to systematically execute and adhere to the `mobile-audit` skill.
+
 ## [v1.13.1] — 2026-10-21
 ### Security & Compliance
 - **OS-Level Permissions Hardening (`mobile/app.json`)**:

@@ -305,6 +305,11 @@ ssh root@167.71.217.49 'certbot --nginx -d care.maskpro.ph'
 - `config.php` updated: production host → `care.maskpro.ph`, local → `care.maskpro.ph/`
 - Agent rules rewritten for Express architecture + shared droplet boundaries
 
+### 2026-10-27: Mobile Store Audit Skill & Compliance Rule
+- **Standardized `mobile-audit` skill** created in `.agents/skills/mobile-audit/SKILL.md` (and globally in `~/.gemini/config/skills/mobile-audit/SKILL.md`)
+- **Shared across all MaskPro apps:** Applied to `care.maskpro.ph`, `gaq.maskpro.ph`, and `getsales.maskpro.ph`
+- **Rule 19 added to agent rules:** Every mobile app audit and pre-submission review must systematically check the 6 pillars (OS Permissions, Apple App Store Guidelines, Google Play Policies, OWASP MASVS Security, Store Asset Formats, Expo/RN Diagnostics) before approving builds or claiming submission readiness.
+
 ### 2026-03-10: Booking Flow & Vehicle Photos
 - `booking_requests` uses `customer_vehicle_id` (not `vehicle_id`) and `time_added` (not `created_at`)
 - `bookings` table has no `status` column — derived from notes pattern
