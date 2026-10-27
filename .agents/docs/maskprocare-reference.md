@@ -268,7 +268,23 @@ ssh root@167.71.217.49 'certbot --nginx -d care.maskpro.ph'
 - **SSL is active** — certbot Let's Encrypt cert configured in Nginx
 - **`.env` is present** on server with all production creds including `BOOMERANGME_API_KEY`
 - **Phase 4 status corrected** from "Ready — first deploy pending" → ✅ Complete
-- **deploy.sh does NOT upload CHANGELOG.md** — only `package.json` and `server/`. Must manually scp CHANGELOG after deploy
+### 2026-10-28: Mobile Push Notifications & Unify Floating Smart Toast Alert Stack
+- **Expo Notifications Integration (`expo-notifications`):**
+  - Integrated `expo-notifications@~0.32.17` for both Android and iOS devices/emulators.
+  - In Expo SDK 54, `shouldShowAlert` is deprecated; handlers must use `shouldShowBanner: true` and `shouldShowList: true` along with `shouldPlaySound: true` and `shouldSetBadge: true`.
+  - Android notification channel `care-alerts` must be created with `importance: AndroidImportance.MAX` and `lockscreenVisibility: AndroidNotificationVisibility.PUBLIC` to ensure notifications pop up as heads-up alerts on unlocked screens and appear on the lockscreen.
+  - Background listener `addNotificationResponseReceivedListener` routes directly to `/(tabs)/bookings` on tap.
+- **Client Header Notification Bell:**
+  - `TopHeader.tsx` polls `/api/notifications/list` every 20 seconds, updating the red unread count badge on the bell icon and triggering native OS push notifications via `syncAndAlertNewNotifications()` for newly arrived items.
+  - Clicking the bell opens `NotificationModal.tsx` displaying the complete notification drawer with date proposal actions.
+- **Unify Mother App Floating Smart Toast Stack (`includes/care_booking_requests_alert.php`):**
+  - Uses Unify's `#alertToastStack` container (matching the inventory reorder forecast toast style) to float in the upper right.
+  - Automatically queries `notification_api.php?action=care_alerts` on a 25-second poll loop.
+  - Surfaces active booking requests and declined alternative date offers (with customer reason) for sales agents, accounting, and managers so no customer interaction is neglected.
+- **Unify Schema Gotchas:**
+  - In Unify's `branches` table, the name column is `branch_name` (not `name`).
+  - In Unify's `users` table, active user status is `is_active` (not `status`).
+
 ### 2026-10-20: Mobile Native App Parity & Admin Impersonation
 - **Dashboard Load Error on Cold Boot:** In Expo Router, `initialRouteName: '(tabs)'` can cause `(tabs)/index.tsx` to mount before `AuthContext` resolves credentials. Gated initial dashboard requests behind `if (user)` to prevent unauthenticated 401 calls and warning banners.
 - **Admin Login & Impersonation on Mobile:** Replicated web `AdminLogin.jsx` and `AdminPanel.jsx` in `mobile/app/admin-login.tsx` and `mobile/app/admin.tsx`. Admins authenticate using Unify username/password against `POST /api/admin/login` (zero SMS credits).
