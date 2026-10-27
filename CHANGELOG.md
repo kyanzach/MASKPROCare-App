@@ -1,5 +1,20 @@
 # Changelog
 
+## [v1.13.5] — 2026-10-27
+### Changed & Fixed
+- **Mobile UX Modal Alert Architecture (`mobile/components/ui/AlertPromptModal.tsx`)**:
+  - Eliminated top inline error banners (`AlertBanner`) that caused form layout shifts and buried critical failure messages off-screen.
+  - Implemented `AlertPromptModal` with dark backdrop, centered dialog card, semantic circular status badges (error, warning, success, info), bold titles, and 48pt touch targets adhering to Apple HIG & Material 3.
+  - Integrated `asOverlay` prop and `statusBarTranslucent` support ensuring modal alert prompts render seamlessly on top of nested modal forms on both Android and iOS without native window hierarchy conflicts.
+- **Mobile UX Skill Integration (`skills/mobile-ux/SKILL.md`)**:
+  - Researched and established `mobile-ux` best practices skill across workspace `.agents/skills/mobile-ux/` and globally at `~/.gemini/config/skills/mobile-ux/`.
+  - Added Rule 20 to `.agents/rules/maskprocare-app.md` mandating modal prompt dialogs for critical errors, thumb-zone hierarchy, and human-friendly error parsing.
+  - Rolled out `AlertPromptModal` across all mobile screens (`bookings.tsx`, `vehicles.tsx`, `profile.tsx`, `community.tsx`, `shop.tsx`, `login.tsx`).
+- **Vehicle Photo Upload & Booking Backend Fatal Error Resolution**:
+  - **Booking Creation Error 500 (`ER_NO_DEFAULT_FOR_FIELD`)**: Added mapped `service_code` and `service_name` in `server/routes/bookings.js` and modified column `booking_request_services.service_code` to allow `DEFAULT NULL` on production DB `unify_maskpro`.
+  - **Vehicle Photo Upload Error 500 (`Unknown column 'photo'`)**: Added missing `photo varchar(255) DEFAULT NULL` column to `unify_maskpro.vehicles`.
+  - Sanitized photo upload error handlers in `vehicles.tsx` and `profile.tsx` to prevent raw `AxiosError` exceptions from leaking into developer LogBox banners.
+
 ## [v1.13.4] — 2026-10-27
 ### Changed & Improved
 - **Booking Calendar Full-Color Accessibility Badges (`mobile/components/ui/CalendarPicker.tsx`, `frontend/src/pages/Bookings.jsx`)**:

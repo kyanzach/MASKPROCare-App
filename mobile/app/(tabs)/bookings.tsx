@@ -19,6 +19,7 @@ import EmptyState from '@/components/ui/EmptyState';
 import AlertBanner from '@/components/ui/AlertBanner';
 import StatusBadge from '@/components/ui/StatusBadge';
 import ConfirmModal from '@/components/ui/ConfirmModal';
+import AlertPromptModal, { AlertType } from '@/components/ui/AlertPromptModal';
 import CalendarPicker from '@/components/ui/CalendarPicker';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -171,14 +172,21 @@ export default function BookingsScreen() {
     }
   }, [params.openBooking, loading]);
 
-  const triggerAlert = (type: 'success' | 'error', msg: string) => {
-    if (type === 'success') {
-      setSuccess(msg);
-      setError('');
-    } else {
-      setError(msg);
-      setSuccess('');
-    }
+  // Prompt modal state
+  const [promptModal, setPromptModal] = useState<{
+    visible: boolean;
+    type: AlertType;
+    title: string;
+    message: string;
+  }>({
+    visible: false,
+    type: 'error',
+    title: '',
+    message: '',
+  });
+
+  const showPrompt = (type: AlertType, title: string, message: string) => {
+    setPromptModal({ visible: true, type, title, message });
   };
 
   // Unified list: merges requests + bookings, sorted date desc
@@ -249,19 +257,28 @@ export default function BookingsScreen() {
   };
 
   const handleBookingSubmit = async () => {
-    if (!bookingForm.vehicle_id || !bookingForm.service_type || !bookingForm.booking_date) {
-      setError('Please fill in all required fields.');
+    if (!bookingForm.vehicle_id) {
+      showPrompt('warning', 'Vehicle Required', 'Please select a vehicle from your registered vehicles.');
+      return;
+    }
+    if (!bookingForm.service_type) {
+      showPrompt('warning', 'Service Required', 'Please select a service for your booking.');
+      return;
+    }
+    if (!bookingForm.booking_date) {
+      showPrompt('warning', 'Date Required', 'Please pick an available date on the calendar.');
       return;
     }
     setSubmitting(true);
     setError('');
     try {
       await client.post('/bookings/create', { ...bookingForm, booking_time: '08:00' });
-      triggerAlert('success', 'Booking request submitted! Your request is pending approval.');
       setShowBookingModal(false);
+      showPrompt('success', 'Booking Request Submitted!', 'Your request has been received and is pending branch confirmation.');
       loadData();
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to submit booking.');
+      const msg = err.response?.data?.message || 'Failed to submit booking. Please try again.';
+      showPrompt('error', 'Booking Request Failed', msg);
     } finally {
       setSubmitting(false);
     }
@@ -279,7 +296,7 @@ export default function BookingsScreen() {
     if (!cancelTarget) return;
     const reason = cancelReason === 'Others' ? cancelReasonCustom.trim() : cancelReason;
     if (!reason) {
-      setError('Please select or enter a reason.');
+      showPrompt('warning', 'Reason Required', 'Please select or enter a cancellation reason.');
       return;
     }
     setCancelling(true);
@@ -290,11 +307,11 @@ export default function BookingsScreen() {
       } else {
         await client.post('/bookings/cancel', { type: 'booking', booking_id: cancelTarget.id, reason });
       }
-      triggerAlert('success', 'Booking cancelled successfully.');
       setCancelTarget(null);
+      showPrompt('success', 'Booking Cancelled', 'Your booking appointment has been cancelled successfully.');
       loadData();
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to cancel.');
+      showPrompt('error', 'Cancellation Failed', err.response?.data?.message || 'Failed to cancel booking.');
     } finally {
       setCancelling(false);
     }
@@ -330,22 +347,22 @@ export default function BookingsScreen() {
     if (!editTarget) return;
     const reason = editReason === 'Others' ? editReasonCustom.trim() : editReason;
     if (!editDate) {
-      setError('Please select a new date.');
+      showPrompt('warning', 'Date Required', 'Please select a new preferred date.');
       return;
     }
     if (!reason) {
-      setError('Please select or enter a reason.');
+      showPrompt('warning', 'Reason Required', 'Please select or enter a reason for rescheduling.');
       return;
     }
     setEditing(true);
     setError('');
     try {
       await client.post('/bookings/edit-request', { request_id: editTarget.id, new_date: editDate, reason });
-      triggerAlert('success', 'Booking request updated successfully.');
       setEditTarget(null);
+      showPrompt('success', 'Request Rescheduled', 'Your booking request has been updated successfully.');
       loadData();
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to update booking.');
+      showPrompt('error', 'Update Failed', err.response?.data?.message || 'Failed to update booking.');
     } finally {
       setEditing(false);
     }
@@ -387,9 +404,6 @@ export default function BookingsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Alerts */}
-        <AlertBanner message={success} type="success" onDismiss={() => setSuccess('')} autoDismissMs={4000} />
-        <AlertBanner message={error} type="error" onDismiss={() => setError('')} autoDismissMs={5000} />
 
         {/* Booking Cards List */}
         {unifiedList.length > 0 ? (
@@ -473,9 +487,6 @@ export default function BookingsScreen() {
             </View>
 
             <ScrollView contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled">
-              {error ? (
-                <AlertBanner message={error} type="error" onDismiss={() => setError('')} />
-              ) : null}
 
               {/* Vehicle Select */}
               <View style={styles.inputGroup}>
@@ -606,12 +617,7 @@ export default function BookingsScreen() {
                 <TouchableOpacity
                   style={styles.submitButton}
                   onPress={handleBookingSubmit}
-                  disabled={
-                    submitting ||
-                    !bookingForm.vehicle_id ||
-                    !bookingForm.service_type ||
-                    !bookingForm.booking_date
-                  }
+                  disabled={submitting}
                 >
                   {submitting ? (
                     <ActivityIndicator size="small" color="#ffffff" />
@@ -623,6 +629,16 @@ export default function BookingsScreen() {
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
+
+        {/* Modal-level Alert Prompt Overlay */}
+        <AlertPromptModal
+          visible={promptModal.visible}
+          type={promptModal.type}
+          title={promptModal.title}
+          message={promptModal.message}
+          onConfirm={() => setPromptModal((prev) => ({ ...prev, visible: false }))}
+          asOverlay
+        />
       </Modal>
 
       {/* EDIT BOOKING MODAL */}
@@ -640,9 +656,6 @@ export default function BookingsScreen() {
             </View>
 
             <ScrollView contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled">
-              {error ? (
-                <AlertBanner message={error} type="error" onDismiss={() => setError('')} />
-              ) : null}
 
               {editTarget ? (
                 <View style={styles.editCardInfo}>
@@ -719,6 +732,16 @@ export default function BookingsScreen() {
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
+
+        {/* Modal-level Alert Prompt Overlay */}
+        <AlertPromptModal
+          visible={promptModal.visible}
+          type={promptModal.type}
+          title={promptModal.title}
+          message={promptModal.message}
+          onConfirm={() => setPromptModal((prev) => ({ ...prev, visible: false }))}
+          asOverlay
+        />
       </Modal>
 
       {/* CANCEL BOOKING MODAL */}
@@ -736,9 +759,6 @@ export default function BookingsScreen() {
             </View>
 
             <ScrollView contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled">
-              {error ? (
-                <AlertBanner message={error} type="error" onDismiss={() => setError('')} />
-              ) : null}
 
               {cancelTarget ? (
                 <View style={styles.cancelCardInfo}>
@@ -803,7 +823,26 @@ export default function BookingsScreen() {
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
+
+        {/* Modal-level Alert Prompt Overlay */}
+        <AlertPromptModal
+          visible={promptModal.visible}
+          type={promptModal.type}
+          title={promptModal.title}
+          message={promptModal.message}
+          onConfirm={() => setPromptModal((prev) => ({ ...prev, visible: false }))}
+          asOverlay
+        />
       </Modal>
+
+      {/* ALERT PROMPT MODAL */}
+      <AlertPromptModal
+        visible={promptModal.visible}
+        type={promptModal.type}
+        title={promptModal.title}
+        message={promptModal.message}
+        onConfirm={() => setPromptModal((prev) => ({ ...prev, visible: false }))}
+      />
     </View>
   );
 }

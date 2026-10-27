@@ -20,6 +20,7 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import EmptyState from '@/components/ui/EmptyState';
 import AlertBanner from '@/components/ui/AlertBanner';
 import ConfirmModal from '@/components/ui/ConfirmModal';
+import AlertPromptModal, { AlertType } from '@/components/ui/AlertPromptModal';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -163,14 +164,20 @@ export default function VehiclesScreen() {
     loadVehicles();
   }, []);
 
-  const triggerAlert = (type: 'success' | 'error', msg: string) => {
-    if (type === 'success') {
-      setSuccess(msg);
-      setError('');
-    } else {
-      setError(msg);
-      setSuccess('');
-    }
+  const [promptModal, setPromptModal] = useState<{
+    visible: boolean;
+    type: AlertType;
+    title: string;
+    message: string;
+  }>({
+    visible: false,
+    type: 'error',
+    title: '',
+    message: '',
+  });
+
+  const showPrompt = (type: AlertType, title: string, message: string) => {
+    setPromptModal({ visible: true, type, title, message });
   };
 
   const openAdd = () => {
@@ -198,7 +205,7 @@ export default function VehiclesScreen() {
   const handlePickImage = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
-      triggerAlert('error', 'Permission to access media library is required.');
+      showPrompt('warning', 'Permission Required', 'Photo library access is needed to select a vehicle photo.');
       return;
     }
 
@@ -230,16 +237,16 @@ export default function VehiclesScreen() {
       await client.post('/vehicles/upload-photo', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-    } catch (err) {
-      console.error('Photo upload failed:', err);
-      throw new Error('Failed to upload photo');
+    } catch (err: any) {
+      const serverMsg = err.response?.data?.message || 'Unable to upload photo. Please ensure file is valid.';
+      throw new Error(serverMsg);
     }
   };
 
   const handleCardPhotoUpload = async (vehicleId: number) => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
-      triggerAlert('error', 'Permission to access media library is required.');
+      showPrompt('warning', 'Permission Required', 'Photo library access is needed to select a vehicle photo.');
       return;
     }
 
@@ -253,10 +260,10 @@ export default function VehiclesScreen() {
       setUploadingId(vehicleId);
       try {
         await uploadPhoto(vehicleId, result.assets[0].uri);
-        triggerAlert('success', 'Vehicle photo updated successfully!');
+        showPrompt('success', 'Photo Updated', 'Your vehicle photo has been updated successfully!');
         loadVehicles();
       } catch (err: any) {
-        triggerAlert('error', err.message || 'Failed to upload photo.');
+        showPrompt('error', 'Upload Failed', err.message || 'We could not upload your vehicle photo. Please try again.');
       } finally {
         setUploadingId(null);
       }
@@ -265,7 +272,7 @@ export default function VehiclesScreen() {
 
   const handleSubmit = async () => {
     if (!form.make || !form.model) {
-      setError('Make and Model are required.');
+      showPrompt('warning', 'Missing Details', 'Please enter both Vehicle Make and Model.');
       return;
     }
     
@@ -273,7 +280,7 @@ export default function VehiclesScreen() {
     if (form.registration_date) {
       const parts = form.registration_date.split('-');
       if (parts.length !== 3 || parts[0].length !== 4 || parts[1].length !== 2 || parts[2].length !== 2) {
-        setError('Date must be in YYYY-MM-DD format.');
+        showPrompt('warning', 'Invalid Date', 'Registration date must be in YYYY-MM-DD format.');
         return;
       }
     }
@@ -285,11 +292,11 @@ export default function VehiclesScreen() {
       if (editVehicle) {
         await client.post('/vehicles/update', { id: editVehicle.id, ...form });
         vehicleId = editVehicle.id;
-        triggerAlert('success', 'Vehicle updated successfully!');
+        showPrompt('success', 'Vehicle Updated', 'Vehicle details updated successfully!');
       } else {
         const res = await client.post('/vehicles/create', form);
         vehicleId = res.data?.data?.vehicle?.id;
-        triggerAlert('success', 'Vehicle added successfully!');
+        showPrompt('success', 'Vehicle Added', 'New vehicle added to your garage successfully!');
       }
 
       if (modalPhotoUri && vehicleId) {
@@ -299,7 +306,7 @@ export default function VehiclesScreen() {
       setShowModal(false);
       loadVehicles();
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to save vehicle.');
+      showPrompt('error', 'Unable to Save', err.response?.data?.message || 'Failed to save vehicle details. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -310,11 +317,11 @@ export default function VehiclesScreen() {
     setDeleting(true);
     try {
       await client.post('/vehicles/delete', { id: deleteConfirm.id });
-      triggerAlert('success', 'Vehicle deleted successfully!');
+      showPrompt('success', 'Vehicle Deleted', 'The vehicle was removed from your garage.');
       setDeleteConfirm(null);
       loadVehicles();
     } catch (err: any) {
-      triggerAlert('error', err.response?.data?.message || 'Failed to delete vehicle.');
+      showPrompt('error', 'Delete Failed', err.response?.data?.message || 'Failed to delete vehicle.');
       setDeleteConfirm(null);
     } finally {
       setDeleting(false);
@@ -365,9 +372,6 @@ export default function VehiclesScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Alerts */}
-        <AlertBanner message={success} type="success" onDismiss={() => setSuccess('')} autoDismissMs={4000} />
-        <AlertBanner message={error} type="error" onDismiss={() => setError('')} autoDismissMs={5000} />
 
         {/* Vehicle list */}
         {vehicles.length > 0 ? (
@@ -490,9 +494,6 @@ export default function VehiclesScreen() {
             </View>
 
             <ScrollView contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled">
-              {error ? (
-                <AlertBanner message={error} type="error" onDismiss={() => setError('')} />
-              ) : null}
 
               {/* Photo Selector */}
               <TouchableOpacity style={styles.modalPhotoSelector} onPress={handlePickImage}>
@@ -591,6 +592,16 @@ export default function VehiclesScreen() {
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
+
+        {/* Modal-level Alert Prompt Overlay */}
+        <AlertPromptModal
+          visible={promptModal.visible}
+          type={promptModal.type}
+          title={promptModal.title}
+          message={promptModal.message}
+          onConfirm={() => setPromptModal((prev) => ({ ...prev, visible: false }))}
+          asOverlay
+        />
       </Modal>
 
       {/* DELETE CONFIRM MODAL */}
@@ -603,6 +614,15 @@ export default function VehiclesScreen() {
         onConfirm={onDeleteConfirm}
         onCancel={() => setDeleteConfirm(null)}
         isLoading={deleting}
+      />
+
+      {/* ALERT PROMPT MODAL */}
+      <AlertPromptModal
+        visible={promptModal.visible}
+        type={promptModal.type}
+        title={promptModal.title}
+        message={promptModal.message}
+        onConfirm={() => setPromptModal((prev) => ({ ...prev, visible: false }))}
       />
     </View>
   );

@@ -10,20 +10,38 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import AlertBanner from '@/components/ui/AlertBanner';
+import AlertPromptModal, { AlertType } from '@/components/ui/AlertPromptModal';
 
 export default function ShopScreen() {
   const [emailOrPhone, setEmailOrPhone] = useState('');
   const [subscribed, setSubscribed] = useState(false);
-  const [error, setError] = useState('');
+  const [alertModal, setAlertModal] = useState<{
+    visible: boolean;
+    type: AlertType;
+    title: string;
+    message: string;
+  }>({
+    visible: false,
+    type: 'info',
+    title: '',
+    message: '',
+  });
+
+  const showAlert = (type: AlertType, title: string, message: string) => {
+    setAlertModal({ visible: true, type, title, message });
+  };
 
   const handleNotifyMe = () => {
     if (!emailOrPhone.trim()) {
-      setError('Please enter your email or phone number');
+      showAlert('warning', 'Input Required', 'Please enter your mobile number or email address.');
       return;
     }
-    setError('');
     setSubscribed(true);
+    showAlert(
+      'success',
+      "You're on the VIP List!",
+      'We will notify you with your exclusive 20% discount as soon as the MaskPro Shop launches.'
+    );
   };
 
   const CATEGORIES = [
@@ -99,7 +117,6 @@ export default function ShopScreen() {
           Be among the first 100 shoppers to receive an exclusive 20% discount on your first order.
         </Text>
 
-        {error ? <AlertBanner message={error} type="error" onDismiss={() => setError('')} /> : null}
         {subscribed ? (
           <View style={styles.subscribedBanner}>
             <FontAwesome name="check-circle" size={16} color="#16a34a" style={{ marginRight: 8 }} />
@@ -121,6 +138,15 @@ export default function ShopScreen() {
           </View>
         )}
       </View>
+
+      {/* Modern Modal Alert Prompt */}
+      <AlertPromptModal
+        visible={alertModal.visible}
+        type={alertModal.type}
+        title={alertModal.title}
+        message={alertModal.message}
+        onConfirm={() => setAlertModal(prev => ({ ...prev, visible: false }))}
+      />
     </ScrollView>
   );
 }

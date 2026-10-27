@@ -20,7 +20,7 @@ import { useAuth } from '@/context/AuthContext';
 import client from '@/api/client';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import EmptyState from '@/components/ui/EmptyState';
-import AlertBanner from '@/components/ui/AlertBanner';
+import AlertPromptModal, { AlertType } from '@/components/ui/AlertPromptModal';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import PDF417Barcode from '@/components/ui/PDF417Barcode';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -122,46 +122,26 @@ export default function ProfileScreen() {
   const [loyaltyLoaded, setLoyaltyLoaded] = useState(false);
   const [selectedCard, setSelectedCard] = useState<LoyaltyCard | null>(null);
 
-  // Alerts
-  const [success, setSuccess] = useState('');
-  const [error, setError] = useState('');
+  // Modal Alert Prompt (Modern Mobile UX)
+  const [alertModal, setAlertModal] = useState<{
+    visible: boolean;
+    type: AlertType;
+    title: string;
+    message: string;
+  }>({
+    visible: false,
+    type: 'info',
+    title: '',
+    message: '',
+  });
+
+  const showAlert = (type: AlertType, title: string, message: string) => {
+    setAlertModal({ visible: true, type, title, message });
+  };
 
   // Account Deletion state (Apple Guideline 5.1.1(v))
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
-
-  const handleDeleteAccount = async () => {
-    setDeletingAccount(true);
-    try {
-      await client.post('/profile/delete-account');
-      setShowDeleteModal(false);
-      await logout();
-    } catch (err: any) {
-      console.error('Failed to delete account:', err);
-      setError(err.response?.data?.message || 'Failed to delete account. Please try again.');
-      setShowDeleteModal(false);
-    } finally {
-      setDeletingAccount(false);
-    }
-  };
-
-  const openLegalUrl = async (url: string) => {
-    try {
-      await WebBrowser.openBrowserAsync(url);
-    } catch {
-      Linking.openURL(url).catch(() => {});
-    }
-  };
-
-  const triggerAlert = (type: 'success' | 'error', msg: string) => {
-    if (type === 'success') {
-      setSuccess(msg);
-      setError('');
-    } else {
-      setError(msg);
-      setSuccess('');
-    }
-  };
 
   const loadProfile = async () => {
     try {
@@ -232,20 +212,41 @@ export default function ProfileScreen() {
     }
   }, [activeTab, loyaltyLoaded]);
 
+  const handleDeleteAccount = async () => {
+    setDeletingAccount(true);
+    try {
+      await client.post('/profile/delete-account');
+      setShowDeleteModal(false);
+      await logout();
+    } catch (err: any) {
+      setShowDeleteModal(false);
+      showAlert('error', 'Action Failed', err.response?.data?.message || 'Failed to delete account. Please try again.');
+    } finally {
+      setDeletingAccount(false);
+    }
+  };
+
+  const openLegalUrl = async (url: string) => {
+    try {
+      await WebBrowser.openBrowserAsync(url);
+    } catch {
+      Linking.openURL(url).catch(() => {});
+    }
+  };
+
   const handleSaveProfile = async () => {
-    if (!form.full_name) {
-      setError('Full Name is required.');
+    if (!form.full_name.trim()) {
+      showAlert('warning', 'Full Name Required', 'Please enter your full name before saving.');
       return;
     }
     setSavingProfile(true);
-    setError('');
     try {
       await client.put('/profile/update', form);
-      triggerAlert('success', 'Profile updated successfully!');
+      showAlert('success', 'Profile Updated', 'Your profile details have been saved successfully.');
       setEditing(false);
       loadProfile();
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to update profile.');
+      showAlert('error', 'Update Failed', err.response?.data?.message || 'Failed to update profile. Please try again.');
     } finally {
       setSavingProfile(false);
     }
@@ -254,7 +255,7 @@ export default function ProfileScreen() {
   const handlePhotoUpload = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
-      triggerAlert('error', 'Permission to access media library is required.');
+      showAlert('warning', 'Permission Required', 'Permission to access media library is required to upload a profile photo.');
       return;
     }
 
@@ -266,7 +267,6 @@ export default function ProfileScreen() {
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
       setProfilePhotoUploading(true);
-      setError('');
       try {
         const uri = result.assets[0].uri;
         const formData = new FormData();
@@ -284,11 +284,11 @@ export default function ProfileScreen() {
         });
 
         if (res.data?.success) {
-          triggerAlert('success', 'Profile photo updated!');
+          showAlert('success', 'Photo Updated', 'Your profile photo has been updated successfully.');
           loadProfile();
         }
       } catch (err: any) {
-        setError(err.response?.data?.message || 'Failed to upload photo.');
+        showAlert('error', 'Upload Failed', err.response?.data?.message || 'Failed to upload photo. Please check your connection and try again.');
       } finally {
         setProfilePhotoUploading(false);
       }
@@ -297,13 +297,12 @@ export default function ProfileScreen() {
 
   const handlePhotoRemove = async () => {
     setProfilePhotoUploading(true);
-    setError('');
     try {
       await client.delete('/profile/photo');
-      triggerAlert('success', 'Profile photo removed.');
+      showAlert('success', 'Photo Removed', 'Your profile photo has been removed.');
       loadProfile();
-    } catch (err) {
-      setError('Failed to remove photo.');
+    } catch (err: any) {
+      showAlert('error', 'Removal Failed', err.response?.data?.message || 'Failed to remove photo.');
     } finally {
       setProfilePhotoUploading(false);
     }
@@ -423,9 +422,6 @@ export default function ProfileScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Success/Error Alerts */}
-        <AlertBanner message={success} type="success" onDismiss={() => setSuccess('')} autoDismissMs={3000} />
-        <AlertBanner message={error} type="error" onDismiss={() => setError('')} autoDismissMs={4000} />
 
         {activeTab === 'profile' ? (
           /* ================= PROFILE TAB ================= */
@@ -853,6 +849,15 @@ export default function ProfileScreen() {
         onConfirm={handleDeleteAccount}
         onCancel={() => setShowDeleteModal(false)}
         isLoading={deletingAccount}
+      />
+
+      {/* Modern Modal Alert Prompt */}
+      <AlertPromptModal
+        visible={alertModal.visible}
+        type={alertModal.type}
+        title={alertModal.title}
+        message={alertModal.message}
+        onConfirm={() => setAlertModal(prev => ({ ...prev, visible: false }))}
       />
     </View>
   );

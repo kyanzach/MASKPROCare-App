@@ -17,7 +17,7 @@ import client from '@/api/client';
 import { useAuth } from '@/context/AuthContext';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import EmptyState from '@/components/ui/EmptyState';
-import AlertBanner from '@/components/ui/AlertBanner';
+import AlertPromptModal, { AlertType } from '@/components/ui/AlertPromptModal';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 
 interface Post {
@@ -68,9 +68,22 @@ export default function CommunityScreen() {
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [isResolving, setIsResolving] = useState(false);
 
-  // Alerts
-  const [success, setSuccess] = useState('');
-  const [error, setError] = useState('');
+  // Modal Alert Prompt (Modern Mobile UX)
+  const [alertModal, setAlertModal] = useState<{
+    visible: boolean;
+    type: AlertType;
+    title: string;
+    message: string;
+  }>({
+    visible: false,
+    type: 'info',
+    title: '',
+    message: '',
+  });
+
+  const showAlert = (type: AlertType, title: string, message: string) => {
+    setAlertModal({ visible: true, type, title, message });
+  };
 
   const fetchPosts = async () => {
     try {
@@ -79,7 +92,7 @@ export default function CommunityScreen() {
         setPosts(res.data?.data?.posts || []);
       }
     } catch (err) {
-      console.error('Failed to fetch posts:', err);
+      // Background load error
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -95,24 +108,13 @@ export default function CommunityScreen() {
     fetchPosts();
   }, []);
 
-  const triggerAlert = (type: 'success' | 'error', msg: string) => {
-    if (type === 'success') {
-      setSuccess(msg);
-      setError('');
-    } else {
-      setError(msg);
-      setSuccess('');
-    }
-  };
-
   const handleCreatePost = async () => {
     if (!title.trim() || !body.trim()) {
-      setError('Please provide both title and details.');
+      showAlert('warning', 'Missing Details', 'Please provide both a title and details for your post.');
       return;
     }
 
     setIsSubmitting(true);
-    setError('');
     try {
       const res = await client.post('/community/posts', {
         type: postType,
@@ -121,18 +123,22 @@ export default function CommunityScreen() {
       });
 
       if (res.data?.success) {
-        const successMsg =
-          postType === 'sos'
-            ? 'Your MASKPRO S.O.S. request was submitted instantly!'
-            : 'Your post has been submitted.';
-        triggerAlert('success', successMsg);
         setTitle('');
         setBody('');
         setIsPosting(false);
         fetchPosts();
+        showAlert(
+          'success',
+          postType === 'sos' ? 'S.O.S. Sent!' : 'Post Published',
+          postType === 'sos'
+            ? 'Your MASKPRO S.O.S. request was submitted. Nearby drivers and admins have been notified.'
+            : 'Your post has been published to the Care Community.'
+        );
+      } else {
+        showAlert('error', 'Post Submission Failed', res.data?.message || 'Failed to submit post. Please try again.');
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to submit post.');
+      showAlert('error', 'Submission Failed', err.response?.data?.message || 'Failed to submit post. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -148,7 +154,7 @@ export default function CommunityScreen() {
         setComments(res.data?.data?.comments || []);
       }
     } catch (err) {
-      console.error('Failed to fetch comments:', err);
+      // background fetch error
     } finally {
       setCommentsLoading(false);
     }
@@ -182,7 +188,7 @@ export default function CommunityScreen() {
         }
       }
     } catch (err: any) {
-      console.error('Failed to add comment:', err);
+      showAlert('error', 'Comment Failed', err.response?.data?.message || 'Unable to post your comment. Please try again.');
     } finally {
       setIsSubmittingComment(false);
     }
@@ -198,10 +204,10 @@ export default function CommunityScreen() {
         setPosts((prev) =>
           prev.map((p) => (p.id === selectedPost.id ? { ...p, status: 'resolved' } : p))
         );
-        triggerAlert('success', 'Post marked as resolved!');
+        showAlert('success', 'Resolved', 'Post has been marked as resolved!');
       }
     } catch (err: any) {
-      triggerAlert('error', err.response?.data?.message || 'Failed to resolve post.');
+      showAlert('error', 'Action Failed', err.response?.data?.message || 'Failed to resolve post.');
     } finally {
       setIsResolving(false);
     }
@@ -311,12 +317,6 @@ export default function CommunityScreen() {
             <Text style={styles.communitySubtitle}>
               Connect with fellow drivers, ask maintenance questions, and request emergency roadside help.
             </Text>
-            {success ? (
-              <AlertBanner message={success} type="success" onDismiss={() => setSuccess('')} autoDismissMs={3000} />
-            ) : null}
-            {error ? (
-              <AlertBanner message={error} type="error" onDismiss={() => setError('')} autoDismissMs={4000} />
-            ) : null}
           </View>
         }
         ListEmptyComponent={
@@ -394,8 +394,6 @@ export default function CommunityScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {error ? <AlertBanner message={error} type="error" onDismiss={() => setError('')} /> : null}
-
                 <Text style={styles.label}>Title</Text>
                 <TextInput
                   style={styles.input}
@@ -449,6 +447,16 @@ export default function CommunityScreen() {
             }
           />
         </KeyboardAvoidingView>
+
+        {/* Modal-level Alert Prompt Overlay */}
+        <AlertPromptModal
+          visible={alertModal.visible}
+          type={alertModal.type}
+          title={alertModal.title}
+          message={alertModal.message}
+          onConfirm={() => setAlertModal((prev) => ({ ...prev, visible: false }))}
+          asOverlay
+        />
       </Modal>
 
       {/* ─── POST DETAIL & COMMENTS MODAL ─────────────────────────── */}
@@ -596,7 +604,26 @@ export default function CommunityScreen() {
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
+
+        {/* Modal-level Alert Prompt Overlay */}
+        <AlertPromptModal
+          visible={alertModal.visible}
+          type={alertModal.type}
+          title={alertModal.title}
+          message={alertModal.message}
+          onConfirm={() => setAlertModal((prev) => ({ ...prev, visible: false }))}
+          asOverlay
+        />
       </Modal>
+
+      {/* Modern Modal Alert Prompt */}
+      <AlertPromptModal
+        visible={alertModal.visible}
+        type={alertModal.type}
+        title={alertModal.title}
+        message={alertModal.message}
+        onConfirm={() => setAlertModal(prev => ({ ...prev, visible: false }))}
+      />
     </View>
   );
 }

@@ -18,6 +18,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import client from '@/api/client';
+import AlertPromptModal, { AlertType } from '@/components/ui/AlertPromptModal';
 import AlertBanner from '@/components/ui/AlertBanner';
 
 const RESEND_COOLDOWN_SECONDS = 30;
@@ -30,10 +31,26 @@ export default function LoginScreen() {
   const [formattedMobile, setFormattedMobile] = useState('');
   const [otp, setOtp] = useState<string[]>(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [devOtp, setDevOtp] = useState('');
   const [resendTimer, setResendTimer] = useState(0);
+
+  // Modal Alert Prompt (Modern Mobile UX)
+  const [alertModal, setAlertModal] = useState<{
+    visible: boolean;
+    type: AlertType;
+    title: string;
+    message: string;
+  }>({
+    visible: false,
+    type: 'error',
+    title: '',
+    message: '',
+  });
+
+  const showAlert = (type: AlertType, title: string, message: string) => {
+    setAlertModal({ visible: true, type, title, message });
+  };
 
   const otpRefs = useRef<(TextInput | null)[]>([]);
   const timerRef = useRef<any>(null);
@@ -76,13 +93,12 @@ export default function LoginScreen() {
   };
 
   const handleMobileSubmit = async () => {
-    setError('');
     setSuccess('');
 
     const cleaned = mobile.replace(/[^0-9]/g, '');
     const mobilePattern = /^(0)?9\d{9}$/;
     if (!mobilePattern.test(cleaned)) {
-      setError('Please enter a valid Philippine mobile number (e.g., 09XX XXX XXXX)');
+      showAlert('warning', 'Invalid Mobile Number', 'Please enter a valid Philippine mobile number (e.g., 09XX XXX XXXX)');
       return;
     }
 
@@ -102,11 +118,11 @@ export default function LoginScreen() {
           otpRefs.current[0]?.focus();
         }, 300);
       } else {
-        setError(res.data?.message || 'Failed to send OTP. Please try again.');
+        showAlert('error', 'Sign In Failed', res.data?.message || 'Failed to send OTP. Please try again.');
       }
     } catch (err: any) {
-      const msg = err.response?.data?.message || 'Failed to send OTP. Please try again.';
-      setError(msg);
+      const msg = err.response?.data?.message || 'Failed to send OTP. Please check your network and try again.';
+      showAlert('error', 'Unable to Send Code', msg);
     } finally {
       setLoading(false);
     }
@@ -125,13 +141,11 @@ export default function LoginScreen() {
       setOtp(newOtp);
       const nextIndex = Math.min(digits.length, 5);
       otpRefs.current[nextIndex]?.focus();
-      if (error) setError('');
       return;
     }
 
     newOtp[index] = cleaned.slice(-1);
     setOtp(newOtp);
-    if (error) setError('');
 
     // Auto-focus next box
     if (cleaned && index < 5) {
@@ -147,7 +161,6 @@ export default function LoginScreen() {
 
   const handleResend = async () => {
     if (resendTimer > 0 || loading) return;
-    setError('');
     setSuccess('');
     setLoading(true);
     try {
@@ -160,10 +173,10 @@ export default function LoginScreen() {
         setSuccess('New OTP sent successfully');
         startResendTimer();
       } else {
-        setError(res.data?.message || 'Failed to resend OTP.');
+        showAlert('error', 'Resend Failed', res.data?.message || 'Failed to resend OTP.');
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to resend OTP.');
+      showAlert('error', 'Resend Failed', err.response?.data?.message || 'Failed to resend OTP.');
     } finally {
       setLoading(false);
     }
@@ -172,12 +185,11 @@ export default function LoginScreen() {
   const handleVerifyOtp = async () => {
     const otpCode = otp.join('');
     if (otpCode.length < 6) {
-      setError('Please enter the 6-digit OTP');
+      showAlert('warning', 'Incomplete Code', 'Please enter the 6-digit OTP code.');
       return;
     }
 
     setLoading(true);
-    setError('');
     const cleaned = mobile.replace(/[^0-9]/g, '');
 
     try {
@@ -189,11 +201,11 @@ export default function LoginScreen() {
       if (response.data?.success) {
         await login(response.data.data.token, response.data.data.customer);
       } else {
-        setError(response.data?.message || 'Invalid or expired OTP');
+        showAlert('error', 'Verification Failed', response.data?.message || 'Invalid or expired OTP');
       }
     } catch (err: any) {
       const msg = err.response?.data?.message || 'Verification failed. Please try again.';
-      setError(msg);
+      showAlert('error', 'Verification Failed', msg);
     } finally {
       setLoading(false);
     }
@@ -245,9 +257,6 @@ export default function LoginScreen() {
           </Text>
 
           {/* Alerts */}
-          {error ? (
-            <AlertBanner message={error} type="error" onDismiss={() => setError('')} />
-          ) : null}
           {success ? (
             <AlertBanner message={success} type="success" onDismiss={() => setSuccess('')} autoDismissMs={4000} />
           ) : null}
@@ -272,7 +281,6 @@ export default function LoginScreen() {
                 value={mobile}
                 onChangeText={(val) => {
                   setMobile(val.replace(/[^0-9]/g, '').slice(0, 11));
-                  if (error) setError('');
                 }}
                 maxLength={11}
               />
@@ -362,7 +370,6 @@ export default function LoginScreen() {
                   onPress={() => {
                     setStep('mobile');
                     setOtp(['', '', '', '', '', '']);
-                    setError('');
                     setSuccess('');
                     setDevOtp('');
                   }}
@@ -430,6 +437,15 @@ export default function LoginScreen() {
           </Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Modern Modal Alert Prompt */}
+      <AlertPromptModal
+        visible={alertModal.visible}
+        type={alertModal.type}
+        title={alertModal.title}
+        message={alertModal.message}
+        onConfirm={() => setAlertModal(prev => ({ ...prev, visible: false }))}
+      />
     </KeyboardAvoidingView>
   );
 }

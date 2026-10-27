@@ -327,7 +327,18 @@ router.post('/create', async (req, res) => {
     const requestId = result.insertId;
 
     // Insert service
-    await pool.query("INSERT INTO booking_request_services (request_id, service_name) VALUES (?, ?)", [requestId, String(service_type).trim()]);
+    const serviceCodeMap = {
+      'Nano Ceramic Coating': 'MNCC',
+      'Nano Ceramic Tint': 'MCT',
+      'Paint Protection Film (PPF)': 'PPF',
+      'PPF': 'PPF',
+      'Auto Paint & Repair': 'MAP',
+    };
+    const sCode = serviceCodeMap[service_type] || String(service_type || '').slice(0, 10);
+    await pool.query(
+      "INSERT INTO booking_request_services (request_id, service_code, service_name) VALUES (?, ?, ?)",
+      [requestId, sCode, String(service_type).trim()]
+    );
 
     return res.status(201).json({
       success: true,
