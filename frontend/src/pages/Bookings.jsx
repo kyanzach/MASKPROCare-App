@@ -71,6 +71,10 @@ export default function Bookings() {
   const [editAvailableDates, setEditAvailableDates] = useState([]);
   const [editLoadingDates, setEditLoadingDates] = useState(false);
 
+  // Offer response
+  const [respondingOffer, setRespondingOffer] = useState(false);
+  const [declineModal, setDeclineModal] = useState({ open: false, item: null, reason: '' });
+
   const location = useLocation();
   useEffect(() => { loadData(); }, []);
   useEffect(() => {
@@ -96,6 +100,44 @@ export default function Bookings() {
     finally { setLoading(false); }
   };
 
+  const handleAcceptOffer = async (requestId) => {
+    setRespondingOffer(true);
+    try {
+      await api.post('/bookings/respond-offer', { request_id: requestId, action: 'accept' });
+      await loadData();
+      setSuccess('Proposed date accepted! Request is now pending confirmation.');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to accept alternative date.');
+    } finally {
+      setRespondingOffer(false);
+    }
+  };
+
+  const handleDeclineSubmit = async (e) => {
+    e.preventDefault();
+    if (!declineModal.item) return;
+    const reason = declineModal.reason.trim();
+    if (!reason) {
+      setError('Please provide a reason for declining.');
+      return;
+    }
+    setRespondingOffer(true);
+    try {
+      await api.post('/bookings/respond-offer', {
+        request_id: declineModal.item.id,
+        action: 'decline',
+        reply_reason: reason,
+      });
+      setDeclineModal({ open: false, item: null, reason: '' });
+      await loadData();
+      setSuccess('Offer response sent to branch.');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to decline alternative date.');
+    } finally {
+      setRespondingOffer(false);
+    }
+  };
+
   // Unified list: merge bookings + requests, sorted by date (newest first)
   const unifiedList = useMemo(() => {
     const all = [
@@ -105,6 +147,7 @@ export default function Bookings() {
         type: 'booking',
         status: b.status,
         service: getServiceLabel(b.latest_service),
+        vehicle_photo: b.vehicle_photo,
         dateObj: new Date(b.booking_date),
         dateStr: new Date(b.booking_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
         timeStr: new Date(b.booking_date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
@@ -115,6 +158,12 @@ export default function Bookings() {
         type: 'request',
         status: r.status, // pending, cancelled, rejected
         service: getServiceLabel(r.latest_service || r.service_names),
+        rejection_reason: r.rejection_reason,
+        cancellation_reason: r.cancellation_reason,
+        offered_date: r.offered_date,
+        offer_status: r.offer_status,
+        customer_offer_reply: r.customer_offer_reply,
+        vehicle_photo: r.vehicle_photo,
         dateObj: new Date(r.booking_date),
         dateStr: new Date(r.booking_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
         timeStr: new Date(r.booking_date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
@@ -376,20 +425,65 @@ export default function Bookings() {
               <tbody>
                 {unifiedList.map((item, idx) => {
                   const sc = STATUS_CONFIG[item.status] || STATUS_CONFIG.scheduled;
+                  const isRejected = item.status === 'rejected';
+                  const hasOffer = !!item.offered_date;
                   return (
                     <tr key={`${item.type}-${item.id}`} style={{
                       borderBottom: idx < unifiedList.length - 1 ? '1px solid rgba(0,0,0,0.06)' : 'none',
-                      opacity: item.status === 'cancelled' || item.status === 'rejected' ? 0.65 : 1,
+                      opacity: item.status === 'cancelled' ? 0.65 : 1,
+                      backgroundColor: isRejected ? '#fff8f8' : 'transparent',
                     }}>
                       <td style={{ padding: '14px 16px' }}>
-                        <div style={{ fontWeight: 600, color: '#1f2937' }}>{item.dateStr}</div>
+                        <div style={{ fontWeight: 600, color: isRejected ? '#991b1b' : '#1f2937' }}>{item.dateStr}</div>
                         <div style={{ fontSize: '12px', color: '#64748b' }}>{item.timeStr}</div>
                       </td>
                       <td style={{ padding: '14px 16px' }}>
                         <div style={{ fontWeight: 600, color: '#1f2937' }}>{item.make} {item.model}</div>
                         <div style={{ fontSize: '12px', color: '#64748b' }}>{item.plate_no || ''}</div>
                       </td>
-                      <td style={{ padding: '14px 16px', color: '#374151' }}>{item.service}</td>
+                      <td style={{ padding: '14px 16px', color: '#374151' }}>
+                        <div style={{ fontWeight: 500 }}>{item.service}</div>
+                        {isRejected && item.rejection_reason && (
+                          <div style={{ fontSize: '12px', color: '#b91c1c', background: '#fee2e2', padding: '4px 8px', borderRadius: '6px', marginTop: '4px' }}>
+                            <strong>Reason:</strong> {item.rejection_reason}
+                          </div>
+                        )}
+                        {hasOffer && (
+                          <div style={{ fontSize: '12px', color: '#1e40af', background: '#eff6ff', padding: '6px 8px', borderRadius: '6px', marginTop: '6px', border: '1px solid #bfdbfe' }}>
+                            <div>
+                              <strong>Proposed Date:</strong> {new Date(item.offered_date).toLocaleDateString()} {new Date(item.offered_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                            {(!item.offer_status || item.offer_status === 'offered') && (
+                              <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAcceptOffer(item.id)}
+                                  disabled={respondingOffer}
+                                  style={{ padding: '3px 8px', borderRadius: '4px', border: 'none', background: '#16a34a', color: '#fff', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                                >
+                                  Accept Date
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeclineModal({ open: true, item, reason: '' })}
+                                  disabled={respondingOffer}
+                                  style={{ padding: '3px 8px', borderRadius: '4px', border: '1px solid #ef4444', background: '#fff', color: '#dc2626', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                                >
+                                  Decline Offer
+                                </button>
+                              </div>
+                            )}
+                            {item.offer_status === 'accepted' && (
+                              <div style={{ color: '#15803d', fontWeight: 600, marginTop: '2px' }}>✓ Accepted proposed date</div>
+                            )}
+                            {item.offer_status === 'declined' && (
+                              <div style={{ color: '#b91c1c', fontWeight: 600, marginTop: '2px' }}>
+                                ✕ Declined: {item.customer_offer_reply}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </td>
                       <td style={{ padding: '14px 16px', textAlign: 'center' }}>
                         <span style={{
                           display: 'inline-flex', alignItems: 'center', gap: '4px',
@@ -635,6 +729,75 @@ export default function Bookings() {
                 {editing ? <span className="spinner"></span> : <><i className="fas fa-check"></i> Update Booking</>}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== DECLINE PROPOSED DATE MODAL ===== */}
+      {declineModal.open && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px'
+        }}>
+          <div style={{
+            backgroundColor: '#fff', borderRadius: '16px', padding: '24px',
+            maxWidth: '420px', width: '100%', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div style={{ width: '40px', height: '40px', borderRadius: '20px', backgroundColor: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626' }}>
+                <i className="fas fa-times" style={{ fontSize: '18px' }}></i>
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: '#111827' }}>Decline Proposed Date</h3>
+                <small style={{ color: '#64748b' }}>
+                  Offered: {declineModal.item?.offered_date ? new Date(declineModal.item.offered_date).toLocaleDateString() : ''}
+                </small>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '13px', color: '#475569', marginBottom: '14px', lineHeight: 1.5 }}>
+              Please state why this date does not work for you so our branch agent can adjust and offer a suitable schedule:
+            </p>
+
+            <form onSubmit={handleDeclineSubmit}>
+              <textarea
+                rows={3}
+                required
+                value={declineModal.reason}
+                onChange={(e) => setDeclineModal({ ...declineModal, reason: e.target.value })}
+                placeholder="e.g. Schedule conflict, prefer weekends instead..."
+                style={{
+                  width: '100%', borderRadius: '10px', border: '1px solid #d1d5db',
+                  padding: '10px 12px', fontSize: '13px', resize: 'vertical',
+                  marginBottom: '16px', boxSizing: 'border-box'
+                }}
+              />
+
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={() => setDeclineModal({ open: false, item: null, reason: '' })}
+                  disabled={respondingOffer}
+                  style={{
+                    padding: '8px 16px', borderRadius: '8px', border: '1px solid #d1d5db',
+                    background: '#fff', color: '#4b5563', cursor: 'pointer', fontWeight: 600
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={respondingOffer || !declineModal.reason.trim()}
+                  style={{
+                    padding: '8px 18px', borderRadius: '8px', border: 'none',
+                    background: '#dc2626', color: '#fff', cursor: 'pointer', fontWeight: 600
+                  }}
+                >
+                  {respondingOffer ? 'Sending...' : 'Send Reason'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

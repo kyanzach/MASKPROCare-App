@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   TextInput,
   Modal,
+  Image,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -71,6 +72,12 @@ interface BookingItem {
   timeStr: string;
   dateObj: Date;
   service: string;
+  rejection_reason?: string;
+  cancellation_reason?: string;
+  offered_date?: string;
+  offer_status?: 'offered' | 'accepted' | 'declined';
+  customer_offer_reply?: string;
+  vehicle_photo?: string;
 }
 
 interface Vehicle {
@@ -191,6 +198,75 @@ export default function BookingsScreen() {
     setPromptModal({ visible: true, type, title, message });
   };
 
+  // Responding to date offers
+  const [respondingOffer, setRespondingOffer] = useState(false);
+  const [declineModal, setDeclineModal] = useState<{
+    visible: boolean;
+    item: BookingItem | null;
+    reason: string;
+  }>({
+    visible: false,
+    item: null,
+    reason: '',
+  });
+
+  // Photo Lightbox modal
+  const [viewingPhoto, setViewingPhoto] = useState<{
+    url: string;
+    title: string;
+    plate: string;
+  } | null>(null);
+
+  const getPhotoUrl = (photoPath?: string) => {
+    if (!photoPath) return null;
+    if (photoPath.startsWith('http')) return photoPath;
+    const baseURL = client.defaults.baseURL || 'https://care.maskpro.ph/api';
+    const rootBase = baseURL.replace(/\/api\/?$/, '');
+    return `${rootBase}/${photoPath}`;
+  };
+
+  const handleAcceptOffer = async (requestId: number) => {
+    setRespondingOffer(true);
+    try {
+      await client.post('/bookings/respond-offer', {
+        request_id: requestId,
+        action: 'accept',
+      });
+      showPrompt('success', 'Date Accepted', 'You accepted the proposed alternative schedule. It is now pending branch confirmation.');
+      loadData();
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'Failed to accept date.';
+      showPrompt('error', 'Action Failed', msg);
+    } finally {
+      setRespondingOffer(false);
+    }
+  };
+
+  const handleDeclineSubmit = async () => {
+    if (!declineModal.item) return;
+    const reason = declineModal.reason.trim();
+    if (!reason) {
+      showPrompt('warning', 'Reason Required', 'Please provide a brief reason why this date does not work so our agent can offer a better alternative.');
+      return;
+    }
+    setRespondingOffer(true);
+    try {
+      await client.post('/bookings/respond-offer', {
+        request_id: declineModal.item.id,
+        action: 'decline',
+        reply_reason: reason,
+      });
+      setDeclineModal({ visible: false, item: null, reason: '' });
+      showPrompt('info', 'Offer Declined', 'Your response has been sent to the branch agent.');
+      loadData();
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'Failed to submit response.';
+      showPrompt('error', 'Action Failed', msg);
+    } finally {
+      setRespondingOffer(false);
+    }
+  };
+
   // Unified list: merges requests + bookings, sorted date desc
   const unifiedList = useMemo<BookingItem[]>(() => {
     const list: BookingItem[] = [
@@ -202,6 +278,7 @@ export default function BookingsScreen() {
           type: 'booking' as const,
           status: b.status,
           service: getServiceLabel(b.latest_service),
+          vehicle_photo: b.vehicle_photo,
           dateObj: d,
           dateStr: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
           timeStr: d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
@@ -215,6 +292,12 @@ export default function BookingsScreen() {
           type: 'request' as const,
           status: r.status,
           service: getServiceLabel(r.latest_service || r.service_names),
+          rejection_reason: r.rejection_reason,
+          cancellation_reason: r.cancellation_reason,
+          offered_date: r.offered_date,
+          offer_status: r.offer_status,
+          customer_offer_reply: r.customer_offer_reply,
+          vehicle_photo: r.vehicle_photo,
           dateObj: d,
           dateStr: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
           timeStr: d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
@@ -428,29 +511,158 @@ export default function BookingsScreen() {
         {unifiedList.length > 0 ? (
           <View style={styles.listContainer}>
             {unifiedList.map((item) => {
-              const opacity = item.status === 'cancelled' || item.status === 'rejected' ? 0.65 : 1;
+              const isRejected = item.status === 'rejected';
+              const isCancelled = item.status === 'cancelled';
+              const opacity = isCancelled ? 0.65 : 1;
+              const photoUrl = getPhotoUrl(item.vehicle_photo);
+              const hasOffer = !!item.offered_date;
+              const isOfferPending = isRejected && hasOffer && (!item.offer_status || item.offer_status === 'offered');
+              const isOfferAccepted = item.offer_status === 'accepted';
+              const isOfferDeclined = item.offer_status === 'declined';
+
               return (
-                <View key={`${item.type}-${item.id}`} style={[styles.bookingCard, { opacity }]}>
+                <View
+                  key={`${item.type}-${item.id}`}
+                  style={[
+                    styles.bookingCard,
+                    { opacity },
+                    isRejected && styles.rejectedBookingCard,
+                  ]}
+                >
                   <View style={styles.cardHeader}>
                     <View>
-                      <Text style={styles.cardDate}>{item.dateStr}</Text>
+                      <Text style={[styles.cardDate, isRejected && styles.rejectedDateText]}>
+                        {item.dateStr}
+                      </Text>
                       <Text style={styles.cardTime}>{item.timeStr}</Text>
                     </View>
                     <StatusBadge status={item.status} />
                   </View>
 
                   <View style={styles.cardBody}>
-                    <View style={styles.detailRow}>
-                      <FontAwesome name="car" size={12} color="#6b7280" style={styles.detailIcon} />
-                      <Text style={styles.detailText}>
-                        {item.make} {item.model} {item.plate_no ? `— ${item.plate_no}` : ''}
-                      </Text>
-                    </View>
-                    <View style={styles.detailRow}>
-                      <FontAwesome name="wrench" size={12} color="#6b7280" style={styles.detailIcon} />
-                      <Text style={styles.detailText}>{item.service}</Text>
+                    <View style={styles.vehicleDetailsRow}>
+                      {photoUrl ? (
+                        <TouchableOpacity
+                          onPress={() =>
+                            setViewingPhoto({
+                              url: photoUrl,
+                              title: `${item.make} ${item.model}`,
+                              plate: item.plate_no,
+                            })
+                          }
+                          activeOpacity={0.8}
+                          style={styles.cardVehicleThumbWrap}
+                        >
+                          <Image source={{ uri: photoUrl }} style={styles.cardVehicleThumb} resizeMode="cover" />
+                          <View style={styles.cardThumbIcon}>
+                            <FontAwesome name="search-plus" size={9} color="#ffffff" />
+                          </View>
+                        </TouchableOpacity>
+                      ) : null}
+
+                      <View style={{ flex: 1 }}>
+                        <View style={styles.detailRow}>
+                          <FontAwesome name="car" size={12} color="#6b7280" style={styles.detailIcon} />
+                          <Text style={styles.detailText}>
+                            {item.make} {item.model} {item.plate_no ? `— ${item.plate_no}` : ''}
+                          </Text>
+                        </View>
+                        <View style={styles.detailRow}>
+                          <FontAwesome name="wrench" size={12} color="#6b7280" style={styles.detailIcon} />
+                          <Text style={styles.detailText}>{item.service}</Text>
+                        </View>
+                      </View>
                     </View>
                   </View>
+
+                  {/* Rejection Reason Box */}
+                  {isRejected && item.rejection_reason ? (
+                    <View style={styles.cardRejectionBox}>
+                      <View style={styles.cardRejectionHeader}>
+                        <FontAwesome name="exclamation-circle" size={12} color="#dc2626" style={{ marginRight: 5 }} />
+                        <Text style={styles.cardRejectionTitle}>Branch Reason for Rejection:</Text>
+                      </View>
+                      <Text style={styles.cardRejectionText}>{item.rejection_reason}</Text>
+                    </View>
+                  ) : null}
+
+                  {/* Alternative Date Offered Box */}
+                  {hasOffer ? (
+                    <View style={styles.cardOfferContainer}>
+                      <View style={styles.cardOfferHeader}>
+                        <View style={styles.cardOfferIcon}>
+                          <FontAwesome name="calendar-check-o" size={13} color="#4338ca" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.cardOfferLabel}>Alternative Date Offered:</Text>
+                          <Text style={styles.cardOfferDate}>
+                            {new Date(item.offered_date!).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })}{' '}
+                            at{' '}
+                            {new Date(item.offered_date!).toLocaleTimeString('en-US', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              hour12: true,
+                            })}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {isOfferPending ? (
+                        <View style={styles.cardOfferActions}>
+                          <TouchableOpacity
+                            style={styles.cardAcceptBtn}
+                            onPress={() => handleAcceptOffer(item.id)}
+                            disabled={respondingOffer}
+                            activeOpacity={0.8}
+                          >
+                            {respondingOffer ? (
+                              <ActivityIndicator size="small" color="#ffffff" />
+                            ) : (
+                              <>
+                                <FontAwesome name="check" size={12} color="#ffffff" style={{ marginRight: 6 }} />
+                                <Text style={styles.cardAcceptBtnText}>Accept Date</Text>
+                              </>
+                            )}
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={styles.cardDeclineBtn}
+                            onPress={() => setDeclineModal({ visible: true, item, reason: '' })}
+                            disabled={respondingOffer}
+                            activeOpacity={0.8}
+                          >
+                            <FontAwesome name="times" size={12} color="#dc2626" style={{ marginRight: 6 }} />
+                            <Text style={styles.cardDeclineBtnText}>Decline Offer</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : isOfferAccepted ? (
+                        <View style={styles.cardOfferAcceptedBanner}>
+                          <FontAwesome name="check-circle" size={13} color="#15803d" style={{ marginRight: 6 }} />
+                          <Text style={styles.cardOfferAcceptedText}>
+                            You accepted this alternative date. Awaiting confirmation.
+                          </Text>
+                        </View>
+                      ) : isOfferDeclined ? (
+                        <View style={styles.cardOfferDeclinedBanner}>
+                          <FontAwesome name="times-circle" size={13} color="#b91c1c" style={{ marginRight: 6 }} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.cardOfferDeclinedText}>
+                              You declined this date offer.
+                            </Text>
+                            {item.customer_offer_reply ? (
+                              <Text style={styles.cardOfferReplyText}>
+                                Reason: "{item.customer_offer_reply}"
+                              </Text>
+                            ) : null}
+                          </View>
+                        </View>
+                      ) : null}
+                    </View>
+                  ) : null}
 
                   {/* Actions footer */}
                   {canEdit(item) || canCancel(item) ? (
@@ -854,6 +1066,123 @@ export default function BookingsScreen() {
         />
       </Modal>
 
+      {/* DECLINE OFFER MODAL PROMPT */}
+      <Modal
+        visible={declineModal.visible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setDeclineModal({ visible: false, item: null, reason: '' })}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.promptModalOverlay}
+        >
+          <View style={styles.promptModalCard}>
+            <View style={styles.promptModalHeader}>
+              <View style={styles.promptIconCircle}>
+                <FontAwesome name="times" size={18} color="#dc2626" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.promptModalTitle}>Decline Proposed Date</Text>
+                <Text style={styles.promptModalSubtitle}>
+                  {declineModal.item?.offered_date
+                    ? new Date(declineModal.item.offered_date).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })
+                    : ''}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={styles.promptInstructionText}>
+              Please state why this proposed date does not work for you so our branch agent can adjust and offer a suitable schedule:
+            </Text>
+
+            <TextInput
+              style={styles.promptInput}
+              placeholder="e.g. Schedule conflict, prefer weekends instead..."
+              placeholderTextColor="#9ca3af"
+              multiline
+              numberOfLines={3}
+              value={declineModal.reason}
+              onChangeText={(text) => setDeclineModal((prev) => ({ ...prev, reason: text }))}
+            />
+
+            <View style={styles.promptModalActions}>
+              <TouchableOpacity
+                style={styles.promptCancelBtn}
+                onPress={() => setDeclineModal({ visible: false, item: null, reason: '' })}
+                disabled={respondingOffer}
+              >
+                <Text style={styles.promptCancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.promptConfirmBtn}
+                onPress={handleDeclineSubmit}
+                disabled={respondingOffer}
+              >
+                {respondingOffer ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.promptConfirmBtnText}>Submit & Decline</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* PHOTO LIGHTBOX MODAL */}
+      <Modal
+        visible={!!viewingPhoto}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setViewingPhoto(null)}
+      >
+        <View style={styles.lightboxBackdrop}>
+          <View style={styles.lightboxCard}>
+            <View style={styles.lightboxHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.lightboxTitle} numberOfLines={1}>
+                  {viewingPhoto?.title}
+                </Text>
+                <Text style={styles.lightboxSubtitle}>{viewingPhoto?.plate}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.lightboxCloseBtn}
+                onPress={() => setViewingPhoto(null)}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <FontAwesome name="times" size={18} color="#ffffff" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.lightboxImageWrap}>
+              {viewingPhoto?.url && (
+                <Image
+                  source={{ uri: viewingPhoto.url }}
+                  style={styles.lightboxImage}
+                  resizeMode="contain"
+                />
+              )}
+            </View>
+
+            <View style={styles.lightboxFooter}>
+              <TouchableOpacity
+                style={styles.lightboxCloseBarBtn}
+                onPress={() => setViewingPhoto(null)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.lightboxCloseBarText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* ALERT PROMPT MODAL */}
       <AlertPromptModal
         visible={promptModal.visible}
@@ -1196,5 +1525,325 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '700',
+  },
+
+  // ─── Rejection & Offer Card Additions ───
+  rejectedBookingCard: {
+    borderColor: '#ef4444',
+    borderWidth: 1.5,
+    backgroundColor: '#fff8f8',
+  },
+  rejectedDateText: {
+    color: '#991b1b',
+  },
+  vehicleDetailsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  cardVehicleThumbWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: '#e2e8f0',
+  },
+  cardVehicleThumb: {
+    width: '100%',
+    height: '100%',
+  },
+  cardThumbIcon: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 4,
+    padding: 2,
+  },
+  cardRejectionBox: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fca5a5',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 10,
+  },
+  cardRejectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  cardRejectionTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#991b1b',
+  },
+  cardRejectionText: {
+    fontSize: 12,
+    color: '#7f1d1d',
+    lineHeight: 16,
+  },
+  cardOfferContainer: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#bfdbfe',
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 10,
+  },
+  cardOfferHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  cardOfferIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: '#dbeafe',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardOfferLabel: {
+    fontSize: 11,
+    color: '#1e40af',
+    fontWeight: '600',
+  },
+  cardOfferDate: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#1d4ed8',
+    marginTop: 1,
+  },
+  cardOfferActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#dbeafe',
+  },
+  cardAcceptBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#16a34a',
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  cardAcceptBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  cardDeclineBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#fca5a5',
+    backgroundColor: '#ffffff',
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  cardDeclineBtnText: {
+    color: '#dc2626',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  cardOfferAcceptedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0fdf4',
+    padding: 8,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  cardOfferAcceptedText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#15803d',
+    flex: 1,
+  },
+  cardOfferDeclinedBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#fef2f2',
+    padding: 8,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  cardOfferDeclinedText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#991b1b',
+  },
+  cardOfferReplyText: {
+    fontSize: 11,
+    color: '#7f1d1d',
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
+
+  // Prompt Modal (Decline)
+  promptModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  promptModalCard: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  promptModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  promptIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#fee2e2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  promptModalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  promptModalSubtitle: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 2,
+  },
+  promptInstructionText: {
+    fontSize: 13,
+    color: '#374151',
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  promptInput: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 13,
+    color: '#111827',
+    backgroundColor: '#f9fafb',
+    textAlignVertical: 'top',
+    minHeight: 80,
+    marginBottom: 16,
+  },
+  promptModalActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  promptCancelBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+  },
+  promptCancelBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4b5563',
+  },
+  promptConfirmBtn: {
+    flex: 1.4,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#dc2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  promptConfirmBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+
+  // Photo Lightbox
+  lightboxBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  lightboxCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#1e293b',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  lightboxHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#334155',
+  },
+  lightboxTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  lightboxSubtitle: {
+    fontSize: 12,
+    color: '#94a3b8',
+    marginTop: 2,
+  },
+  lightboxCloseBtn: {
+    padding: 6,
+  },
+  lightboxImageWrap: {
+    width: '100%',
+    height: 300,
+    backgroundColor: '#0f172a',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lightboxImage: {
+    width: '100%',
+    height: '100%',
+  },
+  lightboxFooter: {
+    padding: 12,
+    backgroundColor: '#1e293b',
+    alignItems: 'center',
+  },
+  lightboxCloseBarBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 24,
+    backgroundColor: '#334155',
+    borderRadius: 8,
+  },
+  lightboxCloseBarText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ffffff',
   },
 });

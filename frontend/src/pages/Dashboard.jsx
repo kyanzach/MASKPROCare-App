@@ -52,7 +52,10 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [vehicles, setVehicles] = useState([]);
   const [bookings, setBookings] = useState([]);
+  const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [respondingOffer, setRespondingOffer] = useState(false);
+  const [declineModal, setDeclineModal] = useState({ open: false, req: null, reason: '' });
 
   useEffect(() => {
     loadData();
@@ -68,10 +71,47 @@ export default function Dashboard() {
       setStats(statsRes.data.data);
       setVehicles(vehiclesRes.data.data?.vehicles || []);
       setBookings(bookingsRes.data.data?.bookings || []);
+      setRequests(bookingsRes.data.data?.requests || statsRes.data.data?.pending_requests || []);
     } catch (err) {
       console.error('Dashboard load error:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAcceptOffer = async (requestId) => {
+    setRespondingOffer(true);
+    try {
+      await api.post('/bookings/respond-offer', { request_id: requestId, action: 'accept' });
+      await loadData();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to accept alternative date.');
+    } finally {
+      setRespondingOffer(false);
+    }
+  };
+
+  const handleDeclineSubmit = async (e) => {
+    e.preventDefault();
+    if (!declineModal.req) return;
+    const reason = declineModal.reason.trim();
+    if (!reason) {
+      alert('Please enter a reason for declining.');
+      return;
+    }
+    setRespondingOffer(true);
+    try {
+      await api.post('/bookings/respond-offer', {
+        request_id: declineModal.req.request_id,
+        action: 'decline',
+        reply_reason: reason,
+      });
+      setDeclineModal({ open: false, req: null, reason: '' });
+      await loadData();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to decline alternative date.');
+    } finally {
+      setRespondingOffer(false);
     }
   };
 
@@ -90,6 +130,12 @@ export default function Dashboard() {
   const firstName = displayName?.split(' ')[0] || 'there';
   const upcomingBookings = bookings.filter(b => b.status === 'Scheduled' || new Date(b.booking_date) >= new Date());
   const recentBookings = bookings.slice(0, 5);
+  const pendingAppointments = requests.filter(
+    r => r.status === 'pending' || (r.status === 'rejected' && (r.offered_date || r.rejection_reason))
+  );
+  const pendingCount = stats?.stats?.pending_requests ?? requests.filter(
+    r => r.status === 'pending' || (r.status === 'rejected' && r.offer_status === 'offered')
+  ).length;
 
   return (
     <div>
@@ -168,7 +214,7 @@ export default function Dashboard() {
           <div className="stats-card-inner">
             <div>
               <div className="stats-card-label">Pending Requests</div>
-              <div className="stats-card-value">{stats?.stats?.pending_requests ?? 0}</div>
+              <div className="stats-card-value">{pendingCount}</div>
             </div>
             <div className="stats-icon stats-icon-yellow">
               <i className="fas fa-hourglass-half"></i>
@@ -178,6 +224,133 @@ export default function Dashboard() {
             <i className="fas fa-clock"></i>
             <span>Awaiting Approval</span>
           </div>
+        </div>
+      </div>
+
+      {/* ─── Pending Appointments Section (Top of Upcoming) ─── */}
+      <div className="card-modern mb-32">
+        <div className="card-modern-body">
+          <div className="flex-between mb-24">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div className="stats-icon stats-icon-yellow" style={{ width: '40px', height: '40px', borderRadius: '12px', fontSize: '16px' }}>
+                <i className="fas fa-hourglass-half"></i>
+              </div>
+              <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#1f2937', margin: 0 }}>Pending Appointments</h2>
+            </div>
+            <span className="badge" style={{ backgroundColor: pendingAppointments.length > 0 ? '#fef3c7' : '#f1f5f9', color: pendingAppointments.length > 0 ? '#b45309' : '#64748b' }}>
+              {pendingAppointments.length} pending
+            </span>
+          </div>
+
+          {pendingAppointments.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {pendingAppointments.map((req) => {
+                const isRejected = req.status === 'rejected';
+                const hasOffer = !!req.offered_date;
+                const isOfferPending = isRejected && hasOffer && (!req.offer_status || req.offer_status === 'offered');
+                const isOfferAccepted = req.offer_status === 'accepted';
+                const isOfferDeclined = req.offer_status === 'declined';
+
+                return (
+                  <div
+                    key={req.request_id}
+                    style={{
+                      border: isRejected ? '1.5px solid #ef4444' : '1px solid #fde68a',
+                      borderRadius: '14px',
+                      padding: '16px',
+                      backgroundColor: isRejected ? '#fff8f8' : '#fffdf5',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '15px', color: isRejected ? '#991b1b' : '#1f2937' }}>
+                          {new Date(req.booking_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at {new Date(req.booking_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                        <div style={{ fontSize: '13px', color: '#64748b' }}>
+                          {req.make} {req.model} • {req.plate_no} • <strong style={{ color: '#334155' }}>{req.service_names || getServiceLabel(req.latest_service)}</strong>
+                        </div>
+                      </div>
+
+                      <span
+                        className="badge"
+                        style={{
+                          backgroundColor: isRejected ? '#fee2e2' : '#fef3c7',
+                          color: isRejected ? '#b91c1c' : '#b45309',
+                          fontWeight: 700,
+                          fontSize: '12px',
+                        }}
+                      >
+                        <i className={isRejected ? 'fas fa-times-circle' : 'fas fa-hourglass-half'} style={{ marginRight: '4px' }}></i>
+                        {isRejected ? 'Request Declined' : 'Pending Approval'}
+                      </span>
+                    </div>
+
+                    {/* Rejection Reason */}
+                    {isRejected && req.rejection_reason && (
+                      <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', padding: '10px 12px', marginTop: '8px', color: '#7f1d1d', fontSize: '13px' }}>
+                        <strong style={{ color: '#991b1b' }}><i className="fas fa-exclamation-circle"></i> Reason for Rejection:</strong><br />
+                        {req.rejection_reason}
+                      </div>
+                    )}
+
+                    {/* Alternative Date Offered */}
+                    {hasOffer && (
+                      <div style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '12px', marginTop: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                          <span style={{ fontSize: '12px', color: '#1e40af', fontWeight: 700 }}>
+                            <i className="fas fa-calendar-check"></i> Alternative Date Proposed by Agent:
+                          </span>
+                          <span style={{ fontSize: '14px', fontWeight: 800, color: '#1d4ed8' }}>
+                            {new Date(req.offered_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at {new Date(req.offered_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+
+                        {isOfferPending && (
+                          <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-success"
+                              onClick={() => handleAcceptOffer(req.request_id)}
+                              disabled={respondingOffer}
+                              style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '6px 14px', borderRadius: '8px', background: '#16a34a', color: '#fff', border: 'none', cursor: 'pointer' }}
+                            >
+                              <i className="fas fa-check"></i> Accept Date
+                            </button>
+
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-danger"
+                              onClick={() => setDeclineModal({ open: true, req, reason: '' })}
+                              disabled={respondingOffer}
+                              style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '6px 14px', borderRadius: '8px', background: '#fff', border: '1px solid #ef4444', color: '#dc2626', cursor: 'pointer' }}
+                            >
+                              <i className="fas fa-times"></i> Decline Offer
+                            </button>
+                          </div>
+                        )}
+
+                        {isOfferAccepted && (
+                          <div style={{ color: '#15803d', fontSize: '12px', fontWeight: 600, marginTop: '6px' }}>
+                            <i className="fas fa-check-circle"></i> You accepted this date. Waiting for branch confirmation.
+                          </div>
+                        )}
+
+                        {isOfferDeclined && (
+                          <div style={{ color: '#b91c1c', fontSize: '12px', fontWeight: 600, marginTop: '6px' }}>
+                            <i className="fas fa-times-circle"></i> You declined this offer. {req.customer_offer_reply && <span>Reason: "{req.customer_offer_reply}"</span>}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '16px', color: '#94a3b8', fontSize: '13px' }}>
+              <i className="fas fa-check-circle" style={{ color: '#10b981', marginRight: '6px' }}></i> No pending appointments awaiting review.
+            </div>
+          )}
         </div>
       </div>
 
@@ -304,6 +477,75 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Decline Offer Modal */}
+      {declineModal.open && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px'
+        }}>
+          <div style={{
+            backgroundColor: '#fff', borderRadius: '16px', padding: '24px',
+            maxWidth: '420px', width: '100%', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div style={{ width: '40px', height: '40px', borderRadius: '20px', backgroundColor: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626' }}>
+                <i className="fas fa-times" style={{ fontSize: '18px' }}></i>
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: '#111827' }}>Decline Proposed Date</h3>
+                <small style={{ color: '#64748b' }}>
+                  Offered: {declineModal.req?.offered_date ? new Date(declineModal.req.offered_date).toLocaleDateString() : ''}
+                </small>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '13px', color: '#475569', marginBottom: '14px', lineHeight: 1.5 }}>
+              Please state why this date does not work for you so our branch agent can adjust and offer a suitable schedule:
+            </p>
+
+            <form onSubmit={handleDeclineSubmit}>
+              <textarea
+                rows={3}
+                required
+                value={declineModal.reason}
+                onChange={(e) => setDeclineModal({ ...declineModal, reason: e.target.value })}
+                placeholder="e.g. Schedule conflict, prefer weekends instead..."
+                style={{
+                  width: '100%', borderRadius: '10px', border: '1px solid #d1d5db',
+                  padding: '10px 12px', fontSize: '13px', resize: 'vertical',
+                  marginBottom: '16px', boxSizing: 'border-box'
+                }}
+              />
+
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={() => setDeclineModal({ open: false, req: null, reason: '' })}
+                  disabled={respondingOffer}
+                  style={{
+                    padding: '8px 16px', borderRadius: '8px', border: '1px solid #d1d5db',
+                    background: '#fff', color: '#4b5563', cursor: 'pointer', fontWeight: 600
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={respondingOffer}
+                  style={{
+                    padding: '8px 18px', borderRadius: '8px', border: 'none',
+                    background: '#dc2626', color: '#fff', cursor: 'pointer', fontWeight: 700
+                  }}
+                >
+                  {respondingOffer ? 'Submitting...' : 'Submit & Decline'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

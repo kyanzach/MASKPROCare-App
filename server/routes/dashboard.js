@@ -63,7 +63,7 @@ router.get('/stats', async (req, res) => {
     try {
       const [rows] = await pool.query(`
         SELECT b.booking_id, b.booking_date, b.latest_service, b.notes,
-               v.make, v.model, v.plate_no
+               v.make, v.model, v.plate_no, v.photo as vehicle_photo
         FROM bookings b
         LEFT JOIN vehicles v ON b.customer_vehicle_id = v.id
         WHERE b.customer_id = ? AND b.booking_date >= NOW()
@@ -79,7 +79,7 @@ router.get('/stats', async (req, res) => {
     try {
       const [rows] = await pool.query(`
         SELECT b.booking_id, b.booking_date, b.latest_service, b.notes,
-               v.make, v.model, v.plate_no
+               v.make, v.model, v.plate_no, v.photo as vehicle_photo
         FROM bookings b
         LEFT JOIN vehicles v ON b.customer_vehicle_id = v.id
         WHERE b.customer_id = ? AND b.booking_date < NOW()
@@ -90,11 +90,34 @@ router.get('/stats', async (req, res) => {
       recent = rows;
     } catch { /* ignore */ }
 
-    // Pending requests count
+    // Pending requests & offers
+    let pendingRequests = [];
     let pendingCount = 0;
     try {
-      const [rows] = await pool.query("SELECT COUNT(*) as cnt FROM booking_requests WHERE customer_id = ? AND status = 'pending'", [customerId]);
-      pendingCount = rows[0]?.cnt || 0;
+      const [rows] = await pool.query(`
+        SELECT br.request_id, br.booking_date, br.latest_service, br.notes, br.branch_id,
+               br.status, br.cancellation_reason, br.rejection_reason, br.offered_date,
+               br.offer_status, br.customer_offer_reply, br.time_added,
+               v.make, v.model, v.plate_no, v.photo as vehicle_photo,
+               GROUP_CONCAT(brs.service_name SEPARATOR ', ') as service_names
+        FROM booking_requests br
+        LEFT JOIN vehicles v ON br.customer_vehicle_id = v.id
+        LEFT JOIN booking_request_services brs ON br.request_id = brs.request_id
+        WHERE br.customer_id = ? 
+          AND (br.status = 'pending' OR (br.status = 'rejected' AND (br.offered_date IS NOT NULL OR br.time_added >= DATE_SUB(NOW(), INTERVAL 30 DAY))))
+        GROUP BY br.request_id
+        ORDER BY 
+          CASE 
+            WHEN br.status = 'rejected' AND br.offer_status = 'offered' THEN 1
+            WHEN br.status = 'pending' THEN 2
+            ELSE 3
+          END,
+          br.time_added DESC
+        LIMIT 10
+      `, [customerId]);
+      pendingRequests = rows;
+
+      pendingCount = rows.filter(r => r.status === 'pending' || (r.status === 'rejected' && r.offer_status === 'offered')).length;
     } catch { /* ignore */ }
 
     // Completed services count
@@ -115,6 +138,7 @@ router.get('/stats', async (req, res) => {
           completed_services: completedCount
         },
         vehicles,
+        pending_requests: pendingRequests,
         upcoming_bookings: upcoming,
         recent_bookings: recent
       },

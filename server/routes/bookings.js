@@ -156,7 +156,7 @@ router.get('/list', async (req, res) => {
     try {
       const [rows] = await pool.query(`
         SELECT b.booking_id, b.booking_date, b.latest_service, b.notes, b.branch_id,
-               v.make, v.model, v.plate_no, v.color, v.size,
+               v.make, v.model, v.plate_no, v.color, v.size, v.photo as vehicle_photo,
                GROUP_CONCAT(DISTINCT bst.service_name SEPARATOR ', ') as service_names,
                GROUP_CONCAT(DISTINCT bst.status SEPARATOR ', ') as service_statuses
         FROM bookings b
@@ -208,9 +208,10 @@ router.get('/list', async (req, res) => {
     try {
       const [rows] = await pool.query(`
         SELECT br.request_id, br.booking_date, br.latest_service, br.notes, br.branch_id,
-               br.status, br.cancellation_reason, br.rejection_reason, br.edit_history,
+               br.status, br.cancellation_reason, br.rejection_reason, br.offered_date,
+               br.offer_status, br.customer_offer_reply, br.edit_history,
                br.time_added,
-               v.make, v.model, v.plate_no,
+               v.make, v.model, v.plate_no, v.photo as vehicle_photo,
                GROUP_CONCAT(brs.service_name SEPARATOR ', ') as service_names
         FROM booking_requests br
         LEFT JOIN vehicles v ON br.customer_vehicle_id = v.id
@@ -741,6 +742,95 @@ router.post('/edit-request', async (req, res) => {
   } catch (err) {
     console.error('Edit request error:', err);
     return res.status(500).json({ success: false, data: null, message: 'Failed to update request. Please try again.', errors: [] });
+  }
+});
+
+// ─── POST /api/bookings/respond-offer ──────────────────────────────
+router.post('/respond-offer', async (req, res) => {
+  try {
+    const customerId = req.user.customer_id;
+    const { request_id, action, reply_reason } = req.body;
+    const reqId = parseInt(request_id, 10);
+
+    if (!reqId || reqId <= 0) {
+      return res.status(422).json({ success: false, data: null, message: 'Request ID is required', errors: [] });
+    }
+
+    if (!['accept', 'decline'].includes(action)) {
+      return res.status(422).json({ success: false, data: null, message: "Action must be 'accept' or 'decline'", errors: [] });
+    }
+
+    // Verify request ownership
+    const [rows] = await pool.query(
+      "SELECT * FROM booking_requests WHERE request_id = ? AND customer_id = ?",
+      [reqId, customerId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, data: null, message: 'Booking request not found', errors: [] });
+    }
+
+    const request = rows[0];
+
+    if (!request.offered_date) {
+      return res.status(400).json({ success: false, data: null, message: 'No alternative date offered for this request', errors: [] });
+    }
+
+    const now = new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila' });
+
+    if (action === 'accept') {
+      // Customer accepted the proposed date:
+      // Update booking_date to offered_date, return status to 'pending', set offer_status to 'accepted'
+      const noteAppend = `Offer accepted by customer on ${now}: Scheduled on ${request.offered_date}.`;
+      const updatedNotes = request.notes ? `${request.notes}\n${noteAppend}` : noteAppend;
+
+      await pool.query(
+        `UPDATE booking_requests 
+         SET status = 'pending', booking_date = offered_date, offer_status = 'accepted', 
+             customer_offer_reply = ?, notes = ?
+         WHERE request_id = ? AND customer_id = ?`,
+        [reply_reason || 'Accepted proposed alternative date', updatedNotes, reqId, customerId]
+      );
+    } else {
+      // Customer declined:
+      const declineReason = String(reply_reason || 'Customer declined alternative date offer').trim();
+      const noteAppend = `Offer declined by customer on ${now}. Reason: ${declineReason}`;
+      const updatedNotes = request.notes ? `${request.notes}\n${noteAppend}` : noteAppend;
+
+      await pool.query(
+        `UPDATE booking_requests 
+         SET offer_status = 'declined', customer_offer_reply = ?, notes = ?
+         WHERE request_id = ? AND customer_id = ?`,
+        [declineReason, updatedNotes, reqId, customerId]
+      );
+    }
+
+    // Return updated request
+    const [updated] = await pool.query(`
+      SELECT br.*, v.make, v.model, v.plate_no, v.photo as vehicle_photo,
+             GROUP_CONCAT(brs.service_name SEPARATOR ', ') as service_names
+      FROM booking_requests br
+      LEFT JOIN vehicles v ON br.customer_vehicle_id = v.id
+      LEFT JOIN booking_request_services brs ON br.request_id = brs.request_id
+      WHERE br.request_id = ?
+      GROUP BY br.request_id
+    `, [reqId]);
+
+    const updatedRow = updated[0];
+    if (updatedRow?.edit_history) {
+      try { updatedRow.edit_history = JSON.parse(updatedRow.edit_history); } catch { /* keep string */ }
+    }
+    if (updatedRow) updatedRow.type = 'request';
+
+    return res.json({
+      success: true,
+      data: { request: updatedRow },
+      message: action === 'accept' ? 'Proposed date accepted! Request is now pending confirmation.' : 'Offer response submitted successfully.',
+      errors: []
+    });
+  } catch (err) {
+    console.error('Respond offer error:', err);
+    return res.status(500).json({ success: false, data: null, message: 'Failed to process offer response: ' + err.message, errors: [] });
   }
 });
 

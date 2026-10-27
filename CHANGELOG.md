@@ -1,5 +1,18 @@
 # Changelog
 
+## [v1.13.7] — 2026-10-27
+### Added & Enhanced
+- **Pending Appointments Section & Live Widget Count (`mobile/app/(tabs)/index.tsx`, `frontend/src/pages/Dashboard.jsx`, `server/routes/dashboard.js`)**:
+  - Placed a dedicated "Pending Appointments" section directly above "Upcoming Appointments" on both Mobile and Web Dashboards, clearly distinguishing pending requests awaiting approval from confirmed upcoming appointments.
+  - Connected the dashboard "Pending" hourglass stat card to live pending request count (`status = 'pending' OR (status = 'rejected' AND offer_status = 'offered')`).
+- **Booking Rejection Red Marking & Alternative Date Negotiation (`booking_requests.php`, `booking_request_card.php`, `server/routes/bookings.js`, `mobile/app/(tabs)/bookings.tsx`, `mobile/app/(tabs)/index.tsx`, `frontend/src/pages/Bookings.jsx`, `frontend/src/pages/Dashboard.jsx`)**:
+  - Enhanced Unify Agent rejection modal (`booking_requests.php`) with alternative date & time proposal inputs (`offered_date`, `offer_status = 'offered'`).
+  - Added red visual highlighting (`styles.rejectedCardItem` / `#fff8f8` with red border) and rejection reason callout in both Mobile and Web Care Apps.
+  - Provided 1-click "Accept Date" action (moves booking to the proposed date and resets to pending for seamless agent approval) and "Decline Offer" action with a reason prompt dialog (`customer_offer_reply`).
+  - Displayed proposed alternative dates, offer status badges, and customer decline reasons inside Unify booking request cards (`booking_request_card.php`).
+- **Profile Photo Path Resolution (`mobile/app/(tabs)/profile.tsx`)**:
+  - Corrected profile photo resolution in mobile app to properly load avatars from `/api/uploads/photos/`.
+
 ## [v1.13.6] — 2026-10-27
 ### Added, Changed & Fixed
 - **Nginx Vehicle Photo 404 Resolution (`/etc/nginx/sites-available/care`, `deploy.sh`)**:

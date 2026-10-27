@@ -313,7 +313,10 @@ export default function ProfileScreen() {
     if (photoPath.startsWith('http')) return photoPath;
     
     const rootBase = API_BASE.endsWith('/api') ? API_BASE.slice(0, -4) : API_BASE;
-    return `${rootBase}/${photoPath}`;
+    if (photoPath.startsWith('uploads/')) {
+      return `${rootBase}/${photoPath}`;
+    }
+    return `${rootBase}/api/uploads/photos/${photoPath}`;
   };
 
   const formatDate = (dateStr: string | null) => {

@@ -1,11 +1,26 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Dimensions } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  RefreshControl,
+  TouchableOpacity,
+  Dimensions,
+  Image,
+  Modal,
+  TextInput,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import client from '@/api/client';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import EmptyState from '@/components/ui/EmptyState';
 import VehicleIcon, { getVehicleConfig } from '@/components/ui/VehicleIcon';
+import AlertPromptModal, { AlertType } from '@/components/ui/AlertPromptModal';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -32,6 +47,27 @@ interface Booking {
   model: string;
   plate_no: string;
   status: string;
+  vehicle_photo?: string;
+}
+
+interface BookingRequest {
+  request_id: number;
+  booking_date: string;
+  latest_service: string;
+  service_names?: string;
+  notes?: string;
+  branch_id?: number;
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  rejection_reason?: string;
+  cancellation_reason?: string;
+  offered_date?: string;
+  offer_status?: 'offered' | 'accepted' | 'declined';
+  customer_offer_reply?: string;
+  time_added: string;
+  make: string;
+  model: string;
+  plate_no: string;
+  vehicle_photo?: string;
 }
 
 interface Stats {
@@ -46,6 +82,7 @@ interface Vehicle {
   make: string;
   model: string;
   plate_no: string;
+  photo?: string;
 }
 
 export default function DashboardScreen() {
@@ -54,8 +91,53 @@ export default function DashboardScreen() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [requests, setRequests] = useState<BookingRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [respondingOffer, setRespondingOffer] = useState(false);
+
+  // Decline Offer Modal
+  const [declineModal, setDeclineModal] = useState<{
+    visible: boolean;
+    request: BookingRequest | null;
+    reason: string;
+  }>({
+    visible: false,
+    request: null,
+    reason: '',
+  });
+
+  // Prompt Alert Modal
+  const [promptModal, setPromptModal] = useState<{
+    visible: boolean;
+    type: AlertType;
+    title: string;
+    message: string;
+  }>({
+    visible: false,
+    type: 'info',
+    title: '',
+    message: '',
+  });
+
+  // Photo Lightbox Modal
+  const [viewingPhoto, setViewingPhoto] = useState<{
+    url: string;
+    title: string;
+    plate: string;
+  } | null>(null);
+
+  const showPrompt = (type: AlertType, title: string, message: string) => {
+    setPromptModal({ visible: true, type, title, message });
+  };
+
+  const getPhotoUrl = (photoPath?: string) => {
+    if (!photoPath) return null;
+    if (photoPath.startsWith('http')) return photoPath;
+    const baseURL = client.defaults.baseURL || 'https://care.maskpro.ph/api';
+    const rootBase = baseURL.replace(/\/api\/?$/, '');
+    return `${rootBase}/${photoPath}`;
+  };
 
   const loadData = async () => {
     if (!user) return;
@@ -68,6 +150,9 @@ export default function DashboardScreen() {
       setStats(statsRes.data?.data?.stats || null);
       setVehicles(vehiclesRes.data?.data?.vehicles || []);
       setBookings(bookingsRes.data?.data?.bookings || []);
+      const reqList: BookingRequest[] =
+        bookingsRes.data?.data?.requests || statsRes.data?.data?.pending_requests || [];
+      setRequests(reqList);
     } catch (err: any) {
       if (err?.response?.status !== 401) {
         console.error('Dashboard load error:', err);
@@ -91,12 +176,87 @@ export default function DashboardScreen() {
     loadData();
   }, []);
 
+  const handleAcceptOffer = async (requestId: number) => {
+    setRespondingOffer(true);
+    try {
+      await client.post('/bookings/respond-offer', {
+        request_id: requestId,
+        action: 'accept',
+      });
+      showPrompt(
+        'success',
+        'Proposed Date Accepted',
+        'You have accepted the alternative schedule. Your request is now pending branch confirmation.'
+      );
+      loadData();
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'Failed to accept alternative date.';
+      showPrompt('error', 'Action Failed', msg);
+    } finally {
+      setRespondingOffer(false);
+    }
+  };
+
+  const openDeclineModal = (req: BookingRequest) => {
+    setDeclineModal({
+      visible: true,
+      request: req,
+      reason: '',
+    });
+  };
+
+  const handleDeclineSubmit = async () => {
+    if (!declineModal.request) return;
+    const reason = declineModal.reason.trim();
+    if (!reason) {
+      showPrompt('warning', 'Reason Required', 'Please provide a brief reason why this date does not work so our agent can offer a better alternative.');
+      return;
+    }
+
+    setRespondingOffer(true);
+    try {
+      await client.post('/bookings/respond-offer', {
+        request_id: declineModal.request.request_id,
+        action: 'decline',
+        reply_reason: reason,
+      });
+      setDeclineModal({ visible: false, request: null, reason: '' });
+      showPrompt(
+        'info',
+        'Offer Declined',
+        'Your response and reason have been submitted to the branch agent for review.'
+      );
+      loadData();
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'Failed to submit response.';
+      showPrompt('error', 'Action Failed', msg);
+    } finally {
+      setRespondingOffer(false);
+    }
+  };
+
   if (loading) {
     return <LoadingSpinner message="Loading dashboard..." />;
   }
 
   const firstName = user?.full_name?.trim() ? user.full_name.trim().split(' ')[0] : 'there';
-  const upcomingBookings = bookings.filter(b => b.status === 'Scheduled' || new Date(b.booking_date) >= new Date());
+  const upcomingBookings = bookings.filter(
+    (b) => b.status === 'Scheduled' || new Date(b.booking_date) >= new Date()
+  );
+
+  // Pending appointments: recently requested pending approval + rejected requests needing response or attention
+  const pendingAppointments = requests.filter(
+    (r) =>
+      r.status === 'pending' ||
+      (r.status === 'rejected' && (!!r.offered_date || !!r.rejection_reason))
+  );
+
+  // Live count for pending widget
+  const pendingCount =
+    stats?.pending_requests ??
+    requests.filter(
+      (r) => r.status === 'pending' || (r.status === 'rejected' && r.offer_status === 'offered')
+    ).length;
 
   const formatBookingDate = (dateStr: string) => {
     try {
@@ -114,6 +274,181 @@ export default function DashboardScreen() {
     } catch {
       return '';
     }
+  };
+
+  const renderPendingCard = (req: BookingRequest) => {
+    const isRejected = req.status === 'rejected';
+    const photoUrl = getPhotoUrl(req.vehicle_photo);
+    const hasOffer = !!req.offered_date;
+    const isOfferPending =
+      isRejected && hasOffer && (!req.offer_status || req.offer_status === 'offered');
+    const isOfferAccepted = req.offer_status === 'accepted';
+    const isOfferDeclined = req.offer_status === 'declined';
+
+    return (
+      <View
+        key={`req-${req.request_id}`}
+        style={[
+          styles.pendingCardItem,
+          isRejected && styles.rejectedCardItem,
+        ]}
+      >
+        {/* Card Header: Date & Status Badge */}
+        <View style={styles.pendingCardHeader}>
+          <View style={styles.dateTimeContainer}>
+            <Text style={[styles.appointmentDate, isRejected && styles.rejectedDateText]}>
+              {formatBookingDate(req.booking_date)}
+            </Text>
+            <Text style={styles.appointmentTime}>{formatBookingTime(req.booking_date)}</Text>
+          </View>
+          <View
+            style={[
+              styles.pendingStatusBadge,
+              isRejected ? styles.rejectedBadgeBg : styles.pendingBadgeBg,
+            ]}
+          >
+            <FontAwesome
+              name={isRejected ? 'times-circle' : 'hourglass-half'}
+              size={11}
+              color={isRejected ? '#b91c1c' : '#b45309'}
+              style={{ marginRight: 4 }}
+            />
+            <Text
+              style={[
+                styles.pendingStatusText,
+                { color: isRejected ? '#b91c1c' : '#b45309' },
+              ]}
+            >
+              {isRejected ? 'Declined by Branch' : 'Pending Approval'}
+            </Text>
+          </View>
+        </View>
+
+        {/* Vehicle & Service Info */}
+        <View style={styles.appointmentBody}>
+          {photoUrl ? (
+            <TouchableOpacity
+              onPress={() =>
+                setViewingPhoto({
+                  url: photoUrl,
+                  title: `${req.make} ${req.model}`,
+                  plate: req.plate_no,
+                })
+              }
+              activeOpacity={0.8}
+              style={styles.vehicleThumbContainer}
+            >
+              <Image source={{ uri: photoUrl }} style={styles.vehicleThumb} resizeMode="cover" />
+              <View style={styles.thumbExpandIcon}>
+                <FontAwesome name="search-plus" size={10} color="#ffffff" />
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <VehicleIcon make={req.make} model={req.model} size={38} />
+          )}
+
+          <View style={styles.appointmentDetails}>
+            <View style={styles.vehicleTitleRow}>
+              <Text style={styles.vehicleName}>
+                {req.make} {req.model}
+              </Text>
+            </View>
+            <Text style={styles.vehiclePlate}>{req.plate_no}</Text>
+            <Text style={styles.serviceText}>
+              {req.service_names || getServiceLabel(req.latest_service)}
+            </Text>
+          </View>
+        </View>
+
+        {/* If Rejected: Prominent Red Box with Reason */}
+        {isRejected && req.rejection_reason ? (
+          <View style={styles.rejectionReasonBox}>
+            <View style={styles.rejectionReasonHeader}>
+              <FontAwesome name="exclamation-circle" size={13} color="#dc2626" style={{ marginRight: 6 }} />
+              <Text style={styles.rejectionReasonTitle}>Reason for Rejection:</Text>
+            </View>
+            <Text style={styles.rejectionReasonText}>{req.rejection_reason}</Text>
+          </View>
+        ) : null}
+
+        {/* If Alternative Date Offered */}
+        {hasOffer ? (
+          <View style={styles.offerContainer}>
+            <View style={styles.offerHeaderRow}>
+              <View style={styles.offerIconBadge}>
+                <FontAwesome name="calendar-check-o" size={14} color="#4338ca" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.offerLabel}>Alternative Date Offered:</Text>
+                <Text style={styles.offerDateText}>
+                  {formatBookingDate(req.offered_date!)} at {formatBookingTime(req.offered_date!)}
+                </Text>
+              </View>
+            </View>
+
+            {/* Offer Decision Actions / Badges */}
+            {isOfferPending ? (
+              <View style={styles.offerActionsRow}>
+                <TouchableOpacity
+                  style={styles.acceptOfferBtn}
+                  onPress={() => handleAcceptOffer(req.request_id)}
+                  disabled={respondingOffer}
+                  activeOpacity={0.8}
+                >
+                  {respondingOffer ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                  ) : (
+                    <>
+                      <FontAwesome name="check" size={12} color="#ffffff" style={{ marginRight: 6 }} />
+                      <Text style={styles.acceptOfferBtnText}>Accept Date</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.declineOfferBtn}
+                  onPress={() => openDeclineModal(req)}
+                  disabled={respondingOffer}
+                  activeOpacity={0.8}
+                >
+                  <FontAwesome name="times" size={12} color="#dc2626" style={{ marginRight: 6 }} />
+                  <Text style={styles.declineOfferBtnText}>Decline Offer</Text>
+                </TouchableOpacity>
+              </View>
+            ) : isOfferAccepted ? (
+              <View style={styles.offerStatusBannerAccepted}>
+                <FontAwesome name="check-circle" size={14} color="#15803d" style={{ marginRight: 6 }} />
+                <Text style={styles.offerStatusBannerAcceptedText}>
+                  You accepted this alternative date. Awaiting branch approval.
+                </Text>
+              </View>
+            ) : isOfferDeclined ? (
+              <View style={styles.offerStatusBannerDeclined}>
+                <FontAwesome name="times-circle" size={14} color="#b91c1c" style={{ marginRight: 6 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.offerStatusBannerDeclinedText}>
+                    You declined this date offer.
+                  </Text>
+                  {req.customer_offer_reply ? (
+                    <Text style={styles.offerReplyReasonText}>
+                      Reason: "{req.customer_offer_reply}"
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
+        {/* Card Footer Note */}
+        <View style={styles.pendingCardFooter}>
+          <Text style={styles.pendingSubmittedText}>
+            Submitted on {formatBookingDate(req.time_added)}
+          </Text>
+          <Text style={styles.requestIdText}>#{req.request_id}</Text>
+        </View>
+      </View>
+    );
   };
 
   return (
@@ -185,12 +520,48 @@ export default function DashboardScreen() {
               <FontAwesome name="hourglass-half" size={18} color="#dc2626" />
             </View>
           </View>
-          <Text style={styles.statsValue}>{stats?.pending_requests ?? 0}</Text>
+          <Text style={styles.statsValue}>{pendingCount}</Text>
           <Text style={styles.statsLabel}>Pending</Text>
         </View>
       </View>
 
-      {/* Upcoming Appointments */}
+      {/* ─── Pending Appointments Section (Top of Upcoming) ─── */}
+      <View style={styles.sectionContainer}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Pending Appointments</Text>
+          <View
+            style={[
+              styles.countBadge,
+              { backgroundColor: pendingAppointments.length > 0 ? '#fef3c7' : '#f3f4f6' },
+            ]}
+          >
+            <Text
+              style={[
+                styles.countBadgeText,
+                { color: pendingAppointments.length > 0 ? '#b45309' : '#6b7280' },
+              ]}
+            >
+              {pendingAppointments.length}
+            </Text>
+          </View>
+        </View>
+
+        {pendingAppointments.length > 0 ? (
+          <View style={styles.pendingCardsContainer}>
+            {pendingAppointments.map((req) => renderPendingCard(req))}
+          </View>
+        ) : (
+          <View style={styles.noPendingBox}>
+            <FontAwesome name="clock-o" size={24} color="#9ca3af" style={{ marginBottom: 6 }} />
+            <Text style={styles.noPendingTitle}>No pending booking requests</Text>
+            <Text style={styles.noPendingSubtitle}>
+              New appointments you request will appear here while waiting for branch confirmation.
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* ─── Upcoming Approved Appointments ─── */}
       <View style={styles.sectionContainer}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Upcoming Appointments</Text>
@@ -202,7 +573,7 @@ export default function DashboardScreen() {
         {upcomingBookings.length > 0 ? (
           <View style={styles.appointmentCard}>
             {upcomingBookings.slice(0, 5).map((booking, index) => {
-              const vehicleConfig = getVehicleConfig(booking.make, booking.model);
+              const photoUrl = getPhotoUrl(booking.vehicle_photo);
               return (
                 <View
                   key={booking.booking_id || index}
@@ -222,7 +593,26 @@ export default function DashboardScreen() {
                   </View>
 
                   <View style={styles.appointmentBody}>
-                    <VehicleIcon make={booking.make} model={booking.model} size={36} />
+                    {photoUrl ? (
+                      <TouchableOpacity
+                        onPress={() =>
+                          setViewingPhoto({
+                            url: photoUrl,
+                            title: `${booking.make} ${booking.model}`,
+                            plate: booking.plate_no,
+                          })
+                        }
+                        activeOpacity={0.8}
+                        style={styles.vehicleThumbContainer}
+                      >
+                        <Image source={{ uri: photoUrl }} style={styles.vehicleThumb} resizeMode="cover" />
+                        <View style={styles.thumbExpandIcon}>
+                          <FontAwesome name="search-plus" size={10} color="#ffffff" />
+                        </View>
+                      </TouchableOpacity>
+                    ) : (
+                      <VehicleIcon make={booking.make} model={booking.model} size={36} />
+                    )}
                     <View style={styles.appointmentDetails}>
                       <Text style={styles.vehicleName}>
                         {booking.make} {booking.model}
@@ -261,10 +651,27 @@ export default function DashboardScreen() {
             contentContainerStyle={styles.vehiclesScroll}
           >
             {vehicles.slice(0, 5).map((vehicle) => {
+              const photoUrl = getPhotoUrl(vehicle.photo);
               return (
                 <View key={vehicle.id} style={styles.vehicleCardItem}>
                   <View style={styles.vehicleCardHeader}>
-                    <VehicleIcon make={vehicle.make} model={vehicle.model} size={40} />
+                    {photoUrl ? (
+                      <TouchableOpacity
+                        onPress={() =>
+                          setViewingPhoto({
+                            url: photoUrl,
+                            title: `${vehicle.make} ${vehicle.model}`,
+                            plate: vehicle.plate_no,
+                          })
+                        }
+                        activeOpacity={0.8}
+                        style={styles.vehicleThumbContainer}
+                      >
+                        <Image source={{ uri: photoUrl }} style={styles.vehicleThumb} resizeMode="cover" />
+                      </TouchableOpacity>
+                    ) : (
+                      <VehicleIcon make={vehicle.make} model={vehicle.model} size={40} />
+                    )}
                     <View style={styles.vehicleCardMeta}>
                       <Text style={styles.vehicleCardName} numberOfLines={1}>
                         {vehicle.make} {vehicle.model}
@@ -300,13 +707,133 @@ export default function DashboardScreen() {
         ) : (
           <EmptyState
             icon="car"
-            title="No vehicles registered"
-            description="Add your first vehicle to start managing maintenance schedules."
+            title="No vehicles found"
+            description="Add your first vehicle to start tracking services and booking appointments."
             actionText="Add Vehicle"
             onAction={() => router.push('/(tabs)/vehicles')}
           />
         )}
       </View>
+
+      {/* Decline Alternative Date Reason Modal Prompt */}
+      <Modal
+        visible={declineModal.visible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setDeclineModal({ visible: false, request: null, reason: '' })}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.declineModalCard}>
+            <View style={styles.declineModalHeader}>
+              <View style={styles.declineIconCircle}>
+                <FontAwesome name="times" size={18} color="#dc2626" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.declineModalTitle}>Decline Proposed Date</Text>
+                <Text style={styles.declineModalSubtitle}>
+                  Offered: {declineModal.request?.offered_date ? formatBookingDate(declineModal.request.offered_date) : ''}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={styles.declineInstructionText}>
+              Please state why this date does not work for you so our branch agent can adjust and offer a suitable schedule:
+            </Text>
+
+            <TextInput
+              style={styles.declineInput}
+              placeholder="e.g. Not available on this day, prefer weekends instead..."
+              placeholderTextColor="#9ca3af"
+              multiline
+              numberOfLines={3}
+              value={declineModal.reason}
+              onChangeText={(text) => setDeclineModal((prev) => ({ ...prev, reason: text }))}
+            />
+
+            <View style={styles.declineModalActions}>
+              <TouchableOpacity
+                style={styles.cancelDeclineBtn}
+                onPress={() => setDeclineModal({ visible: false, request: null, reason: '' })}
+                disabled={respondingOffer}
+              >
+                <Text style={styles.cancelDeclineBtnText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.confirmDeclineBtn}
+                onPress={handleDeclineSubmit}
+                disabled={respondingOffer}
+              >
+                {respondingOffer ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.confirmDeclineBtnText}>Submit & Decline</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Vehicle Photo Lightbox Modal */}
+      <Modal
+        visible={!!viewingPhoto}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setViewingPhoto(null)}
+      >
+        <View style={styles.lightboxBackdrop}>
+          <View style={styles.lightboxCard}>
+            <View style={styles.lightboxHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.lightboxTitle} numberOfLines={1}>
+                  {viewingPhoto?.title}
+                </Text>
+                <Text style={styles.lightboxSubtitle}>{viewingPhoto?.plate}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.lightboxCloseBtn}
+                onPress={() => setViewingPhoto(null)}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <FontAwesome name="times" size={18} color="#ffffff" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.lightboxImageWrap}>
+              {viewingPhoto?.url && (
+                <Image
+                  source={{ uri: viewingPhoto.url }}
+                  style={styles.lightboxImage}
+                  resizeMode="contain"
+                />
+              )}
+            </View>
+
+            <View style={styles.lightboxFooter}>
+              <TouchableOpacity
+                style={styles.lightboxCloseBarBtn}
+                onPress={() => setViewingPhoto(null)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.lightboxCloseBarText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Alert Prompt Modal Dialog */}
+      <AlertPromptModal
+        visible={promptModal.visible}
+        type={promptModal.type}
+        title={promptModal.title}
+        message={promptModal.message}
+        onConfirm={() => setPromptModal((prev) => ({ ...prev, visible: false }))}
+      />
     </ScrollView>
   );
 }
@@ -314,11 +841,11 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#f8fafc',
   },
   contentContainer: {
     padding: 16,
-    paddingBottom: 110,
+    paddingBottom: 32,
   },
   header: {
     flexDirection: 'row',
@@ -332,27 +859,33 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   nameText: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '800',
     color: '#111827',
   },
   bookButton: {
     borderRadius: 12,
     overflow: 'hidden',
+    shadowColor: '#4f46e5',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
   },
   bookButtonGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 10,
     paddingHorizontal: 16,
+    gap: 8,
   },
   bookIcon: {
-    marginRight: 6,
+    marginRight: 2,
   },
   bookButtonText: {
     color: '#ffffff',
-    fontSize: 13,
     fontWeight: '700',
+    fontSize: 13,
   },
   statsGrid: {
     flexDirection: 'row',
@@ -377,21 +910,21 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   statsIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   statsValue: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '800',
     color: '#111827',
-    marginBottom: 2,
   },
   statsLabel: {
     fontSize: 12,
     color: '#6b7280',
+    marginTop: 4,
     fontWeight: '500',
   },
   sectionContainer: {
@@ -401,30 +934,281 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
+    gap: 8,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
-    color: '#1f2937',
+    color: '#111827',
   },
   countBadge: {
-    backgroundColor: '#dbeafe',
+    backgroundColor: '#e0e7ff',
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 2,
-    marginLeft: 8,
   },
   countBadgeText: {
-    color: '#1e40af',
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#4338ca',
+  },
+
+  // ─── Pending Appointments Styles ───
+  pendingCardsContainer: {
+    gap: 12,
+  },
+  pendingCardItem: {
+    backgroundColor: '#fffdf5',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  rejectedCardItem: {
+    borderColor: '#ef4444',
+    borderWidth: 1.5,
+    backgroundColor: '#fff8f8',
+  },
+  pendingCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  rejectedDateText: {
+    color: '#991b1b',
+  },
+  pendingStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  pendingBadgeBg: {
+    backgroundColor: '#fef3c7',
+  },
+  rejectedBadgeBg: {
+    backgroundColor: '#fee2e2',
+  },
+  pendingStatusText: {
     fontSize: 11,
     fontWeight: '700',
   },
+
+  // Rejection Reason Box
+  rejectionReasonBox: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fca5a5',
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 10,
+  },
+  rejectionReasonHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  rejectionReasonTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#991b1b',
+  },
+  rejectionReasonText: {
+    fontSize: 12,
+    color: '#7f1d1d',
+    lineHeight: 16,
+  },
+
+  // Date Offer Box
+  offerContainer: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#bfdbfe',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 10,
+  },
+  offerHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  offerIconBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#dbeafe',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  offerLabel: {
+    fontSize: 11,
+    color: '#1e40af',
+    fontWeight: '600',
+  },
+  offerDateText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#1d4ed8',
+    marginTop: 2,
+  },
+  offerActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#dbeafe',
+  },
+  acceptOfferBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#16a34a',
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  acceptOfferBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  declineOfferBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#fca5a5',
+    backgroundColor: '#ffffff',
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  declineOfferBtnText: {
+    color: '#dc2626',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  offerStatusBannerAccepted: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0fdf4',
+    padding: 8,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  offerStatusBannerAcceptedText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#15803d',
+    flex: 1,
+  },
+  offerStatusBannerDeclined: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#fef2f2',
+    padding: 8,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  offerStatusBannerDeclinedText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#991b1b',
+  },
+  offerReplyReasonText: {
+    fontSize: 11,
+    color: '#7f1d1d',
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
+  pendingCardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  pendingSubmittedText: {
+    fontSize: 11,
+    color: '#94a3b8',
+  },
+  requestIdText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748b',
+  },
+
+  noPendingBox: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  noPendingTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  noPendingSubtitle: {
+    fontSize: 11,
+    color: '#94a3b8',
+    textAlign: 'center',
+    marginTop: 2,
+    maxWidth: 280,
+  },
+
+  // ─── Vehicle Thumbnail with Expand ───
+  vehicleThumbContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: '#e2e8f0',
+  },
+  vehicleThumb: {
+    width: '100%',
+    height: '100%',
+  },
+  thumbExpandIcon: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 4,
+    padding: 2,
+  },
+  vehicleTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  // ─── Upcoming Card Styles ───
   appointmentCard: {
     backgroundColor: '#ffffff',
     borderRadius: 16,
+    padding: 16,
     borderWidth: 1,
     borderColor: '#f3f4f6',
-    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   appointmentItem: {
     borderBottomWidth: 1,
@@ -444,7 +1228,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   dateTimeContainer: {
-    flexDirection: 'column',
+    flex: 1,
   },
   appointmentDate: {
     fontSize: 14,
@@ -491,6 +1275,8 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginTop: 4,
   },
+
+  // Vehicles Horizontal List
   vehiclesScroll: {
     gap: 12,
     paddingBottom: 4,
@@ -559,5 +1345,164 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#ffffff',
     fontWeight: '600',
+  },
+
+  // ─── Decline Reason Modal ───
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  declineModalCard: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  declineModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  declineIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#fee2e2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  declineModalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  declineModalSubtitle: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 2,
+  },
+  declineInstructionText: {
+    fontSize: 13,
+    color: '#374151',
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  declineInput: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 13,
+    color: '#111827',
+    backgroundColor: '#f9fafb',
+    textAlignVertical: 'top',
+    minHeight: 80,
+    marginBottom: 16,
+  },
+  declineModalActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  cancelDeclineBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+  },
+  cancelDeclineBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4b5563',
+  },
+  confirmDeclineBtn: {
+    flex: 1.4,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#dc2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmDeclineBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+
+  // ─── Photo Lightbox Modal ───
+  lightboxBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  lightboxCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#1e293b',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  lightboxHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#334155',
+  },
+  lightboxTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  lightboxSubtitle: {
+    fontSize: 12,
+    color: '#94a3b8',
+    marginTop: 2,
+  },
+  lightboxCloseBtn: {
+    padding: 6,
+  },
+  lightboxImageWrap: {
+    width: '100%',
+    height: 300,
+    backgroundColor: '#0f172a',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lightboxImage: {
+    width: '100%',
+    height: '100%',
+  },
+  lightboxFooter: {
+    padding: 12,
+    backgroundColor: '#1e293b',
+    alignItems: 'center',
+  },
+  lightboxCloseBarBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 24,
+    backgroundColor: '#334155',
+    borderRadius: 8,
+  },
+  lightboxCloseBarText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ffffff',
   },
 });
