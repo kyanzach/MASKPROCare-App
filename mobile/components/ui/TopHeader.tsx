@@ -12,6 +12,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import client from '@/api/client';
 import NotificationModal, { NotificationItem } from './NotificationModal';
+import { syncAndAlertNewNotifications } from '@/services/notificationService';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://care.maskpro.ph/api';
 
@@ -44,13 +45,11 @@ export default function TopHeader() {
     };
   }, [user]);
 
-  // Poll notification count every 60 seconds
+  // Poll notifications and trigger native push alerts for new items
   const fetchNotifCount = useCallback(async () => {
     try {
-      const res = await client.get('/notifications/count');
-      if (res.data?.success) {
-        setNotifCount(res.data.data?.unread_count || 0);
-      }
+      const count = await syncAndAlertNewNotifications();
+      setNotifCount(count);
     } catch {
       // silent
     }
@@ -58,7 +57,8 @@ export default function TopHeader() {
 
   useEffect(() => {
     fetchNotifCount();
-    const interval = setInterval(fetchNotifCount, 60000);
+    // Poll every 20 seconds for responsive notification arrival
+    const interval = setInterval(fetchNotifCount, 20000);
     return () => clearInterval(interval);
   }, [fetchNotifCount]);
 

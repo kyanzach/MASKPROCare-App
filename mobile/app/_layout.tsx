@@ -22,6 +22,9 @@ export const unstable_settings = {
 SplashScreen.preventAutoHideAsync();
 
 import { AuthProvider } from '@/context/AuthContext';
+import { registerForPushNotificationsAsync } from '@/services/notificationService';
+import * as Notifications from 'expo-notifications';
+import { useRouter } from 'expo-router';
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
@@ -53,6 +56,26 @@ export default function RootLayout() {
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
+  const router = useRouter();
+
+  useEffect(() => {
+    registerForPushNotificationsAsync();
+
+    const responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      const link = response.notification.request.content.data?.link;
+      if (link && typeof link === 'string') {
+        if (link.includes('booking')) {
+          router.push('/(tabs)/bookings');
+        } else if (link.includes('vehicle')) {
+          router.push('/(tabs)/vehicles');
+        }
+      }
+    });
+
+    return () => {
+      responseSubscription.remove();
+    };
+  }, [router]);
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>

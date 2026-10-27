@@ -1,5 +1,20 @@
 # Changelog
 
+## [v1.13.8] — 2026-10-28
+### Added & Enhanced
+- **Client-Side Notification Bell & Push Notification System (`mobile/services/notificationService.ts`, `mobile/app/_layout.tsx`, `mobile/components/ui/TopHeader.tsx`, `mobile/app.json`, `mobile/package.json`)**:
+  - Integrated `expo-notifications` for standard OS heads-up banners on unlocked screens and native lockscreen notifications on both Android and iOS devices/emulators.
+  - Configured high-priority notification channel (`care-alerts`, `AndroidImportance.MAX`, public lockscreen visibility) and auto-permission request.
+  - Implemented client-side notification bell with live red unread counter badge in `TopHeader.tsx`, syncing with `/api/notifications/list` via background interval polling.
+  - Tapping a notification opens the app and directly routes to `/(tabs)/bookings` for immediate action, while clicking the header bell opens the full in-app `NotificationModal` drawer.
+- **Full-Stack Notification Triggers & DB Integration (`server/routes/bookings.js`, `unify_maskpro.customer_notifications`)**:
+  - Added customer notification dispatch (`customer_notifications`) across booking lifecycle: initial submission, staff date proposals, approvals, customer offer acceptances, and offer declines.
+  - Implemented staff notification dispatch (`notifyUnifyStaff`) inserting directly into Unify's internal `notifications` table for assigned branch agents, sales, accounting, and Ryan Paco.
+- **Unify Mother App Floating Smart Toast Stack (`includes/care_booking_requests_alert.php`, `notification_api.php`, `footer.php`, `booking_requests.php`)**:
+  - Created a sticky floating alert toast stack on all Unify pages (matching the inventory reorder forecast toast style) for sales agents, accounting, managers, and Ryan Paco.
+  - Surfaces real-time alerts for booking requests and customer offer declines with reasons, pulsating blue glow, live badge counts, and direct 1-click links to `booking_requests.php`.
+  - Added 25s auto-polling loop via `notification_api.php?action=care_alerts` so alerts appear dynamically without requiring page refreshes.
+
 ## [v1.13.7] — 2026-10-27
 ### Added & Enhanced
 - **Pending Appointments Section & Live Widget Count (`mobile/app/(tabs)/index.tsx`, `frontend/src/pages/Dashboard.jsx`, `server/routes/dashboard.js`)**:

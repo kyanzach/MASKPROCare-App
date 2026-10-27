@@ -18,6 +18,47 @@ const { authenticateToken } = require('../middleware/auth');
 // All booking routes require authentication
 router.use(authenticateToken);
 
+// --- Helper: Insert customer notification in customer_notifications ---
+async function createCustomerNotification(customerId, type, title, message, link = '/bookings') {
+  try {
+    await pool.query(
+      `INSERT INTO customer_notifications (customer_id, type, title, message, link, is_read, created_at)
+       VALUES (?, ?, ?, ?, ?, 0, NOW())`,
+      [customerId, type, title, message, link]
+    );
+  } catch (err) {
+    console.error('Error creating customer notification:', err);
+  }
+}
+
+// --- Helper: Notify Unify Agents, Accounting & Management in notifications table ---
+async function notifyUnifyStaff(branchId, type, title, message, link = 'booking_requests.php', refId = null) {
+  try {
+    const [users] = await pool.query(
+      `SELECT id FROM users 
+       WHERE is_active = 1 
+         AND (
+           branch_id = ? 
+           OR branch_id = 1 
+           OR access_level IN ('admin', 'manager', 'superadmin', 'accountingstaff', 'accountingsupervisor', 'branchaccounting', 'salesagent', 'sales', 'branchsales', 'branchowner', 'branchmanager', 'branchadmin')
+           OR full_name LIKE '%Ryan Paco%'
+         )`,
+      [branchId || 1]
+    );
+
+    if (users && users.length > 0) {
+      const values = users.map(u => [u.id, null, type, title, message, link, refId, 0]);
+      await pool.query(
+        `INSERT INTO notifications (user_id, actor_id, type, title, message, link, reference_id, is_read) 
+         VALUES ?`,
+        [values]
+      );
+    }
+  } catch (err) {
+    console.error('Error notifying Unify staff:', err);
+  }
+}
+
 // --- Helper: Format Date to YYYY-MM-DD in local timezone (Manila) ---
 function toLocalDateStr(d) {
   const y = d.getFullYear();
@@ -376,6 +417,34 @@ router.post('/create', async (req, res) => {
       [requestId, sCode, String(service_type).trim()]
     );
 
+    // Fetch vehicle & customer details for notifications
+    try {
+      const [vehRows] = await pool.query("SELECT make, model FROM vehicles WHERE id = ?", [parseInt(vehicle_id, 10)]);
+      const vehName = vehRows[0] ? `${vehRows[0].make} ${vehRows[0].model}` : 'Vehicle';
+      const [custRows] = await pool.query("SELECT full_name FROM customers WHERE id = ?", [customerId]);
+      const custName = custRows[0]?.full_name || 'Customer';
+
+      // 1. Notify Customer (bell & push on mobile)
+      await createCustomerNotification(
+        customerId,
+        'booking_requested',
+        'Booking Request Submitted ⏳',
+        `Your appointment request for ${vehName} on ${booking_date} at ${booking_time} has been submitted and is pending branch approval.`
+      );
+
+      // 2. Notify Unify Agents, Accounting & Ryan Paco
+      await notifyUnifyStaff(
+        branchId,
+        'care_booking_request',
+        `New Care Booking Request: ${vehName}`,
+        `${custName} submitted a new booking request for ${service_type} on ${booking_date} at ${booking_time}.`,
+        'booking_requests.php',
+        requestId
+      );
+    } catch (notifErr) {
+      console.warn('Booking create notification error:', notifErr);
+    }
+
     return res.status(201).json({
       success: true,
       data: { request_id: requestId, status: 'pending', booking_date: bookingDatetime, service_type: String(service_type).trim() },
@@ -425,6 +494,27 @@ router.post('/cancel', async (req, res) => {
         return res.status(409).json({ success: false, data: null, message: 'Request was already processed by another action', errors: [] });
       }
 
+      try {
+        const [custRows] = await pool.query("SELECT full_name FROM customers WHERE id = ?", [req.user.customer_id]);
+        const custName = custRows[0]?.full_name || 'Customer';
+        await createCustomerNotification(
+          req.user.customer_id,
+          'booking_cancelled',
+          'Booking Request Cancelled',
+          `Your booking request #${reqId} has been cancelled.`
+        );
+        await notifyUnifyStaff(
+          req.user.branch_id,
+          'care_booking_cancelled',
+          `Booking Request Cancelled: ${custName}`,
+          `${custName} cancelled booking request #${reqId}. Reason: "${cancelReason}".`,
+          'booking_requests.php?tab=cancelled',
+          reqId
+        );
+      } catch (e) {
+        console.warn('Cancel notification error:', e);
+      }
+
       return res.json({ success: true, data: null, message: 'Booking request cancelled successfully', errors: [] });
     } else {
       // Cancel approved booking
@@ -459,6 +549,27 @@ router.post('/cancel', async (req, res) => {
       await pool.query("UPDATE bookings SET notes = ? WHERE booking_id = ?", [updatedNotes, bId]);
       await pool.query("UPDATE booking_services_to_perform SET status = 'Cancelled' WHERE booking_id = ?", [bId]);
       await pool.query("UPDATE bookings_service_types SET status = 'Cancelled' WHERE booking_id = ?", [bId]);
+
+      try {
+        const [custRows] = await pool.query("SELECT full_name FROM customers WHERE id = ?", [req.user.customer_id]);
+        const custName = custRows[0]?.full_name || 'Customer';
+        await createCustomerNotification(
+          req.user.customer_id,
+          'booking_cancelled',
+          'Appointment Cancelled',
+          `Your appointment #${bId} has been cancelled.`
+        );
+        await notifyUnifyStaff(
+          req.user.branch_id,
+          'care_booking_cancelled',
+          `Appointment Cancelled: ${custName}`,
+          `${custName} cancelled booking #${bId}. Reason: "${cancelReason}".`,
+          'booking_requests.php',
+          bId
+        );
+      } catch (e) {
+        console.warn('Cancel notification error:', e);
+      }
 
       return res.json({ success: true, data: null, message: 'Booking cancelled successfully', errors: [] });
     }
@@ -821,6 +932,49 @@ router.post('/respond-offer', async (req, res) => {
       try { updatedRow.edit_history = JSON.parse(updatedRow.edit_history); } catch { /* keep string */ }
     }
     if (updatedRow) updatedRow.type = 'request';
+
+    // Fetch customer and vehicle details for notifications
+    try {
+      const [custRows] = await pool.query("SELECT full_name FROM customers WHERE id = ?", [customerId]);
+      const custName = custRows[0]?.full_name || 'Customer';
+      const vehName = updatedRow ? `${updatedRow.make} ${updatedRow.model}` : 'Vehicle';
+
+      if (action === 'accept') {
+        const offeredStr = new Date(request.offered_date).toLocaleString();
+        await createCustomerNotification(
+          customerId,
+          'offer_accepted',
+          'Alternative Date Accepted ✓',
+          `You accepted the proposed appointment date for ${vehName} on ${offeredStr}. Awaiting branch confirmation.`
+        );
+        await notifyUnifyStaff(
+          request.branch_id,
+          'care_offer_accepted',
+          `Offer Accepted: ${custName} (${vehName})`,
+          `${custName} accepted the proposed date (${offeredStr}). Booking request is ready for approval.`,
+          'booking_requests.php',
+          reqId
+        );
+      } else {
+        const declineReason = String(reply_reason || 'Declined proposed date').trim();
+        await createCustomerNotification(
+          customerId,
+          'offer_declined',
+          'Alternative Date Declined',
+          `You declined the proposed date for ${vehName}. Reason: "${declineReason}".`
+        );
+        await notifyUnifyStaff(
+          request.branch_id,
+          'care_offer_declined',
+          `Offer Declined: ${custName} (${vehName})`,
+          `${custName} declined the proposed date. Reason: "${declineReason}".`,
+          'booking_requests.php?tab=rejected',
+          reqId
+        );
+      }
+    } catch (notifErr) {
+      console.warn('Respond offer notification error:', notifErr);
+    }
 
     return res.json({
       success: true,
