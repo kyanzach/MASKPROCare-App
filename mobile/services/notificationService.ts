@@ -1,7 +1,12 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import client from '@/api/client';
+
+const isExpoGo =
+  Constants.appOwnership === 'expo' ||
+  Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
 // Configure foreground presentation behavior
 Notifications.setNotificationHandler({
@@ -22,17 +27,21 @@ const LAST_SEEN_KEY = 'care_last_alerted_notif_id';
 export async function registerForPushNotificationsAsync(): Promise<boolean> {
   try {
     if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('care-alerts', {
-        name: 'MASKPRO Care Notifications',
-        description: 'Booking confirmations, schedule offers, and service reminders',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#3b82f6',
-        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-        bypassDnd: false,
-        sound: 'default',
-        enableVibrate: true,
-      });
+      try {
+        await Notifications.setNotificationChannelAsync('care-alerts', {
+          name: 'MASKPRO Care Notifications',
+          description: 'Booking confirmations, schedule offers, and service reminders',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#3b82f6',
+          lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+          bypassDnd: false,
+          sound: 'default',
+          enableVibrate: true,
+        });
+      } catch {
+        // Safe channel fallback
+      }
     }
 
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
@@ -44,7 +53,7 @@ export async function registerForPushNotificationsAsync(): Promise<boolean> {
 
     return finalStatus === 'granted';
   } catch (err) {
-    console.warn('Push notification permission error:', err);
+    // Suppress push permission noise in development / Expo Go
     return false;
   }
 }

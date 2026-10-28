@@ -7,6 +7,13 @@ import { useEffect } from 'react';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
+import { LogBox } from 'react-native';
+
+// Suppress known Expo Go SDK 53 remote push notification deprecation notice
+LogBox.ignoreLogs([
+  'expo-notifications: Android Push notifications',
+  'Android Push notifications (remote notifications) functionality provided by expo-notifications was removed from Expo Go',
+]);
 
 export {
   // Catch any errors thrown by the Layout component.

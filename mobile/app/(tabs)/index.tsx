@@ -200,12 +200,25 @@ export default function DashboardScreen() {
   };
 
   const loadData = async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
     try {
       const [statsRes, vehiclesRes, bookingsRes, loyaltyRes] = await Promise.all([
-        client.get('/dashboard/stats'),
-        client.get('/vehicles/list'),
-        client.get('/bookings/list'),
+        client.get('/dashboard/stats').catch((err) => {
+          if (err?.response?.status !== 401) console.warn('stats fetch error:', err?.message);
+          return { data: null };
+        }),
+        client.get('/vehicles/list').catch((err) => {
+          if (err?.response?.status !== 401) console.warn('vehicles fetch error:', err?.message);
+          return { data: null };
+        }),
+        client.get('/bookings/list').catch((err) => {
+          if (err?.response?.status !== 401) console.warn('bookings fetch error:', err?.message);
+          return { data: null };
+        }),
         client.get('/loyalty/cards').catch(() => ({ data: { data: { cards: [] } } })),
       ]);
       setStats(statsRes.data?.data?.stats || null);
@@ -239,13 +252,20 @@ export default function DashboardScreen() {
       loadData();
     } else {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [user]);
 
-  const onRefresh = useCallback(() => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    loadData();
-  }, []);
+    try {
+      await loadData();
+    } catch {
+      // safe fallback
+    } finally {
+      setRefreshing(false);
+    }
+  }, [user]);
 
   const handleAcceptOffer = async (requestId: number) => {
     setRespondingOffer(true);
@@ -635,7 +655,7 @@ export default function DashboardScreen() {
       style={styles.container}
       contentContainerStyle={styles.contentContainer}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#4f46e5']} />
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#4f46e5']} tintColor="#4f46e5" />
       }
     >
       {/* Welcome Header */}

@@ -61,8 +61,8 @@ router.post('/login', async (req, res) => {
       }
     }
 
-    // Generate 6-digit OTP (fixed 777777 for App Store Review demo account)
-    const otp = isReviewAccount ? '777777' : String(Math.floor(100000 + Math.random() * 900000));
+    // Generate 6-digit OTP
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
 
     // Store OTP — update if exists, insert if new
     // Use MySQL DATE_ADD(NOW(), ...) for timezone-consistent expiry (Asia/Manila)
@@ -80,11 +80,8 @@ router.post('/login', async (req, res) => {
       );
     }
 
-    // Send OTP via SMS (skip for review account to save credits and prevent delays)
-    let smsSent = true;
-    if (!isReviewAccount) {
-      smsSent = await sendOtpSms(formattedMobile, otp, OTP_EXPIRY_SECONDS / 60, customerId);
-    }
+    // Always send OTP via SMS (iTexMo primary, SMS-it fallback)
+    const smsSent = await sendOtpSms(formattedMobile, otp, OTP_EXPIRY_SECONDS / 60, customerId);
 
     // Build response
     const responseData = { sms_sent: smsSent };

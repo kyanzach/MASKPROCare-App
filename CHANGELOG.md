@@ -1,6 +1,26 @@
 # Changelog
 
-## [v1.13.11] — 2026-10-28
+## [v1.13.12] — 2026-10-28
+### Added
+- **Unify Lightbox Photo Popup Modal (`booking_request_card.php`)**:
+  - Replaced opening raw image URLs in new browser tabs with an in-page Bootstrap modal lightbox (`#brPhotoLightboxModal`).
+  - Both customer profile avatar and vehicle thumbnail now pop up high-resolution images in-page with title, customer ID, plate, and color details.
+- **Unify Negotiation & Activity Timeline (`booking_request_card.php`)**:
+  - Replaced raw cluttered text notes with an interactive, chronological vertical negotiation timeline widget.
+  - Automatically parses counter-offer dates, declined offers with reasons, branch offers, and customer notes into styled nodes with icon badges and quote speech bubbles.
+
+### Fixed
+- **Real OTP SMS Delivery (`server/routes/auth.js`)**:
+  - Restored real OTP SMS generation and delivery via iTexMo / SMS-it for all registered numbers including `09852779777`.
+  - Maintained App Store review bypass code `777777` in `/verify` without suppressing SMS notifications.
+- **Expo Go Android Push Notification Warning (`mobile/app/_layout.tsx`, `mobile/services/notificationService.ts`)**:
+  - Suppressed Expo Go SDK 53 deprecation log in `LogBox` and guarded remote push token registration when running inside Expo Go on Android.
+- **Mobile Pull-to-Refresh Freeze (`mobile/app/(tabs)/index.tsx`)**:
+  - Wrapped `onRefresh` in `async / try / finally { setRefreshing(false); }` and added iOS `tintColor`.
+  - Added catch fallbacks on all `Promise.all` requests and ensured `!user` immediately clears `refreshing` and `loading` states.
+- **Unify Schedule Title & Badge Clarification (`booking_request_card.php`)**:
+  - Dynamically displays `"Agreed Schedule"` ONLY when customer has accepted or request is approved; displays `"Branch Proposed Schedule"` during active negotiation.
+  - Removed misplaced `"Client Counter-Proposal"` badge from inside the branch offer box to eliminate agent confusion.
 ### Added
 - **NanoFix Maintenance Tracker & Missed Visit Counter (`server/routes/dashboard.js`, `mobile/`, `frontend/`)**:
   - Replaced legacy Date-to-string comparison that always returned 0 with full Unify maintenance calculation parity (`getMaintenanceSummary()`).
