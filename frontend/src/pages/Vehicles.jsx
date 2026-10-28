@@ -2,7 +2,15 @@ import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
 
-const API_BASE = 'http://localhost/unify.maskpro.ph/maskprocare-app';
+// Build photo URL helper: points to root domain on production (/uploads/...) or Express dev server
+const getPhotoUrl = (photoPath) => {
+  if (!photoPath) return null;
+  if (photoPath.startsWith('http')) return photoPath;
+  const rootBase = import.meta.env.VITE_API_URL
+    ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '')
+    : (import.meta.env.PROD ? '' : 'http://localhost:3004');
+  return `${rootBase}/${photoPath.replace(/^\//, '')}`;
+};
 
 // Map common colors to CSS color values
 const COLOR_MAP = {
@@ -107,7 +115,7 @@ export default function Vehicles() {
       registration_date: v.registration_date || v.registration_expiry || '',
     });
     setModalPhoto(null);
-    setModalPhotoPreview(v.photo ? `${API_BASE}/${v.photo}` : null);
+    setModalPhotoPreview(v.photo ? getPhotoUrl(v.photo) : null);
     setError('');
     setShowModal(true);
   };
@@ -207,13 +215,6 @@ export default function Vehicles() {
     } finally { setSaving(false); }
   };
 
-  // Build photo URL helper
-  const getPhotoUrl = (photoPath) => {
-    if (!photoPath) return null;
-    if (photoPath.startsWith('http')) return photoPath;
-    return `${API_BASE}/${photoPath}`;
-  };
-
   if (loading) {
     return <div className="loading-container"><div className="spinner"></div><p>Loading vehicles...</p></div>;
   }
@@ -266,13 +267,32 @@ export default function Vehicles() {
                   onClick={() => !isUploadingThis && (photoUrl ? setViewingPhoto({ url: photoUrl, title: `${v.make} ${v.model}`, plate: v.plate_no || 'No Plate Number' }) : handleCardPhotoUpload(v.id))}
                   style={{
                     height: '160px',
-                    background: photoUrl ? `url(${photoUrl}) center/cover no-repeat` : 'linear-gradient(135deg, #f1f5f9, #e2e8f0)',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    borderRadius: '16px 16px 0 0',
+                    cursor: 'pointer',
+                    background: photoUrl ? '#0f172a' : 'linear-gradient(135deg, #f1f5f9, #e2e8f0)',
                     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                    borderRadius: '16px 16px 0 0', position: 'relative', cursor: 'pointer',
                     transition: 'opacity 0.2s',
                   }}
                   title={photoUrl ? 'Click to view full photo' : 'Click to add photo'}
                 >
+                  {photoUrl && (
+                    <img
+                      src={photoUrl}
+                      alt={`${v.make} ${v.model}`}
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                      }}
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  )}
                   {isUploadingThis && (
                     <div style={{
                       position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.8)',
@@ -298,6 +318,8 @@ export default function Vehicles() {
                         background: 'rgba(15,23,42,0.7)', borderRadius: '20px',
                         padding: '3px 8px', display: 'flex', alignItems: 'center', gap: '4px',
                         color: '#ffffff', fontSize: '11px', fontWeight: 600,
+                        backdropFilter: 'blur(4px)',
+                        zIndex: 1,
                       }}>
                         <i className="fas fa-search-plus" style={{ fontSize: '10px' }}></i> View
                       </div>
@@ -312,6 +334,7 @@ export default function Vehicles() {
                           background: '#3b82f6', borderRadius: '50%',
                           width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                           boxShadow: '0 2px 4px rgba(0,0,0,0.2)', cursor: 'pointer',
+                          zIndex: 1,
                         }}
                       >
                         <i className="fas fa-camera" style={{ fontSize: '11px', color: 'white' }}></i>
@@ -398,16 +421,23 @@ export default function Vehicles() {
                   onClick={() => modalFileInputRef.current?.click()}
                   style={{
                     height: '140px',
-                    background: modalPhotoPreview
-                      ? `url(${modalPhotoPreview}) center/cover no-repeat`
-                      : 'linear-gradient(135deg, #f1f5f9, #e2e8f0)',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    background: modalPhotoPreview ? '#0f172a' : 'linear-gradient(135deg, #f1f5f9, #e2e8f0)',
                     borderRadius: '12px', cursor: 'pointer', marginBottom: '20px',
                     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                     border: '2px dashed rgba(59,130,246,0.3)',
                     transition: 'all 0.2s',
-                    position: 'relative',
                   }}
                 >
+                  {modalPhotoPreview && (
+                    <img
+                      src={modalPhotoPreview}
+                      alt="Vehicle preview"
+                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  )}
                   {!modalPhotoPreview && (
                     <>
                       <i className="fas fa-camera" style={{ fontSize: '28px', color: '#94a3b8', marginBottom: '8px' }}></i>
@@ -420,8 +450,10 @@ export default function Vehicles() {
                   {modalPhotoPreview && (
                     <div style={{
                       position: 'absolute', bottom: '8px', right: '8px',
-                      background: 'rgba(0,0,0,0.5)', borderRadius: '20px',
+                      background: 'rgba(0,0,0,0.6)', borderRadius: '20px',
                       padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px',
+                      backdropFilter: 'blur(4px)',
+                      zIndex: 1,
                     }}>
                       <i className="fas fa-camera" style={{ fontSize: '10px', color: 'white' }}></i>
                       <span style={{ fontSize: '11px', color: 'white', fontWeight: 500 }}>Change</span>

@@ -1,6 +1,21 @@
 # Changelog
 
-## [v1.13.13] — 2026-10-28
+## [v1.13.14] — 2026-10-28
+### Fixed
+- **Unify Booking Finalization Fatal 500 Error (`/var/www/unify/booking_requests.php`)**:
+  - Fixed PHP Fatal `ArgumentCountError` at line 214 and line 284: `bind_param("isss", ...)` had 4 type characters for only 3 bound parameters (`customer_id`, `notif_title`, `notif_msg`). Corrected type definition string to `"iss"`.
+  - Replaced `catch (Exception $cnErr)` with `catch (Throwable $cnErr)` so PHP 8+ Errors cannot bypass catch blocks and cause HTTP 500 crashes.
+- **Web App Vehicle Photo Display on My Vehicles Page (`frontend/src/pages/Vehicles.jsx`)**:
+  - Replaced legacy hardcoded `const API_BASE = 'http://localhost/unify.maskpro.ph/maskprocare-app'` with production-aware `getPhotoUrl` helper.
+  - In production (`care.maskpro.ph`), vehicle photo paths now resolve directly to `/uploads/vehicles/...` served by Nginx with 200 OK.
+  - Upgraded vehicle card photo container from CSS background image to an embedded `<img>` tag with `object-fit: cover` and fallback error handling.
+  - Fixed full-size photo preview lightbox and edit modal preview to use correct URL resolution.
+
+### Verified
+- **Booking Creation & SMS Confirmation Audit**:
+  - Verified booking #18359 was created and SMS confirmation for NanoFix (Maintenance) on Nov 2, 2026 was dispatched to ITEXMO API for `639852779777`.
+  - Recorded in Unify `sms_history` table: Entry ID `29647`, Status `Sent`, Reference `PRRYA21136446328473173449`, 2 credits used.
+
 ### Added
 - **Web App Vehicle Photo Thumbnails (`frontend/src/pages/Dashboard.jsx`)**:
   - Dashboard vehicle cards now render the vehicle's actual photograph thumbnail (`v.photo`) with automatic fallback to model-branded vehicle icons.
