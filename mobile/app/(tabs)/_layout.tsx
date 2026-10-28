@@ -58,6 +58,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="services"
+        options={{
+          title: 'Aftercare',
+          tabBarIcon: ({ color }) => <TabBarIcon name="heartbeat" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="community"
         options={{
           title: 'Community',
@@ -69,13 +76,6 @@ export default function TabLayout() {
         options={{
           title: 'Shop',
           tabBarIcon: ({ color }) => <TabBarIcon name="shopping-bag" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="services"
-        options={{
-          title: 'Aftercare',
-          tabBarIcon: ({ color }) => <TabBarIcon name="heartbeat" color={color} />,
         }}
       />
       <Tabs.Screen

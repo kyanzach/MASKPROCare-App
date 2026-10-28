@@ -336,11 +336,12 @@ ssh root@167.71.217.49 'certbot --nginx -d care.maskpro.ph'
 - **Shared across all MaskPro apps:** Applied to `care.maskpro.ph`, `gaq.maskpro.ph`, and `getsales.maskpro.ph`
 - **Rule 19 added to agent rules:** Every mobile app audit and pre-submission review must systematically check the 6 pillars (OS Permissions, Apple App Store Guidelines, Google Play Policies, OWASP MASVS Security, Store Asset Formats, Expo/RN Diagnostics) before approving builds or claiming submission readiness.
 
-### 2026-03-10: Booking Flow & Vehicle Photos
-- `booking_requests` uses `customer_vehicle_id` (not `vehicle_id`) and `time_added` (not `created_at`)
-- `bookings` table has no `status` column — derived from notes pattern
-- Availability endpoint needs to accept GET (not just POST) for frontend `api.get()` calls
-- Vehicle photo upload: WebP auto-conversion via GD, max 1200px, ~200KB target
-- Unify schema upgraded to v1.15.0: added `cancelled` enum, `edit_history`, `cancellation_reason` columns
-- Race condition guard: approve/reject/edit all check `WHERE status = 'pending'`
-- Cancel flow: requests use `status='cancelled'` + `cancellation_reason`; bookings use `notes LIKE 'CANCELLED:%'` pattern
+### 2026-10-28: NanoFix Maintenance Engine, Loyalty Dashboard & Unify Card Photo Details
+- **NanoFix Maintenance Rule:** Vehicles with past Nano Ceramic Coating or NanoFix maintenance qualify for 6-month maintenance intervals. A vehicle needs maintenance starting 5 months after the last visit, unless a future visit is booked.
+- **Missed Visit Calculation:** Each passed 6-month cycle without a service counts as a missed visit.
+- **Photo URL Schemas:**
+  - Customer Profile Photo: `https://care.maskpro.ph/api/uploads/photos/<filename>`
+  - Vehicle Photo: `https://care.maskpro.ph/<path>` (e.g. `uploads/vehicles/...`) served directly from Care root, NOT via `/api/`.
+- **Bottom Navigation Layout:** Placed Aftercare (`services`) between Vehicles and Community.
+- **My Loyalty Cards Widget:** Replicated "My Vehicles" scroller style across mobile and web with category metadata and direct deep-linking.
+

@@ -1,5 +1,26 @@
 # Changelog
 
+## [v1.13.11] — 2026-10-28
+### Added
+- **NanoFix Maintenance Tracker & Missed Visit Counter (`server/routes/dashboard.js`, `mobile/`, `frontend/`)**:
+  - Replaced legacy Date-to-string comparison that always returned 0 with full Unify maintenance calculation parity (`getMaintenanceSummary()`).
+  - Automatically checks past coating visits, tracks 6-month maintenance intervals, calculates overdue/due status, and computes missed maintenance visits with last missed date.
+  - Added helpful dashboard alert widget on both mobile and web: displays `"X Vehicles Needs NanoFix Maintenance"` and `"Y Missed Visits (Last Month DD, YYYY)"` with one-tap `"Book NanoFix"` action.
+  - Vehicles in "My Vehicles" now display status badges for `"NanoFix Due"` and `"NanoFix Overdue"`.
+- **My Loyalty Cards Dashboard Section (`mobile/`, `frontend/`)**:
+  - Added a dedicated "My Loyalty Cards" section right after "My Vehicles" matching its card style and layout.
+  - Lists loyalty cards with category badges (coating, tint, ppf, wash, gift), service name, tier, visits/credits counter, and "View Card" / "Use Card" actions.
+  - Mobile profile tab directly activates the loyalty view when deep-linked with `?tab=loyalty`.
+- **Unify Request Card Customer & Vehicle Real Photo Details (`booking_requests.php`, `booking_request_card.php`)**:
+  - Replaced default icon placeholders with real customer avatar photo from Care app profile (`profile_photo`), with initials fallback.
+  - Display Customer ID badge (`ID #XXXX`), phone number, and email.
+  - Replaced vehicle icon placeholder with vehicle photo thumbnail with zoom lightbox preview.
+  - Added chips for plate #, vehicle color swatch + name, and size.
+
+### Changed
+- **Mobile Bottom Navigation Tab Order (`mobile/app/(tabs)/_layout.tsx`)**:
+  - Reordered tabs to place **Aftercare** (`services`) immediately next to **Vehicles** and before **Community** (Dashboard → Bookings → Vehicles → Aftercare → Community → Shop → Profile).
+
 ## [v1.13.10] — 2026-10-28
 ### Added
 - **Client counter-date ("Preferred Date") flow (`mobile/`, `frontend/`, `server/routes/bookings.js`)**:

@@ -47,11 +47,34 @@ function getVehicleIcon(make, model = '') {
   return VEHICLE_ICONS[m] || { icon: 'fas fa-car', bg: 'linear-gradient(135deg, #0ea5e9, #1e40af)' };
 }
 
+// Category display config for Loyalty Cards
+const CATEGORY_META = {
+  coating: { label: 'Nano Ceramic Coating', icon: 'fas fa-shield-alt', gradient: 'linear-gradient(135deg, #3b82f6, #6366f1)' },
+  tint:    { label: 'Nano Ceramic Tint',    icon: 'fas fa-sun', gradient: 'linear-gradient(135deg, #0ea5e9, #38bdf8)' },
+  ppf:     { label: 'Paint Protection Film', icon: 'fas fa-fire', gradient: 'linear-gradient(135deg, #ef4444, #f97316)' },
+  wash:    { label: 'Care Wash',             icon: 'fas fa-star', gradient: 'linear-gradient(135deg, #10b981, #34d399)' },
+  gift:    { label: 'Gift Card',             icon: 'fas fa-gift', gradient: 'linear-gradient(135deg, #8b5cf6, #a78bfa)' },
+  other:   { label: 'Other',                 icon: 'fas fa-file-alt', gradient: 'linear-gradient(135deg, #64748b, #94a3b8)' },
+};
+
+function getCounterLabel(category) {
+  switch (category) {
+    case 'coating':
+    case 'ppf':
+      return 'Credits Used';
+    case 'tint':
+      return 'Earned Points';
+    default:
+      return 'Visits Used';
+  }
+}
+
 export default function Dashboard() {
   const { customer } = useAuth();
   const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [vehicles, setVehicles] = useState([]);
+  const [loyaltyCards, setLoyaltyCards] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -66,15 +89,25 @@ export default function Dashboard() {
 
   const loadData = async () => {
     try {
-      const [statsRes, vehiclesRes, bookingsRes] = await Promise.all([
+      const [statsRes, vehiclesRes, bookingsRes, loyaltyRes] = await Promise.all([
         api.get('/dashboard/stats'),
         api.get('/vehicles/list'),
         api.get('/bookings/list'),
+        api.get('/loyalty/cards').catch(() => ({ data: { data: { cards: [] } } })),
       ]);
       setStats(statsRes.data.data);
-      setVehicles(vehiclesRes.data.data?.vehicles || []);
+
+      const statVehicles = statsRes.data.data?.vehicles || [];
+      const maintMap = new Map(statVehicles.map((v) => [v.id, v.maintenance]));
+      const rawVehicles = vehiclesRes.data.data?.vehicles || [];
+      const enrichedVehicles = rawVehicles.map((v) => ({
+        ...v,
+        maintenance: v.maintenance || maintMap.get(v.id) || null,
+      }));
+      setVehicles(enrichedVehicles);
       setBookings(bookingsRes.data.data?.bookings || []);
       setRequests(bookingsRes.data.data?.requests || statsRes.data.data?.pending_requests || []);
+      setLoyaltyCards(loyaltyRes.data.data?.cards || []);
     } catch (err) {
       console.error('Dashboard load error:', err);
     } finally {
@@ -185,6 +218,53 @@ export default function Dashboard() {
         </button>
       </div>
 
+      {/* NanoFix Maintenance Alert Widget */}
+      {((stats?.stats?.vehicles_needing_maintenance ?? stats?.stats?.vehicles_needing_service ?? 0) > 0 || (stats?.stats?.missed_maintenance_visits || 0) > 0) && (
+        <div style={{
+          background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)',
+          border: '1px solid #fde68a',
+          borderRadius: '16px',
+          padding: '16px 20px',
+          marginBottom: '28px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '16px',
+          boxShadow: '0 2px 8px rgba(217, 119, 6, 0.08)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div style={{
+              width: '44px', height: '44px', borderRadius: '12px',
+              background: '#f59e0b', color: '#fff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '20px', flexShrink: 0
+            }}>
+              <i className="fas fa-shield-alt"></i>
+            </div>
+            <div>
+              <div style={{ fontSize: '15px', fontWeight: 700, color: '#92400e' }}>
+                {(stats?.stats?.vehicles_needing_maintenance ?? stats?.stats?.vehicles_needing_service ?? 0)} Vehicle{(stats?.stats?.vehicles_needing_maintenance ?? stats?.stats?.vehicles_needing_service ?? 0) === 1 ? '' : 's'} Needs NanoFix Maintenance
+              </div>
+              {(stats?.stats?.missed_maintenance_visits || 0) > 0 && (
+                <div style={{ fontSize: '13px', fontWeight: 600, color: '#b45309', marginTop: '2px' }}>
+                  <i className="fas fa-history" style={{ marginRight: '5px' }}></i>
+                  {stats.stats.missed_maintenance_visits} Missed Visit{stats.stats.missed_maintenance_visits === 1 ? '' : 's'}
+                  {stats.stats.last_missed_maintenance ? ` (Last ${new Date(stats.stats.last_missed_maintenance).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })})` : ''}
+                </div>
+              )}
+            </div>
+          </div>
+          <button
+            className="btn-gradient"
+            onClick={() => navigate('/bookings', { state: { openBooking: true } })}
+            style={{ flexShrink: 0, padding: '8px 18px', fontSize: '13px' }}
+          >
+            <i className="fas fa-calendar-plus" style={{ marginRight: '6px' }}></i>
+            Book NanoFix
+          </button>
+        </div>
+      )}
+
       {/* Stats Cards */}
       <div className="grid-4 mb-32">
         <div className="stats-card">
@@ -207,16 +287,23 @@ export default function Dashboard() {
           <div className="stats-card-inner">
             <div>
               <div className="stats-card-label">Needs Service</div>
-              <div className="stats-card-value">{stats?.stats?.vehicles_needing_service ?? 0}</div>
+              <div className="stats-card-value">{stats?.stats?.vehicles_needing_maintenance ?? stats?.stats?.vehicles_needing_service ?? 0}</div>
             </div>
             <div className="stats-icon stats-icon-amber">
               <i className="fas fa-spray-can"></i>
             </div>
           </div>
-          <div className="stats-sub stats-sub-warning">
-            <i className="fas fa-exclamation-triangle"></i>
-            <span>Attention</span>
-          </div>
+          {(stats?.stats?.missed_maintenance_visits || 0) > 0 ? (
+            <div className="stats-sub" style={{ color: '#dc2626', fontWeight: 600 }}>
+              <i className="fas fa-exclamation-circle"></i>
+              <span>{stats.stats.missed_maintenance_visits} Missed Visit{stats.stats.missed_maintenance_visits > 1 ? 's' : ''}</span>
+            </div>
+          ) : (
+            <div className="stats-sub stats-sub-warning">
+              <i className="fas fa-exclamation-triangle"></i>
+              <span>Attention</span>
+            </div>
+          )}
         </div>
 
         <div className="stats-card">
@@ -540,6 +627,16 @@ export default function Dashboard() {
                         <div style={{ flex: 1 }}>
                           <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', margin: 0 }}>{v.make} {v.model}</h3>
                           <p style={{ fontSize: '13px', color: '#64748b', fontWeight: 500, margin: 0 }}>{v.plate_no}</p>
+                          {v.maintenance?.status === 'overdue' && (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 600, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', padding: '2px 8px', marginTop: '6px' }}>
+                              <i className="fas fa-exclamation-circle"></i> NanoFix Overdue
+                            </span>
+                          )}
+                          {v.maintenance?.status === 'due' && (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 600, color: '#d97706', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '6px', padding: '2px 8px', marginTop: '6px' }}>
+                              <i className="fas fa-clock"></i> NanoFix Due
+                            </span>
+                          )}
                         </div>
                       </div>
 
@@ -563,6 +660,82 @@ export default function Dashboard() {
               <p>Add your first vehicle to start managing maintenance schedules.</p>
               <Link to="/vehicles" className="btn-gradient">
                 <i className="fas fa-plus"></i> Add Vehicle
+              </Link>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* My Loyalty Cards */}
+      <div className="card-modern mb-32">
+        <div className="card-modern-body">
+          <div className="flex-between mb-24">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div className="stats-icon" style={{ width: '40px', height: '40px', borderRadius: '12px', fontSize: '16px', background: 'linear-gradient(135deg, #8b5cf6, #6366f1)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <i className="fas fa-id-card"></i>
+              </div>
+              <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#1f2937', margin: 0 }}>My Loyalty Cards</h2>
+            </div>
+            {loyaltyCards.length > 0 && (
+              <Link to="/loyalty" style={{ fontSize: '13px', fontWeight: 600, color: '#4f46e5', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                See All <i className="fas fa-arrow-right"></i>
+              </Link>
+            )}
+          </div>
+
+          {loyaltyCards.length > 0 ? (
+            <div className="grid-3">
+              {loyaltyCards.slice(0, 6).map((card) => {
+                const catMeta = CATEGORY_META[card.category] || CATEGORY_META.other;
+                return (
+                  <div className="vehicle-card" key={card.id}>
+                    <div className="vehicle-card-body">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                        <div className="vehicle-icon" style={{ background: catMeta.gradient, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <i className={catMeta.icon}></i>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#1f2937', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {card.service || catMeta.label}
+                          </h3>
+                          <p style={{ fontSize: '12px', color: '#64748b', fontWeight: 500, margin: '2px 0 0' }}>
+                            {card.tier || 'Member Card'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        background: '#f8fafc', padding: '8px 12px', borderRadius: '8px', marginBottom: '16px',
+                        fontSize: '12px', border: '1px solid #f1f5f9'
+                      }}>
+                        <span style={{ color: '#64748b', fontWeight: 600 }}>{getCounterLabel(card.category)}</span>
+                        <span style={{ color: '#1e293b', fontWeight: 700 }}>
+                          {card.visitsUsed}
+                          {card.visitsTotal > 0 && <span style={{ color: '#94a3b8', fontWeight: 500 }}> / {card.visitsTotal}</span>}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '10px' }}>
+                        <Link to="/loyalty" className="btn-outline btn-sm" style={{ flex: 1, justifyContent: 'center' }}>
+                          <i className="fas fa-eye"></i> View Card
+                        </Link>
+                        <button className="btn-gradient btn-sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => navigate('/bookings', { state: { openBooking: true } })}>
+                          <i className="fas fa-calendar-check"></i> Use Card
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="empty-state">
+              <div className="empty-state-icon"><i className="fas fa-credit-card"></i></div>
+              <h3>No loyalty cards registered</h3>
+              <p>Your warranty and maintenance loyalty cards will appear here once issued.</p>
+              <Link to="/loyalty" className="btn-gradient">
+                <i className="fas fa-id-card"></i> View Loyalty Cards
               </Link>
             </div>
           )}

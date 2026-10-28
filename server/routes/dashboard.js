@@ -31,6 +31,87 @@ async function getVehicleServiceStatus(vehicleId) {
   }
 }
 
+const addMonths = (date, n) => {
+  const d = new Date(date.getTime());
+  const day = d.getDate();
+  d.setMonth(d.getMonth() + n);
+  if (d.getDate() < day) d.setDate(0); // clamp e.g. Aug 31 + 6mo -> Feb 28
+  return d;
+};
+
+/**
+ * NanoFix maintenance status per vehicle — mirrors Unify's "Maintenance Due" logic
+ * (dashboard_sales_fetch_maintenance.php + recalculate_due_date):
+ *  - A vehicle qualifies once it has a Nano Ceramic Coating (or NanoFix maintenance) visit.
+ *  - Next maintenance is due 6 months after the last coating/NanoFix visit.
+ *  - It "needs maintenance" from 5 months after the last visit, unless a NanoFix is already booked.
+ *  - Every 6-month due date that passed without a visit counts as a missed visit.
+ */
+async function getMaintenanceSummary(customerId) {
+  const [visitRows] = await pool.query(`
+    SELECT b.customer_vehicle_id AS vehicle_id, MAX(b.booking_date) AS last_visit
+    FROM bookings b
+    JOIN bookings_service_types s ON s.booking_id = b.booking_id
+    WHERE b.customer_id = ?
+      AND (s.service_name LIKE '%Nano Ceramic Coating%' OR s.service_name = 'Nano Fix (Maintenance)')
+      AND s.status IN ('Done', 'Scheduled', 'completed')
+      AND b.booking_date <= NOW()
+      AND (b.notes IS NULL OR b.notes NOT LIKE '%CANCELLED:%')
+    GROUP BY b.customer_vehicle_id
+  `, [customerId]);
+
+  const [scheduledRows] = await pool.query(`
+    SELECT DISTINCT b.customer_vehicle_id AS vehicle_id, MIN(b.booking_date) AS next_booking
+    FROM bookings b
+    JOIN bookings_service_types s ON s.booking_id = b.booking_id
+    WHERE b.customer_id = ?
+      AND s.service_name = 'Nano Fix (Maintenance)'
+      AND s.status <> 'Cancelled'
+      AND b.booking_date >= CURDATE()
+      AND (b.notes IS NULL OR b.notes NOT LIKE '%CANCELLED:%')
+    GROUP BY b.customer_vehicle_id
+  `, [customerId]);
+  const scheduled = new Map(scheduledRows.map((r) => [r.vehicle_id, r.next_booking]));
+
+  const now = new Date();
+  const byVehicle = {};
+  let vehiclesNeedingMaintenance = 0;
+  let missedVisits = 0;
+  let lastMissed = null;
+
+  for (const row of visitRows) {
+    const lastVisit = new Date(row.last_visit);
+    let due = addMonths(lastVisit, 6);
+    let missed = 0;
+    let vehicleLastMissed = null;
+    while (due < now) {
+      vehicleLastMissed = new Date(due.getTime());
+      due = addMonths(due, 6);
+      missed++;
+    }
+    const nextBooking = scheduled.get(row.vehicle_id) || null;
+    const needs = !nextBooking && addMonths(lastVisit, 5) <= now;
+    const status = nextBooking ? 'scheduled' : missed > 0 ? 'overdue' : needs ? 'due' : 'ok';
+
+    if (needs) vehiclesNeedingMaintenance++;
+    if (!nextBooking) {
+      missedVisits += missed;
+      if (vehicleLastMissed && (!lastMissed || vehicleLastMissed > lastMissed)) lastMissed = vehicleLastMissed;
+    }
+
+    byVehicle[row.vehicle_id] = {
+      status,
+      last_visit: lastVisit,
+      next_due: due,
+      missed_visits: missed,
+      last_missed: vehicleLastMissed,
+      next_booking: nextBooking,
+    };
+  }
+
+  return { byVehicle, vehiclesNeedingMaintenance, missedVisits, lastMissed };
+}
+
 // ─── GET /api/dashboard/stats ─────────────────────────────────────
 router.get('/stats', async (req, res) => {
   try {
@@ -41,22 +122,18 @@ router.get('/stats', async (req, res) => {
     const [vehicles] = await pool.query("SELECT * FROM vehicles WHERE customer_id = ? ORDER BY created_at DESC", [customerId]);
     const totalVehicles = vehicles.length;
 
-    // Calculate vehicles needing service
-    let vehiclesNeedingService = 0;
+    // NanoFix maintenance (replaces the old generic "needs service" calc, which compared a Date to a string and always returned 0)
+    let maintenance = { byVehicle: {}, vehiclesNeedingMaintenance: 0, missedVisits: 0, lastMissed: null };
+    try {
+      maintenance = await getMaintenanceSummary(customerId);
+    } catch (mErr) {
+      console.warn('Maintenance summary error:', mErr.message);
+    }
     for (const v of vehicles) {
       v.service_status = await getVehicleServiceStatus(v.id);
-      try {
-        const [lastSvc] = await pool.query(
-          "SELECT MAX(booking_date) as last_service FROM bookings WHERE customer_vehicle_id = ? AND customer_id = ? AND (notes IS NULL OR notes NOT LIKE '%CANCELLED:%')",
-          [v.id, customerId]
-        );
-        if (!lastSvc[0]?.last_service || lastSvc[0].last_service < sixMonthsAgo) {
-          vehiclesNeedingService++;
-        }
-      } catch {
-        vehiclesNeedingService++;
-      }
+      v.maintenance = maintenance.byVehicle[v.id] || null;
     }
+    const vehiclesNeedingService = maintenance.vehiclesNeedingMaintenance;
 
     // Upcoming bookings
     let upcoming = [];
@@ -134,6 +211,9 @@ router.get('/stats', async (req, res) => {
         stats: {
           total_vehicles: totalVehicles,
           vehicles_needing_service: vehiclesNeedingService,
+          vehicles_needing_maintenance: vehiclesNeedingService,
+          missed_maintenance_visits: maintenance.missedVisits,
+          last_missed_maintenance: maintenance.lastMissed,
           upcoming_bookings: upcoming.length,
           pending_requests: pendingCount,
           completed_services: completedCount

@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as WebBrowser from 'expo-web-browser';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import client from '@/api/client';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
@@ -100,8 +100,15 @@ const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://care.maskpro.ph/api
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ tab?: string }>();
   const { logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<'profile' | 'loyalty'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'loyalty'>(params.tab === 'loyalty' ? 'loyalty' : 'profile');
+
+  useEffect(() => {
+    if (params.tab === 'loyalty') {
+      setActiveTab('loyalty');
+    }
+  }, [params.tab]);
 
   // Profile data
   const [profile, setProfile] = useState<ProfileData | null>(null);

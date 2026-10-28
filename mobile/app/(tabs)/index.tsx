@@ -75,8 +75,12 @@ interface BookingRequest {
 interface Stats {
   total_vehicles: number;
   vehicles_needing_service: number;
+  vehicles_needing_maintenance?: number;
+  missed_maintenance_visits?: number;
+  last_missed_maintenance?: string | null;
   upcoming_bookings: number;
   pending_requests: number;
+  completed_services?: number;
 }
 
 interface Vehicle {
@@ -85,6 +89,53 @@ interface Vehicle {
   model: string;
   plate_no: string;
   photo?: string;
+  maintenance?: {
+    status: 'scheduled' | 'overdue' | 'due' | 'ok';
+    last_visit: string;
+    next_due: string;
+    missed_visits: number;
+    last_missed?: string | null;
+    next_booking?: string | null;
+  } | null;
+}
+
+interface LoyaltyCard {
+  id: number;
+  category: string;
+  service: string;
+  tier: string;
+  expiresAt: string | null;
+  visitsUsed: number;
+  visitsTotal: number;
+  stampsTotal?: number;
+  rewardsUnused: number;
+  bonusBalance: number;
+  vehicle?: string;
+  branch?: string;
+  qrLink?: string;
+  installLink?: string;
+  shortLink?: string;
+}
+
+const CATEGORY_META: Record<string, { label: string; icon: React.ComponentProps<typeof FontAwesome>['name']; colors: [string, string] }> = {
+  coating: { label: 'Nano Ceramic Coating', icon: 'shield', colors: ['#3b82f6', '#6366f1'] },
+  tint:    { label: 'Nano Ceramic Tint',    icon: 'sun-o', colors: ['#0ea5e9', '#38bdf8'] },
+  ppf:     { label: 'Paint Protection Film', icon: 'fire', colors: ['#ef4444', '#f97316'] },
+  wash:    { label: 'Care Wash',             icon: 'star', colors: ['#10b981', '#34d399'] },
+  gift:    { label: 'Gift Card',             icon: 'gift', colors: ['#8b5cf6', '#a78bfa'] },
+  other:   { label: 'Other',                 icon: 'file-text-o', colors: ['#64748b', '#94a3b8'] },
+};
+
+function getCounterLabel(category: string) {
+  switch (category) {
+    case 'coating':
+    case 'ppf':
+      return 'Credits Used';
+    case 'tint':
+      return 'Earned Points';
+    default:
+      return 'Visits Used';
+  }
 }
 
 export default function DashboardScreen() {
@@ -92,6 +143,7 @@ export default function DashboardScreen() {
   const router = useRouter();
   const [stats, setStats] = useState<Stats | null>(null);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [loyaltyCards, setLoyaltyCards] = useState<LoyaltyCard[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [requests, setRequests] = useState<BookingRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -150,17 +202,28 @@ export default function DashboardScreen() {
   const loadData = async () => {
     if (!user) return;
     try {
-      const [statsRes, vehiclesRes, bookingsRes] = await Promise.all([
+      const [statsRes, vehiclesRes, bookingsRes, loyaltyRes] = await Promise.all([
         client.get('/dashboard/stats'),
         client.get('/vehicles/list'),
         client.get('/bookings/list'),
+        client.get('/loyalty/cards').catch(() => ({ data: { data: { cards: [] } } })),
       ]);
       setStats(statsRes.data?.data?.stats || null);
-      setVehicles(vehiclesRes.data?.data?.vehicles || []);
+
+      // Enrich vehicles with maintenance status from stats if available
+      const statVehicles = statsRes.data?.data?.vehicles || [];
+      const maintMap = new Map(statVehicles.map((v: any) => [v.id, v.maintenance]));
+      const rawVehicles = vehiclesRes.data?.data?.vehicles || [];
+      const enrichedVehicles = rawVehicles.map((v: any) => ({
+        ...v,
+        maintenance: v.maintenance || maintMap.get(v.id) || null,
+      }));
+      setVehicles(enrichedVehicles);
       setBookings(bookingsRes.data?.data?.bookings || []);
       const reqList: BookingRequest[] =
         bookingsRes.data?.data?.requests || statsRes.data?.data?.pending_requests || [];
       setRequests(reqList);
+      setLoyaltyCards(loyaltyRes.data?.data?.cards || []);
     } catch (err: any) {
       if (err?.response?.status !== 401) {
         console.error('Dashboard load error:', err);
@@ -287,6 +350,16 @@ export default function DashboardScreen() {
     try {
       const d = new Date(dateStr);
       return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const formatFullDate = (dateStr?: string | null) => {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
     } catch {
       return dateStr;
     }
@@ -606,7 +679,9 @@ export default function DashboardScreen() {
               <FontAwesome name="wrench" size={18} color="#d97706" />
             </View>
           </View>
-          <Text style={styles.statsValue}>{stats?.vehicles_needing_service ?? 0}</Text>
+          <Text style={styles.statsValue}>
+            {stats?.vehicles_needing_maintenance ?? stats?.vehicles_needing_service ?? 0}
+          </Text>
           <Text style={styles.statsLabel}>Needs Service</Text>
         </View>
 
@@ -630,6 +705,56 @@ export default function DashboardScreen() {
           <Text style={styles.statsLabel}>Pending</Text>
         </View>
       </View>
+
+      {/* ─── NanoFix Maintenance Alert Widget ─── */}
+      {((stats?.vehicles_needing_maintenance ?? stats?.vehicles_needing_service ?? 0) > 0 ||
+        (stats?.missed_maintenance_visits || 0) > 0) && (
+        <View style={styles.maintenanceWidgetCard}>
+          <LinearGradient
+            colors={['#fffbeb', '#fef3c7']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.maintenanceWidgetGradient}
+          >
+            <View style={styles.maintenanceWidgetLeft}>
+              <View style={styles.maintenanceWidgetIconBadge}>
+                <FontAwesome name="shield" size={18} color="#ffffff" />
+              </View>
+              <View style={styles.maintenanceWidgetTextCol}>
+                <Text style={styles.maintenanceWidgetTitle}>
+                  {stats?.vehicles_needing_maintenance ?? stats?.vehicles_needing_service ?? 0}{' '}
+                  {(stats?.vehicles_needing_maintenance ?? stats?.vehicles_needing_service ?? 0) === 1
+                    ? 'Vehicle Needs'
+                    : 'Vehicles Needs'}{' '}
+                  NanoFix Maintenance
+                </Text>
+                {(stats?.missed_maintenance_visits || 0) > 0 && (
+                  <Text style={styles.maintenanceWidgetSubtitle}>
+                    {stats?.missed_maintenance_visits}{' '}
+                    {(stats?.missed_maintenance_visits || 0) === 1 ? 'Missed Visit' : 'Missed Visits'}
+                    {stats?.last_missed_maintenance
+                      ? ` (Last ${formatFullDate(stats.last_missed_maintenance)})`
+                      : ''}
+                  </Text>
+                )}
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.maintenanceWidgetBtn}
+              onPress={() => router.push('/(tabs)/bookings?openBooking=true' as any)}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={['#d97706', '#b45309']}
+                style={styles.maintenanceWidgetBtnBg}
+              >
+                <Text style={styles.maintenanceWidgetBtnText}>Book NanoFix</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </LinearGradient>
+        </View>
+      )}
 
       {/* ─── Pending Appointments Section (Top of Upcoming) ─── */}
       <View style={styles.sectionContainer}>
@@ -783,6 +908,18 @@ export default function DashboardScreen() {
                         {vehicle.make} {vehicle.model}
                       </Text>
                       <Text style={styles.vehicleCardPlate}>{vehicle.plate_no}</Text>
+                      {vehicle.maintenance?.status === 'overdue' && (
+                        <View style={styles.vehicleMaintBadgeOverdue}>
+                          <FontAwesome name="exclamation-circle" size={9} color="#dc2626" />
+                          <Text style={styles.vehicleMaintBadgeOverdueText}>NanoFix Overdue</Text>
+                        </View>
+                      )}
+                      {vehicle.maintenance?.status === 'due' && (
+                        <View style={styles.vehicleMaintBadgeDue}>
+                          <FontAwesome name="clock-o" size={9} color="#d97706" />
+                          <Text style={styles.vehicleMaintBadgeDueText}>NanoFix Due</Text>
+                        </View>
+                      )}
                     </View>
                   </View>
                   <View style={styles.vehicleCardActions}>
@@ -817,6 +954,97 @@ export default function DashboardScreen() {
             description="Add your first vehicle to start tracking services and booking appointments."
             actionText="Add Vehicle"
             onAction={() => router.push('/(tabs)/vehicles')}
+          />
+        )}
+      </View>
+
+      {/* ─── My Loyalty Cards Section ─── */}
+      <View style={styles.sectionContainer}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>My Loyalty Cards</Text>
+          {loyaltyCards.length > 0 && (
+            <TouchableOpacity
+              onPress={() => router.push('/(tabs)/profile?tab=loyalty' as any)}
+              activeOpacity={0.7}
+              style={styles.sectionHeaderRight}
+            >
+              <Text style={styles.sectionSeeAll}>See All</Text>
+              <FontAwesome name="angle-right" size={14} color="#4f46e5" />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {loyaltyCards.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.vehiclesScroll}
+          >
+            {loyaltyCards.map((card) => {
+              const catMeta = CATEGORY_META[card.category] || CATEGORY_META.other;
+              return (
+                <View key={card.id} style={styles.vehicleCardItem}>
+                  <View style={styles.vehicleCardHeader}>
+                    <LinearGradient
+                      colors={catMeta.colors}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.loyaltyIconBox}
+                    >
+                      <FontAwesome name={catMeta.icon} size={18} color="#ffffff" />
+                    </LinearGradient>
+                    <View style={styles.vehicleCardMeta}>
+                      <Text style={styles.vehicleCardName} numberOfLines={1}>
+                        {card.service || catMeta.label}
+                      </Text>
+                      <Text style={styles.vehicleCardPlate} numberOfLines={1}>
+                        {card.tier || 'Member Card'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.loyaltyCounterRow}>
+                    <Text style={styles.loyaltyCounterLabel}>{getCounterLabel(card.category)}</Text>
+                    <Text style={styles.loyaltyCounterValue}>
+                      {card.visitsUsed}
+                      {card.visitsTotal > 0 ? (
+                        <Text style={styles.loyaltyCounterTotal}> / {card.visitsTotal}</Text>
+                      ) : null}
+                    </Text>
+                  </View>
+
+                  <View style={styles.vehicleCardActions}>
+                    <TouchableOpacity
+                      style={styles.vehicleCardBtnOutline}
+                      onPress={() => router.push('/(tabs)/profile?tab=loyalty' as any)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.vehicleCardBtnOutlineText}>View Card</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.vehicleCardBtnGradient}
+                      onPress={() => router.push('/(tabs)/bookings?openBooking=true' as any)}
+                      activeOpacity={0.7}
+                    >
+                      <LinearGradient
+                        colors={catMeta.colors}
+                        style={styles.vehicleCardBtnGradientBg}
+                      >
+                        <Text style={styles.vehicleCardBtnGradientText}>Use Card</Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })}
+          </ScrollView>
+        ) : (
+          <EmptyState
+            icon="credit-card"
+            title="No loyalty cards yet"
+            description="Your warranty and maintenance loyalty cards will appear here once issued."
+            actionText="View Profile"
+            onAction={() => router.push('/(tabs)/profile?tab=loyalty' as any)}
           />
         )}
       </View>
@@ -1496,6 +1724,150 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#ffffff',
     fontWeight: '600',
+  },
+
+  // ─── NanoFix Maintenance Widget Styles ───
+  maintenanceWidgetCard: {
+    marginBottom: 20,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    shadowColor: '#d97706',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  maintenanceWidgetGradient: {
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  maintenanceWidgetLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  maintenanceWidgetIconBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: '#d97706',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  maintenanceWidgetTextCol: {
+    flex: 1,
+  },
+  maintenanceWidgetTitle: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#92400e',
+  },
+  maintenanceWidgetSubtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#b45309',
+    marginTop: 2,
+  },
+  maintenanceWidgetBtn: {
+    borderRadius: 8,
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  maintenanceWidgetBtnBg: {
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  maintenanceWidgetBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  // ─── Vehicle Maintenance Badges ───
+  vehicleMaintBadgeOverdue: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#fef2f2',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 4,
+    alignSelf: 'flex-start',
+  },
+  vehicleMaintBadgeOverdueText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#dc2626',
+  },
+  vehicleMaintBadgeDue: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#fffbeb',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 4,
+    alignSelf: 'flex-start',
+  },
+  vehicleMaintBadgeDueText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#d97706',
+  },
+
+  // ─── Loyalty Cards Horizontal Scroller ───
+  sectionHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginLeft: 'auto',
+  },
+  sectionSeeAll: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4f46e5',
+  },
+  loyaltyIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loyaltyCounterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  loyaltyCounterLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  loyaltyCounterValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  loyaltyCounterTotal: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#94a3b8',
   },
 
   // ─── Decline Reason Modal ───
