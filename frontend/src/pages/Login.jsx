@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
+import AiLoginModal from '../components/AiLoginModal';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -17,6 +18,7 @@ export default function Login() {
   const [success, setSuccess] = useState('');
   const [devOtp, setDevOtp] = useState('');
   const [formattedMobile, setFormattedMobile] = useState('');
+  const [showAiModal, setShowAiModal] = useState(false);
 
   const otpRefs = useRef([]);
   const mobileInputRef = useRef(null);
@@ -213,6 +215,26 @@ export default function Login() {
                   {loading ? <span className="spinner"></span> : 'Continue with Mobile'}
                 </button>
               </div>
+              <div style={{ marginTop: '16px', textAlign: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAiModal(true)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#0284c7',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <i className="fas fa-robot"></i>
+                  SMS Delayed or Unavailable? Verify with AI Helper
+                </button>
+              </div>
             </form>
           )}
 
@@ -249,6 +271,32 @@ export default function Login() {
                   disabled={loading || !allFilled}
                 >
                   {loading ? <span className="spinner"></span> : 'Verify & Continue'}
+                </button>
+              </div>
+
+              <div style={{ marginTop: '4px', marginBottom: '12px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAiModal(true)}
+                  style={{
+                    width: '100%',
+                    padding: '11px 16px',
+                    borderRadius: '12px',
+                    border: '1px solid #bae6fd',
+                    backgroundColor: '#f0f9ff',
+                    color: '#0284c7',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <i className="fas fa-robot" style={{ color: '#0284c7' }}></i>
+                  SMS Delayed? Login with AI Assistant
                 </button>
               </div>
 
@@ -308,6 +356,13 @@ export default function Login() {
             </a>
           </p>
         </div>
+
+        {/* AI Helper Login Modal */}
+        <AiLoginModal
+          isOpen={showAiModal}
+          onClose={() => setShowAiModal(false)}
+          initialMobile={mobile}
+        />
       </div>
     </div>
   );

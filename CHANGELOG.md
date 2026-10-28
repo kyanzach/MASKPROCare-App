@@ -1,6 +1,26 @@
 # Changelog
 
-## [v1.13.14] — 2026-10-28
+## [v1.14.0] — 2026-10-28
+### Added
+- **AI Helper Login (Izumi Verification Assistant) (`server/routes/aiAuth.js`, `frontend/src/components/AiLoginModal.jsx`)**:
+  - Implemented interactive conversational identity verification for elderly or SMS-delayed customers.
+  - Verifies 5 key identifiers: Full Name (25%), Booking Month (25%), Booked Service (20%), Vehicle Model (15%), and Registered Mobile (15%).
+  - Configured 90% passing confidence threshold with phonetic and typo tolerance for full name discrepancies.
+  - Generates secure JWT token upon verification and logs user into MaskPro Care immediately.
+- **Dedicated AI Login Security Monitor in Unify (`care_ai_login_audit.php`)**:
+  - Administrative review interface in Unify under Customers (`care_ai_login_audit.php`).
+  - Displays real-time session logs, confidence score breakdowns, IP addresses, devices, and anti-fishing status.
+  - Includes manual IP block and one-click unblock controls, inspect modal with Q&A transcripts, and blacklist management.
+- **Anti-Fishing & Automated IP Blocking Engine (`care_ai_login_logs`, `care_blocked_ips`)**:
+  - Automatically flags and blacklists IP addresses attempting to verify multiple customer names within 2 hours.
+  - Rate-limits failed verification attempts (auto-blocks after 5 failures in 30 minutes).
+
+### Changed
+- **Extended OTP Validity to 15 Minutes (`server/routes/auth.js`)**:
+  - Increased OTP lifetime from 5 minutes (300s) to 15 minutes (900s) to accommodate carrier network delays.
+  - Updated SMS dispatch template to state "Valid for 15 minutes".
+- **Login Screen AI Assistant Integration (`frontend/src/pages/Login.jsx`)**:
+  - Added "SMS Delayed? Login with AI Assistant" trigger on both mobile and OTP screens.
 ### Fixed
 - **Unify Booking Finalization Fatal 500 Error (`/var/www/unify/booking_requests.php`)**:
   - Fixed PHP Fatal `ArgumentCountError` at line 214 and line 284: `bind_param("isss", ...)` had 4 type characters for only 3 bound parameters (`customer_id`, `notif_title`, `notif_msg`). Corrected type definition string to `"iss"`.

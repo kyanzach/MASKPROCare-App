@@ -16,7 +16,7 @@ const { sendOtpSms } = require('../services/sms');
 const { standardizeMobile, getLast10, isValidPhMobile } = require('../utils/mobile');
 
 const JWT_EXPIRY = parseInt(process.env.JWT_EXPIRY, 10) || 86400;
-const OTP_EXPIRY_SECONDS = 300; // 5 minutes
+const OTP_EXPIRY_SECONDS = 900; // 15 minutes
 const DEFAULT_BRANCH_ID = 1;
 
 // ─── POST /api/auth/login ─────────────────────────────────────────

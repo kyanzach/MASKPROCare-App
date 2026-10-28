@@ -37,6 +37,7 @@ app.use('/api/uploads/photos', express.static(path.join(__dirname, 'uploads', 'p
 
 // --- Routes ---
 const authRoutes = require('./routes/auth');
+const aiAuthRoutes = require('./routes/aiAuth');
 const vehicleRoutes = require('./routes/vehicles');
 const bookingRoutes = require('./routes/bookings');
 const dashboardRoutes = require('./routes/dashboard');
@@ -48,6 +49,7 @@ const adminRoutes = require('./routes/admin');
 const communityRoutes = require('./routes/community');
 
 app.use('/api/auth', authRoutes);
+app.use('/api/auth/ai-login', aiAuthRoutes);
 app.use('/api/vehicles', vehicleRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/dashboard', dashboardRoutes);
