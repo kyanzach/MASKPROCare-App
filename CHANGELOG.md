@@ -1,5 +1,16 @@
 # Changelog
 
+## [v1.14.4] — 2026-10-28
+### Fixed & Improved
+- **Collapsible Booking Request Cards & Timeline in Unify (`booking_requests.php`, `booking_request_card.php`)**:
+  - Made every booking request card collapsible by default into a compact, scannable 1-line summary bar (`#ID`, Customer avatar + Name + Mobile, Vehicle + Plate chip, Service chip, Booking Date/Time, Timeline count pill, Status badge, and `Details / Collapse` toggle).
+  - Added an **Expand All / Collapse All** button on the tab bar header to expand or collapse all entries in the active tab with one click.
+  - Made long **Negotiation & Activity Timelines** collapsible inside expanded cards (displaying the latest 2 events immediately and hiding older events behind a `"Show X earlier events"` toggle button).
+  - Deep-linked requests (`?request_id=X` from Floating Smart Toast or `View` in `All Requests`) automatically expand and scroll into view.
+- **Fixed False `1 Need Action` Badge on `Negotiating (0)` Tab (`booking_requests.php`)**:
+  - Separated `$nego_action_count` (`status IN ('negotiating', 'waitlisted') AND offer_status IN ('declined', 'countered')`) from `$followup_count` so `Negotiating (0)` no longer shows a false `1 Need Action` badge when an `Approved` booking has a pending customer cancellation request (`1 Cancel Req`).
+  - Added total approved count to the `Approved (X)` tab header and updated the `Follow-ups Needed` KPI widget click target to route to `Approved` when a cancellation request is pending.
+
 ## [v1.14.3] — 2026-10-28
 ### Fixed & Improved
 - **Clean Single-Badge Cancellation UX (`frontend/src/pages/Bookings.jsx`, `mobile/app/(tabs)/bookings.tsx`)**:

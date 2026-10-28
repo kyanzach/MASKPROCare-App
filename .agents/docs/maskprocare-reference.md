@@ -350,4 +350,9 @@ ssh root@167.71.217.49 'certbot --nginx -d care.maskpro.ph'
   - Vehicle Photo: `https://care.maskpro.ph/<path>` (e.g. `uploads/vehicles/...`) served directly from Care root, NOT via `/api/`.
 - **Bottom Navigation Layout:** Placed Aftercare (`services`) between Vehicles and Community.
 - **My Loyalty Cards Widget:** Replicated "My Vehicles" scroller style across mobile and web with category metadata and direct deep-linking.
+- **Unify Collapsible Request Cards & Cancellation Sync (`v1.14.3–v1.14.4`):**
+  - Customer cancellation requests on approved bookings sync `CANCEL_REQUESTED: <reason>` to both `bookings` and `booking_requests`, surfacing in Unify's Floating Smart Toast (`care_booking_requests_alert.php`) and `Approved` tab (`1 Cancel Req` badge) with 1-click **Confirm Cancellation & Send SMS** or **Keep Booking**.
+  - Every card in `booking_requests.php` / `booking_request_card.php` renders a compact collapsible 1-line summary bar (`.br-card-summary`) and collapsible timeline (`> 2` events) with an **Expand All / Collapse All** toolbar button.
+  - `Negotiating` tab badge uses dedicated `$nego_action_count` instead of `$followup_count` to prevent false `Need Action` badges when `Negotiating` is empty.
+
 
