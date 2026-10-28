@@ -1,5 +1,16 @@
 # Changelog
 
+## [v1.14.3] — 2026-10-28
+### Fixed & Improved
+- **Clean Single-Badge Cancellation UX (`frontend/src/pages/Bookings.jsx`, `mobile/app/(tabs)/bookings.tsx`)**:
+  - Removed redundant multi-line amber notice box under the `Service` column (`s1`) that duplicated the `"Cancellation Requested"` status pill and wrapped into 9 vertical lines.
+  - Shortened post-action feedback message to concise single-line text (`"Cancellation requested — pending branch review."`).
+- **Unify Booking Requests & Floating Smart Toast Cancellation Sync (`server/routes/bookings.js`, `booking_requests.php`, `booking_request_card.php`, `includes/care_booking_requests_alert.php`, `notification_api.php`)**:
+  - Synced customer cancellation requests (`CANCEL_REQUESTED: <reason>`) from `bookings` to `booking_requests` (`s2`) so approved cards in `booking_requests.php` immediately display the `"Cancellation Requested"` badge, timeline event, customer reason, and `1 Cancel Req` tab badge.
+  - Added 1-click **"Confirm Cancellation & Send SMS"** and **"Keep Booking (Dismiss Request)"** agent actions directly on the card in `booking_requests.php`, automatically cancelling the appointment in `bookings`, freeing the slot, updating `sms_reminders`, and sending Unify's official SMS cancellation confirmation.
+  - Updated Unify Floating Smart Toast (`care_booking_requests_alert.php` & `notification_api.php?action=care_alerts`) to surface pending cancellation requests with customer reason and deep-link directly to `booking_requests.php?tab=approved&request_id=X`.
+  - Prevented duplicate cancelled rows in `GET /api/bookings/list` by only returning `booking_requests` with `status = 'cancelled'` when `approved_at IS NULL`.
+
 ## [v1.14.2] — 2026-10-28
 ### Added
 - **Booking Cancellation Approval Workflow (Option A) (`server/routes/bookings.js`, `frontend/src/pages/Bookings.jsx`, `mobile/app/(tabs)/bookings.tsx`, `mobile/components/ui/StatusBadge.tsx`)**:

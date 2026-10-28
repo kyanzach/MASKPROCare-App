@@ -428,7 +428,7 @@ export default function BookingsScreen() {
       } else {
         const res = await client.post('/bookings/cancel', { type: 'booking', booking_id: cancelTarget.id, reason });
         setCancelTarget(null);
-        showPrompt('success', 'Cancellation Requested', res.data?.message || 'Your request has been submitted. Our branch will review and send you an SMS confirmation shortly.');
+        showPrompt('success', 'Cancellation Requested', res.data?.message || 'Pending branch review and SMS confirmation.');
       }
       loadData();
     } catch (err: any) {
@@ -774,16 +774,6 @@ export default function BookingsScreen() {
                           </Text>
                         </TouchableOpacity>
                       ) : null}
-                    </View>
-                  ) : null}
-
-                  {/* Cancellation Requested Notice */}
-                  {item.status === 'cancel_requested' ? (
-                    <View style={styles.cancelRequestedBanner}>
-                      <FontAwesome name="clock-o" size={12} color="#b45309" style={{ marginRight: 6 }} />
-                      <Text style={styles.cancelRequestedBannerText}>
-                        Cancellation request submitted — Our branch will review and send an SMS confirmation shortly.
-                      </Text>
                     </View>
                   ) : null}
 

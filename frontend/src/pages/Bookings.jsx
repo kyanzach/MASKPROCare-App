@@ -287,7 +287,7 @@ export default function Bookings() {
         setSuccess('Booking request cancelled successfully.');
       } else {
         res = await api.post('/bookings/cancel', { type: 'booking', booking_id: cancelTarget.id, reason });
-        setSuccess(res.data?.message || 'Cancellation request submitted. Our branch will review and send you an SMS confirmation shortly.');
+        setSuccess(res.data?.message || 'Cancellation requested — pending branch review.');
       }
       setCancelTarget(null);
       loadData();
@@ -526,16 +526,6 @@ export default function Bookings() {
                                 {item.counter_date ? 'Change Preferred Date' : 'Propose a Preferred Date'}
                               </button>
                             )}
-                          </div>
-                        )}
-                        {item.status === 'cancel_requested' && (
-                          <div style={{
-                            fontSize: '12px', padding: '7px 10px', borderRadius: '8px', marginTop: '6px',
-                            background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e',
-                            display: 'flex', alignItems: 'center', gap: '6px',
-                          }}>
-                            <i className="fas fa-clock" style={{ color: '#d97706' }}></i>
-                            <span>Cancellation request submitted — Our branch will review and send an SMS confirmation shortly.</span>
                           </div>
                         )}
                       </td>

@@ -227,12 +227,18 @@ ssh root@167.71.217.49 'certbot --nginx -d care.maskpro.ph'
 - **Phase 2 (React Web):** ✅ Complete — Login, Dashboard, Vehicles, Bookings, Profile, Notifications
 - **Phase 3 (PHP→Express Rewrite):** ✅ Complete — 22 endpoints in 7 route files, SMS service, capacity helper
 - **Phase 4 (Deploy to Droplet):** ✅ Complete — deployed since 2026-03-13. PM2 `maskpro-care` online, Nginx + SSL (Let's Encrypt), `.env` configured, `care.maskpro.ph` live
-- **Phase 5 (React Native):** Not started
-- **Phase 6 (App Stores):** Not started
+- **Phase 5 (React Native):** ✅ Complete — Expo SDK 54 (`mobile/`), full feature parity (Login, 6-box OTP, Dashboard, Bookings + Counter-Date + Option A Cancellation, Vehicles + Lightbox, Aftercare, Community FlatList + SOS, Shop, Profile + Loyalty Cards, Push Notifications, Admin Impersonation)
+- **Phase 6 (App Stores):** In Progress — 6-pillar `mobile-audit` passed, OS permissions hardened, reviewer demo bypass (`09852779777` / `777777`) active
 
 ---
 
 ## 📝 Session Learnings Log
+
+### 2026-10-28: Option A Cancellation Sync to Unify & Anti-Headache UX (v1.14.3)
+- **Redundant Notice Removal:** Removed the multi-line `"Cancellation request submitted — Our branch will review..."` box from the `Service` column in `Bookings.jsx` and `bookings.tsx` since the `Status` column/header already shows the amber `Cancellation Requested` badge.
+- **Unify `booking_requests` Sync on Booking Cancel:** `POST /api/bookings/cancel` (`type: 'booking'`) now syncs `cancellation_reason` and `CANCEL_REQUESTED:` note to the corresponding `booking_requests` row (creating an approved request record if the booking originated directly in Unify).
+- **Unify Floating Smart Toast & Card Actions:** `includes/care_booking_requests_alert.php` and `notification_api.php?action=care_alerts` include `(br.status = 'approved' AND br.notes LIKE '%CANCEL_REQUESTED:%')` with a state-based snooze signature (`request_id:status:offer_status:cancel_requested`). `booking_request_card.php` renders the timeline event, amber alert, and 1-click `Confirm Cancellation & Send SMS` / `Keep Booking` actions.
+- **Duplicate Cancelled Prevention:** `GET /api/bookings/list` filters `booking_requests` where `status = 'cancelled' AND approved_at IS NULL` so approved bookings that are later cancelled do not appear twice in `My Bookings`.
 
 ### 2026-10-28: Counter-Date, Finalize-by-Phone & Waitlist (v1.13.10)
 - **Schema:** `booking_requests.status` ENUM = `pending, approved, rejected, cancelled, negotiating, waitlisted`. New cols `counter_date DATETIME NULL` (client's preferred date, never stored in `offered_date`) and `waitlist_id INT NULL` (FK-ish → `nanofix_waitlist.id`).

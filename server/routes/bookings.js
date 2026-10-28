@@ -262,7 +262,11 @@ router.get('/list', async (req, res) => {
         FROM booking_requests br
         LEFT JOIN vehicles v ON br.customer_vehicle_id = v.id
         LEFT JOIN booking_request_services brs ON br.request_id = brs.request_id
-        WHERE br.customer_id = ? AND br.status IN ('pending', 'cancelled', 'rejected', 'negotiating', 'waitlisted')
+        WHERE br.customer_id = ?
+          AND (
+            br.status IN ('pending', 'rejected', 'negotiating', 'waitlisted')
+            OR (br.status = 'cancelled' AND br.approved_at IS NULL)
+          )
         GROUP BY br.request_id
         ORDER BY br.time_added DESC
       `, [customerId]);
@@ -529,7 +533,8 @@ router.post('/cancel', async (req, res) => {
       }
 
       const [bookings] = await pool.query(
-        `SELECT b.booking_id, b.booking_date, b.notes, b.branch_id, v.make, v.model,
+        `SELECT b.booking_id, b.booking_date, b.customer_vehicle_id, b.latest_service, b.notes, b.branch_id,
+                v.make, v.model,
                 GROUP_CONCAT(DISTINCT bst.service_name SEPARATOR ', ') as service_names
          FROM bookings b
          LEFT JOIN vehicles v ON b.customer_vehicle_id = v.id
@@ -562,6 +567,43 @@ router.post('/cancel', async (req, res) => {
 
       await pool.query("UPDATE bookings SET notes = ? WHERE booking_id = ?", [updatedNotes, bId]);
 
+      // Sync cancellation request to booking_requests so it surfaces in Unify booking_requests.php & Floating Smart Toast
+      let linkedReqId = null;
+      try {
+        const [reqRows] = await pool.query(
+          `SELECT request_id, notes FROM booking_requests
+           WHERE customer_id = ? AND customer_vehicle_id = ? AND status = 'approved'
+           ORDER BY (DATE(COALESCE(offered_date, booking_date)) = DATE(?)) DESC, request_id DESC
+           LIMIT 1`,
+          [req.user.customer_id, booking.customer_vehicle_id, booking.booking_date]
+        );
+        if (reqRows.length > 0) {
+          linkedReqId = reqRows[0].request_id;
+          const reqNotes = reqRows[0].notes
+            ? (reqRows[0].notes.includes('CANCEL_REQUESTED:') ? reqRows[0].notes : `${reqRows[0].notes}\n${cancelNote}`)
+            : cancelNote;
+          await pool.query(
+            "UPDATE booking_requests SET cancellation_reason = ?, notes = ? WHERE request_id = ?",
+            [cancelReason, reqNotes, linkedReqId]
+          );
+        } else {
+          const svcName = booking.service_names || booking.latest_service || 'Service';
+          const [insReq] = await pool.query(
+            `INSERT INTO booking_requests
+               (branch_id, booking_date, customer_id, customer_vehicle_id, latest_service, status, cancellation_reason, notes, approved_at, time_added)
+             VALUES (?, ?, ?, ?, ?, 'approved', ?, ?, NOW(), NOW())`,
+            [booking.branch_id || req.user.branch_id || 1, booking.booking_date, req.user.customer_id, booking.customer_vehicle_id, svcName, cancelReason, cancelNote]
+          );
+          linkedReqId = insReq.insertId;
+          await pool.query(
+            "INSERT INTO booking_request_services (request_id, service_name, price) VALUES (?, ?, 0)",
+            [linkedReqId, svcName]
+          );
+        }
+      } catch (syncErr) {
+        console.warn('Sync cancel request to booking_requests error:', syncErr);
+      }
+
       try {
         const [custRows] = await pool.query("SELECT full_name FROM customers WHERE id = ?", [req.user.customer_id]);
         const custName = custRows[0]?.full_name || 'Customer';
@@ -571,17 +613,17 @@ router.post('/cancel', async (req, res) => {
         await createCustomerNotification(
           req.user.customer_id,
           'cancellation_requested',
-          'Cancellation Request Submitted',
-          `Your request to cancel appointment #${bId} (${vInfo}) has been submitted. Our branch agent will review your request and send an SMS confirmation shortly.`
+          'Cancellation Requested',
+          `Cancellation requested for appointment #${bId} (${vInfo}). Pending branch review.`
         );
 
         await notifyUnifyStaff(
           booking.branch_id || req.user.branch_id,
           'care_booking_cancel_request',
           `Cancellation Request: ${custName}`,
-          `${custName} requested cancellation for booking #${bId} (${vInfo} on ${dateStr}). Reason: "${cancelReason}". Please review and confirm in Unify.`,
-          'bookings.php',
-          bId
+          `${custName} requested cancellation for booking #${bId} (${vInfo} on ${dateStr}). Reason: "${cancelReason}".`,
+          linkedReqId ? `booking_requests.php?tab=approved&request_id=${linkedReqId}` : 'booking_requests.php?tab=approved',
+          linkedReqId || bId
         );
       } catch (e) {
         console.warn('Cancel notification error:', e);
@@ -589,8 +631,8 @@ router.post('/cancel', async (req, res) => {
 
       return res.json({
         success: true,
-        data: { status: 'cancel_requested' },
-        message: 'Cancellation request submitted. Our branch will review and send you an SMS confirmation shortly.',
+        data: { status: 'cancel_requested', request_id: linkedReqId },
+        message: 'Cancellation requested — pending branch review.',
         errors: []
       });
     }
