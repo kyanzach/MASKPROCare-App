@@ -1,5 +1,15 @@
 # Changelog
 
+## [v1.14.9] — 2026-10-28
+### Added, Changed & Fixed
+- **Interactive Hotel/Flight-Style Calendar Date Picker & Web-Matched LTO Wording (`mobile/app/(tabs)/vehicles.tsx`, `frontend/src/pages/Vehicles.jsx`)**:
+  - Replaced manual date typing (`YYYY-MM-DD` text input on Mobile and browser `<input type="date">` on Web) with a zero-typing **Hotel/Flight-Style Interactive Calendar Date Picker** modal featuring Month/Year quick-jump grids, a 7-column day grid, and quick `Today` / `Clear` actions.
+  - Updated the Mobile Add/Edit Vehicle Modal (`mobile/app/(tabs)/vehicles.tsx`) to match the Web layout and wording: side-by-side `Color` + `Vehicle Registration Date` columns, the blue bell LTO renewal explanation banner (`"Enter your vehicle's registration date and we'll automatically calculate your next renewal — the first 3 years are free in the Philippines, then it's annual. We'll remind you before it's due."`), and Web-matched footer buttons (`Delete Vehicle`, `Cancel`, `Update Vehicle` / `Add Vehicle`).
+- **Vehicle Photo Tap Opens Edit Modal Instead of Lightbox (`mobile/app/(tabs)/vehicles.tsx`, `frontend/src/pages/Vehicles.jsx`)**:
+  - Updated tapping/clicking a vehicle card's photo on both Mobile and Web to open the **Edit Vehicle Modal** (`openEdit(v)`) instead of the zoom lightbox, and removed the `View` / `Tap to view` magnifying glass badge.
+- **Persistent Header & In-Memory Logo on iOS (`mobile/app/(tabs)/_layout.tsx`, `mobile/components/ui/TopHeader.tsx`, `mobile/constants/logoBase64.ts`)**:
+  - Mounted `<TopHeader />` once at the root of `TabLayout` instead of per-tab and embedded `maskpro_logo.png` as an inline base64 URI so the MaskPro Care header logo never flickers or disappears when switching to the `Vehicles` tab on iPhone.
+
 ## [v1.14.8] — 2026-10-28
 ### Fixed
 - **Exclude Cancelled Appointments from Dashboard "Upcoming Appointments" (`mobile/app/(tabs)/index.tsx`, `frontend/src/pages/Dashboard.jsx`, `server/routes/dashboard.js`)**:

@@ -115,6 +115,30 @@ interface Vehicle {
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://care.maskpro.ph/api';
 
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DAY_HEADERS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+function formatDisplayDate(ymd: string) {
+  if (!ymd) return '';
+  const parts = ymd.split('-');
+  if (parts.length !== 3) return ymd;
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10) - 1;
+  const d = parseInt(parts[2], 10);
+  if (isNaN(y) || isNaN(m) || isNaN(d) || m < 0 || m > 11) return ymd;
+  return `${SHORT_MONTHS[m]} ${d}, ${y}`;
+}
+
+function toYMD(year: number, monthIndex: number, day: number) {
+  const mm = String(monthIndex + 1).padStart(2, '0');
+  const dd = String(day).padStart(2, '0');
+  return `${year}-${mm}-${dd}`;
+}
+
 export default function VehiclesScreen() {
   const router = useRouter();
   const { vehicle_id } = useLocalSearchParams<{ vehicle_id?: string }>();
@@ -145,6 +169,49 @@ export default function VehiclesScreen() {
   // Photo states for modal
   const [modalPhotoUri, setModalPhotoUri] = useState<string | null>(null);
   const [uploadingId, setUploadingId] = useState<number | null>(null);
+
+  // Hotel/Flight-Style Interactive Calendar Picker state
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showYearMonthJump, setShowYearMonthJump] = useState(false);
+  const [calYear, setCalYear] = useState(() => new Date().getFullYear());
+  const [calMonth, setCalMonth] = useState(() => new Date().getMonth());
+
+  const openDatePicker = () => {
+    const existing = form.registration_date;
+    if (existing && /^\d{4}-\d{2}-\d{2}$/.test(existing)) {
+      const [y, m] = existing.split('-').map((n) => parseInt(n, 10));
+      if (!isNaN(y) && !isNaN(m)) {
+        setCalYear(y);
+        setCalMonth(m - 1);
+      }
+    } else {
+      const now = new Date();
+      setCalYear(now.getFullYear());
+      setCalMonth(now.getMonth());
+    }
+    setShowYearMonthJump(false);
+    setShowDatePicker(true);
+  };
+
+  const stepCalendarMonth = (delta: number) => {
+    let nextMonth = calMonth + delta;
+    let nextYear = calYear;
+    if (nextMonth < 0) {
+      nextMonth = 11;
+      nextYear -= 1;
+    } else if (nextMonth > 11) {
+      nextMonth = 0;
+      nextYear += 1;
+    }
+    setCalMonth(nextMonth);
+    setCalYear(nextYear);
+  };
+
+  const selectCalendarDay = (day: number) => {
+    const ymd = toYMD(calYear, calMonth, day);
+    setForm((prev) => ({ ...prev, registration_date: ymd }));
+    setShowDatePicker(false);
+  };
 
   const loadVehicles = async () => {
     try {
@@ -373,14 +440,14 @@ export default function VehiclesScreen() {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#4f46e5']} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#2563eb']} />
         }
       >
         <View style={styles.header}>
           <Text style={styles.headerTitle}>My Vehicles</Text>
           <TouchableOpacity style={styles.addButton} onPress={openAdd} activeOpacity={0.8}>
             <LinearGradient
-              colors={['#4f46e5', '#6366f1']}
+              colors={['#2563eb', '#1d4ed8']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.addButtonGradient}
@@ -415,19 +482,9 @@ export default function VehiclesScreen() {
                         <TouchableOpacity
                           style={styles.photoTouchArea}
                           activeOpacity={0.9}
-                          onPress={() =>
-                            setViewingPhoto({
-                              url: photoUrl,
-                              title: `${v.make} ${v.model}`,
-                              plate: v.plate_no || 'No Plate Number',
-                            })
-                          }
+                          onPress={() => openEdit(v)}
                         >
                           <Image source={{ uri: photoUrl }} style={styles.photo} resizeMode="cover" />
-                          <View style={styles.photoExpandBadge}>
-                            <FontAwesome name="search-plus" size={11} color="#ffffff" />
-                            <Text style={styles.photoExpandText}>Tap to view</Text>
-                          </View>
                         </TouchableOpacity>
 
                         {/* Camera change button */}
@@ -545,15 +602,30 @@ export default function VehiclesScreen() {
             <ScrollView contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled">
 
               {/* Photo Selector */}
-              <TouchableOpacity style={styles.modalPhotoSelector} onPress={handlePickImage}>
+              <TouchableOpacity style={styles.modalPhotoSelector} onPress={handlePickImage} activeOpacity={0.85}>
                 {modalPhotoUri ? (
-                  <Image source={{ uri: modalPhotoUri }} style={styles.modalPhoto} resizeMode="cover" />
+                  <>
+                    <Image source={{ uri: modalPhotoUri }} style={styles.modalPhoto} resizeMode="cover" />
+                    <View style={styles.modalPhotoChangeBadge}>
+                      <FontAwesome name="camera" size={10} color="#ffffff" />
+                      <Text style={styles.modalPhotoChangeText}>Change</Text>
+                    </View>
+                  </>
                 ) : editVehicle?.photo ? (
-                  <Image source={{ uri: getPhotoUrl(editVehicle.photo) || '' }} style={styles.modalPhoto} resizeMode="cover" />
+                  <>
+                    <Image source={{ uri: getPhotoUrl(editVehicle.photo) || '' }} style={styles.modalPhoto} resizeMode="cover" />
+                    <View style={styles.modalPhotoChangeBadge}>
+                      <FontAwesome name="camera" size={10} color="#ffffff" />
+                      <Text style={styles.modalPhotoChangeText}>Change</Text>
+                    </View>
+                  </>
                 ) : (
                   <View style={styles.modalPhotoPlaceholder}>
-                    <FontAwesome name="camera" size={24} color="#6b7280" />
-                    <Text style={styles.modalPhotoText}>Select Vehicle Photo</Text>
+                    <FontAwesome name="camera" size={26} color="#94a3b8" />
+                    <Text style={styles.modalPhotoText}>
+                      {editVehicle ? 'Tap to change photo' : 'Tap to add a photo'}
+                    </Text>
+                    <Text style={styles.modalPhotoSubtext}>JPEG, PNG, or WebP</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -563,7 +635,8 @@ export default function VehiclesScreen() {
                 <Text style={styles.inputLabel}>Make *</Text>
                 <TextInput
                   style={styles.textInput}
-                  placeholder="e.g. Toyota, Honda"
+                  placeholder="e.g. Toyota"
+                  placeholderTextColor="#9ca3af"
                   value={form.make}
                   onChangeText={(val) => setForm({ ...form, make: val })}
                 />
@@ -573,7 +646,8 @@ export default function VehiclesScreen() {
                 <Text style={styles.inputLabel}>Model *</Text>
                 <TextInput
                   style={styles.textInput}
-                  placeholder="e.g. Vios, Civic, Fortuner"
+                  placeholder="e.g. Innova"
+                  placeholderTextColor="#9ca3af"
                   value={form.model}
                   onChangeText={(val) => setForm({ ...form, model: val })}
                 />
@@ -583,64 +657,332 @@ export default function VehiclesScreen() {
                 <Text style={styles.inputLabel}>Plate Number</Text>
                 <TextInput
                   style={styles.textInput}
-                  placeholder="e.g. ABC 1234 / GE1234"
+                  placeholder="e.g. ABC 1234"
+                  placeholderTextColor="#9ca3af"
                   autoCapitalize="characters"
                   value={form.plate_no}
                   onChangeText={(val) => setForm({ ...form, plate_no: val })}
                 />
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Color</Text>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="e.g. White, Black, Red"
-                  value={form.color}
-                  onChangeText={(val) => setForm({ ...form, color: val })}
-                />
+              {/* Side-by-Side Row: Color + Vehicle Registration Date (Matches Web) */}
+              <View style={styles.twoColRow}>
+                <View style={[styles.inputGroup, styles.colHalf]}>
+                  <Text style={styles.inputLabel} numberOfLines={1}>Color</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="e.g. White"
+                    placeholderTextColor="#9ca3af"
+                    value={form.color}
+                    onChangeText={(val) => setForm({ ...form, color: val })}
+                  />
+                </View>
+
+                <View style={[styles.inputGroup, styles.colHalf]}>
+                  <Text style={styles.inputLabel} numberOfLines={1} adjustsFontSizeToFit>
+                    Vehicle Registration Date
+                  </Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.datePickerTrigger,
+                      form.registration_date ? styles.datePickerTriggerActive : null,
+                    ]}
+                    onPress={openDatePicker}
+                    activeOpacity={0.75}
+                  >
+                    <FontAwesome
+                      name="calendar"
+                      size={13}
+                      color={form.registration_date ? '#2563eb' : '#64748b'}
+                      style={{ marginRight: 7 }}
+                    />
+                    <Text
+                      style={[
+                        styles.datePickerTriggerText,
+                        !form.registration_date && styles.datePickerPlaceholder,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {form.registration_date ? formatDisplayDate(form.registration_date) : 'Select date'}
+                    </Text>
+                    {form.registration_date ? (
+                      <TouchableOpacity
+                        onPress={() => setForm({ ...form, registration_date: '' })}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        style={{ marginLeft: 4 }}
+                      >
+                        <FontAwesome name="times-circle" size={14} color="#94a3b8" />
+                      </TouchableOpacity>
+                    ) : (
+                      <FontAwesome name="chevron-down" size={10} color="#94a3b8" style={{ marginLeft: 4 }} />
+                    )}
+                  </TouchableOpacity>
+                </View>
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Registration Date (YYYY-MM-DD)</Text>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="YYYY-MM-DD (e.g. 2024-05-25)"
-                  value={form.registration_date}
-                  onChangeText={(val) => setForm({ ...form, registration_date: val })}
-                />
-                <Text style={styles.inputHelper}>
-                  Used to notify you about annual LTO registration renewals.
+              {/* Web-Matched LTO Registration Renewal Footnote Box */}
+              <View style={styles.ltoFootnoteBox}>
+                <FontAwesome name="bell" size={13} color="#3b82f6" style={styles.ltoFootnoteIcon} />
+                <Text style={styles.ltoFootnoteText}>
+                  Enter your vehicle's registration date and we'll automatically calculate your next renewal — the first 3 years are free in the Philippines, then it's annual. We'll remind you before it's due.
                 </Text>
               </View>
 
-              {/* Action buttons inside form */}
-              <View style={styles.modalActions}>
+              {/* Footer Actions (Matches Web: Delete Vehicle on left, Cancel + Update/Add Vehicle on right) */}
+              <View style={styles.modalFooterBar}>
                 {editVehicle ? (
                   <TouchableOpacity
-                    style={styles.deleteButton}
+                    style={styles.deleteLinkBtn}
                     onPress={handleDeleteFromModal}
                     disabled={saving}
+                    activeOpacity={0.7}
                   >
-                    <FontAwesome name="trash" size={14} color="#ef4444" style={styles.actionBtnIcon} />
-                    <Text style={styles.deleteButtonText}>Delete</Text>
+                    <FontAwesome name="trash-o" size={13} color="#ef4444" style={{ marginRight: 5 }} />
+                    <Text style={styles.deleteLinkText} numberOfLines={1}>Delete Vehicle</Text>
                   </TouchableOpacity>
-                ) : null}
+                ) : (
+                  <View />
+                )}
 
-                <TouchableOpacity
-                  style={[styles.saveButton, { flex: editVehicle ? 2 : 1 }]}
-                  onPress={handleSubmit}
-                  disabled={saving}
-                >
-                  {saving ? (
-                    <ActivityIndicator size="small" color="#ffffff" />
-                  ) : (
-                    <Text style={styles.saveButtonText}>Save Vehicle</Text>
-                  )}
-                </TouchableOpacity>
+                <View style={styles.modalRightBtns}>
+                  <TouchableOpacity
+                    style={styles.cancelOutlineBtn}
+                    onPress={() => setShowModal(false)}
+                    disabled={saving}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={styles.cancelOutlineText} numberOfLines={1}>Cancel</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.savePrimaryBtn}
+                    onPress={handleSubmit}
+                    disabled={saving}
+                    activeOpacity={0.85}
+                  >
+                    {saving ? (
+                      <ActivityIndicator size="small" color="#ffffff" />
+                    ) : (
+                      <Text style={styles.savePrimaryText} numberOfLines={1}>
+                        {editVehicle ? 'Update Vehicle' : 'Add Vehicle'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
               </View>
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
+
+        {/* HOTEL / FLIGHT-STYLE INTERACTIVE CALENDAR DATE PICKER OVERLAY */}
+        {showDatePicker && (() => {
+          const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+          const firstDayOfWeek = new Date(calYear, calMonth, 1).getDay();
+          const today = new Date();
+          const todayYMD = toYMD(today.getFullYear(), today.getMonth(), today.getDate());
+          const currentYear = today.getFullYear();
+          const years: number[] = [];
+          for (let y = currentYear + 1; y >= currentYear - 25; y--) {
+            years.push(y);
+          }
+
+          const cells: (number | null)[] = [];
+          for (let i = 0; i < firstDayOfWeek; i++) cells.push(null);
+          for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+          return (
+            <View style={styles.calOverlay}>
+              <TouchableOpacity
+                style={StyleSheet.absoluteFill}
+                activeOpacity={1}
+                onPress={() => setShowDatePicker(false)}
+              />
+              <View style={styles.calSheet}>
+                {/* Booking-style top summary banner */}
+                <View style={styles.calTopSummary}>
+                  <View>
+                    <Text style={styles.calTopLabel}>Vehicle Registration Date</Text>
+                    <Text style={styles.calTopSelected}>
+                      {form.registration_date
+                        ? formatDisplayDate(form.registration_date)
+                        : 'Tap a date below'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.calCloseCircle}
+                    onPress={() => setShowDatePicker(false)}
+                  >
+                    <FontAwesome name="times" size={15} color="#475569" />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Month & Year Navigation Bar */}
+                <View style={styles.calNavRow}>
+                  <TouchableOpacity
+                    style={styles.calNavArrow}
+                    onPress={() => stepCalendarMonth(-1)}
+                    activeOpacity={0.7}
+                  >
+                    <FontAwesome name="chevron-left" size={13} color="#1e293b" />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.calMonthYearPill}
+                    onPress={() => setShowYearMonthJump(!showYearMonthJump)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={styles.calMonthYearText}>
+                      {MONTH_NAMES[calMonth]} {calYear}
+                    </Text>
+                    <FontAwesome
+                      name={showYearMonthJump ? 'chevron-up' : 'chevron-down'}
+                      size={11}
+                      color="#2563eb"
+                      style={{ marginLeft: 6 }}
+                    />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.calNavArrow}
+                    onPress={() => stepCalendarMonth(1)}
+                    activeOpacity={0.7}
+                  >
+                    <FontAwesome name="chevron-right" size={13} color="#1e293b" />
+                  </TouchableOpacity>
+                </View>
+
+                {showYearMonthJump ? (
+                  <View style={styles.calJumpContainer}>
+                    <Text style={styles.calJumpSectionLabel}>Select Month</Text>
+                    <View style={styles.calMonthGrid}>
+                      {SHORT_MONTHS.map((mName, idx) => {
+                        const active = idx === calMonth;
+                        return (
+                          <TouchableOpacity
+                            key={mName}
+                            style={[styles.calMonthChip, active && styles.calMonthChipActive]}
+                            onPress={() => setCalMonth(idx)}
+                          >
+                            <Text style={[styles.calMonthChipText, active && styles.calMonthChipTextActive]}>
+                              {mName}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+
+                    <Text style={[styles.calJumpSectionLabel, { marginTop: 12 }]}>Select Year</Text>
+                    <ScrollView style={{ maxHeight: 150 }} showsVerticalScrollIndicator={false}>
+                      <View style={styles.calYearGrid}>
+                        {years.map((yr) => {
+                          const active = yr === calYear;
+                          return (
+                            <TouchableOpacity
+                              key={yr}
+                              style={[styles.calYearChip, active && styles.calYearChipActive]}
+                              onPress={() => {
+                                setCalYear(yr);
+                                setShowYearMonthJump(false);
+                              }}
+                            >
+                              <Text style={[styles.calYearChipText, active && styles.calYearChipTextActive]}>
+                                {yr}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </ScrollView>
+                  </View>
+                ) : (
+                  <>
+                    {/* Day of week headers */}
+                    <View style={styles.calWeekRow}>
+                      {DAY_HEADERS.map((dh) => (
+                        <View key={dh} style={styles.calWeekCell}>
+                          <Text style={styles.calWeekText}>{dh}</Text>
+                        </View>
+                      ))}
+                    </View>
+
+                    {/* 7-column day cells */}
+                    <View style={styles.calDaysGrid}>
+                      {cells.map((day, idx) => {
+                        if (day === null) {
+                          return <View key={`empty-${idx}`} style={styles.calDayCell} />;
+                        }
+                        const cellYMD = toYMD(calYear, calMonth, day);
+                        const isSelected = form.registration_date === cellYMD;
+                        const isToday = todayYMD === cellYMD;
+
+                        return (
+                          <TouchableOpacity
+                            key={cellYMD}
+                            style={styles.calDayCell}
+                            onPress={() => selectCalendarDay(day)}
+                            activeOpacity={0.7}
+                          >
+                            <View
+                              style={[
+                                styles.calDayPill,
+                                isToday && !isSelected && styles.calDayPillToday,
+                                isSelected && styles.calDayPillSelected,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.calDayText,
+                                  isToday && !isSelected && styles.calDayTextToday,
+                                  isSelected && styles.calDayTextSelected,
+                                ]}
+                              >
+                                {day}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </>
+                )}
+
+                {/* Calendar Footer: Quick Today & Clear */}
+                <View style={styles.calFooter}>
+                  <TouchableOpacity
+                    style={styles.calFooterSecondaryBtn}
+                    onPress={() => {
+                      setForm((prev) => ({ ...prev, registration_date: '' }));
+                      setShowDatePicker(false);
+                    }}
+                  >
+                    <Text style={styles.calFooterSecondaryText}>Clear</Text>
+                  </TouchableOpacity>
+
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <TouchableOpacity
+                      style={styles.calFooterTodayBtn}
+                      onPress={() => {
+                        const now = new Date();
+                        const ymd = toYMD(now.getFullYear(), now.getMonth(), now.getDate());
+                        setForm((prev) => ({ ...prev, registration_date: ymd }));
+                        setShowDatePicker(false);
+                      }}
+                    >
+                      <Text style={styles.calFooterTodayText}>Today</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.calFooterDoneBtn}
+                      onPress={() => setShowDatePicker(false)}
+                    >
+                      <Text style={styles.calFooterDoneText}>Done</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </View>
+          );
+        })()}
 
         {/* Modal-level Alert Prompt Overlay */}
         <AlertPromptModal
@@ -919,16 +1261,17 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   modalPhotoSelector: {
-    height: 160,
-    backgroundColor: '#f8fafc',
+    height: 145,
+    backgroundColor: '#f1f5f9',
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderWidth: 1.5,
+    borderColor: 'rgba(59, 130, 246, 0.3)',
     borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: 18,
     overflow: 'hidden',
+    position: 'relative',
   },
   modalPhoto: {
     width: '100%',
@@ -939,16 +1282,38 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   modalPhotoText: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#64748b',
     fontWeight: '500',
     marginTop: 8,
   },
+  modalPhotoSubtext: {
+    fontSize: 11,
+    color: '#94a3b8',
+    marginTop: 2,
+  },
+  modalPhotoChangeBadge: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    backgroundColor: 'rgba(15, 23, 42, 0.72)',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  modalPhotoChangeText: {
+    fontSize: 11,
+    color: '#ffffff',
+    fontWeight: '600',
+  },
   inputGroup: {
-    marginBottom: 16,
+    marginBottom: 14,
   },
   inputLabel: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: '600',
     color: '#374151',
     marginBottom: 6,
@@ -957,52 +1322,353 @@ const styles = StyleSheet.create({
     height: 44,
     borderWidth: 1,
     borderColor: '#d1d5db',
-    borderRadius: 8,
+    borderRadius: 10,
     paddingHorizontal: 12,
     fontSize: 14,
     color: '#111827',
     backgroundColor: '#ffffff',
   },
-  inputHelper: {
-    fontSize: 11,
-    color: '#6b7280',
-    marginTop: 4,
-  },
-  modalActions: {
+  twoColRow: {
     flexDirection: 'row',
     gap: 12,
-    marginTop: 12,
+    alignItems: 'flex-start',
   },
-  saveButton: {
-    backgroundColor: '#4f46e5',
-    borderRadius: 10,
-    height: 46,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  deleteButton: {
+  colHalf: {
     flex: 1,
-    flexDirection: 'row',
+  },
+  datePickerTrigger: {
+    height: 44,
     borderWidth: 1,
-    borderColor: '#fca5a5',
-    backgroundColor: '#fef2f2',
+    borderColor: '#d1d5db',
     borderRadius: 10,
-    height: 46,
+    paddingHorizontal: 11,
+    backgroundColor: '#ffffff',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  datePickerTriggerActive: {
+    borderColor: '#93c5fd',
+    backgroundColor: '#f8fafc',
+  },
+  datePickerTriggerText: {
+    flex: 1,
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  datePickerPlaceholder: {
+    color: '#9ca3af',
+    fontWeight: '400',
+  },
+  ltoFootnoteBox: {
+    marginTop: 2,
+    marginBottom: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    backgroundColor: 'rgba(59, 130, 246, 0.05)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.14)',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 9,
+  },
+  ltoFootnoteIcon: {
+    marginTop: 2,
+  },
+  ltoFootnoteText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#6b7280',
+    lineHeight: 18,
+  },
+  modalFooterBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+    marginTop: 4,
+  },
+  deleteLinkBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingRight: 8,
+  },
+  deleteLinkText: {
+    color: '#ef4444',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  modalRightBtns: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  cancelOutlineBtn: {
+    height: 42,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  deleteButtonText: {
-    color: '#ef4444',
-    fontSize: 14,
+  cancelOutlineText: {
+    color: '#374151',
+    fontSize: 13.5,
+    fontWeight: '600',
+  },
+  savePrimaryBtn: {
+    height: 42,
+    paddingHorizontal: 18,
+    borderRadius: 10,
+    backgroundColor: '#2563eb',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 124,
+  },
+  savePrimaryText: {
+    color: '#ffffff',
+    fontSize: 13.5,
     fontWeight: '700',
   },
-  actionBtnIcon: {
-    marginRight: 6,
+  calOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 18,
+    zIndex: 50,
+  },
+  calSheet: {
+    width: '100%',
+    maxWidth: 370,
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  calTopSummary: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 14,
+    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  calTopLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748b',
+    marginBottom: 2,
+  },
+  calTopSelected: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  calCloseCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calNavRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  calNavArrow: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calMonthYearPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: '#eff6ff',
+  },
+  calMonthYearText: {
+    fontSize: 14.5,
+    fontWeight: '700',
+    color: '#1e3a8a',
+  },
+  calWeekRow: {
+    flexDirection: 'row',
+    marginBottom: 6,
+  },
+  calWeekCell: {
+    width: '14.2857%',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  calWeekText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#94a3b8',
+  },
+  calDaysGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  calDayCell: {
+    width: '14.2857%',
+    aspectRatio: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 2,
+  },
+  calDayPill: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calDayPillToday: {
+    borderWidth: 1.5,
+    borderColor: '#2563eb',
+    backgroundColor: '#eff6ff',
+  },
+  calDayPillSelected: {
+    backgroundColor: '#2563eb',
+  },
+  calDayText: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: '#1e293b',
+  },
+  calDayTextToday: {
+    color: '#2563eb',
+    fontWeight: '700',
+  },
+  calDayTextSelected: {
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+  calJumpContainer: {
+    paddingVertical: 6,
+  },
+  calJumpSectionLabel: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#64748b',
+    marginBottom: 8,
+  },
+  calMonthGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  calMonthChip: {
+    width: '23%',
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+  },
+  calMonthChipActive: {
+    backgroundColor: '#2563eb',
+    borderColor: '#2563eb',
+  },
+  calMonthChipText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  calMonthChipTextActive: {
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+  calYearGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  calYearChip: {
+    width: '23%',
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+  },
+  calYearChipActive: {
+    backgroundColor: '#2563eb',
+    borderColor: '#2563eb',
+  },
+  calYearChipText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  calYearChipTextActive: {
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+  calFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  calFooterSecondaryBtn: {
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  calFooterSecondaryText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  calFooterTodayBtn: {
+    paddingVertical: 7,
+    paddingHorizontal: 13,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+  },
+  calFooterTodayText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#2563eb',
+  },
+  calFooterDoneBtn: {
+    paddingVertical: 7,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#2563eb',
+  },
+  calFooterDoneText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#ffffff',
   },
   photoTouchArea: {
     width: '100%',
@@ -1029,7 +1695,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 8,
     right: 8,
-    backgroundColor: '#4f46e5',
+    backgroundColor: '#2563eb',
     width: 28,
     height: 28,
     borderRadius: 14,

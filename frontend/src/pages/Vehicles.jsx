@@ -68,6 +68,30 @@ function getRenewalStatus(registrationDate) {
   return { label: `LTO Registration valid until ${next.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`, color: '#059669', bg: 'transparent', border: 'rgba(16,185,129,0.3)', icon: 'fa-check-circle' };
 }
 
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DAY_HEADERS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+function formatDisplayDate(ymd) {
+  if (!ymd) return '';
+  const parts = String(ymd).split('-');
+  if (parts.length !== 3) return ymd;
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10) - 1;
+  const d = parseInt(parts[2], 10);
+  if (isNaN(y) || isNaN(m) || isNaN(d) || m < 0 || m > 11) return ymd;
+  return `${SHORT_MONTHS[m]} ${d}, ${y}`;
+}
+
+function toYMD(year, monthIndex, day) {
+  const mm = String(monthIndex + 1).padStart(2, '0');
+  const dd = String(day).padStart(2, '0');
+  return `${year}-${mm}-${dd}`;
+}
+
 export default function Vehicles() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [vehicles, setVehicles] = useState([]);
@@ -86,6 +110,49 @@ export default function Vehicles() {
   const fileInputRef = useRef(null);
   const modalFileInputRef = useRef(null);
   const uploadTargetRef = useRef(null); // which vehicle id to upload for
+
+  // Hotel/Flight-Style Interactive Calendar Picker state
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showYearMonthJump, setShowYearMonthJump] = useState(false);
+  const [calYear, setCalYear] = useState(() => new Date().getFullYear());
+  const [calMonth, setCalMonth] = useState(() => new Date().getMonth());
+
+  const openDatePicker = () => {
+    const existing = form.registration_date;
+    if (existing && /^\d{4}-\d{2}-\d{2}$/.test(existing)) {
+      const [y, m] = existing.split('-').map((n) => parseInt(n, 10));
+      if (!isNaN(y) && !isNaN(m)) {
+        setCalYear(y);
+        setCalMonth(m - 1);
+      }
+    } else {
+      const now = new Date();
+      setCalYear(now.getFullYear());
+      setCalMonth(now.getMonth());
+    }
+    setShowYearMonthJump(false);
+    setShowDatePicker(true);
+  };
+
+  const stepCalendarMonth = (delta) => {
+    let nextMonth = calMonth + delta;
+    let nextYear = calYear;
+    if (nextMonth < 0) {
+      nextMonth = 11;
+      nextYear -= 1;
+    } else if (nextMonth > 11) {
+      nextMonth = 0;
+      nextYear += 1;
+    }
+    setCalMonth(nextMonth);
+    setCalYear(nextYear);
+  };
+
+  const selectCalendarDay = (day) => {
+    const ymd = toYMD(calYear, calMonth, day);
+    setForm((prev) => ({ ...prev, registration_date: ymd }));
+    setShowDatePicker(false);
+  };
 
   useEffect(() => { loadVehicles(); }, []);
 
@@ -277,9 +344,9 @@ export default function Vehicles() {
             const isUploadingThis = uploading === v.id;
             return (
               <div className="vehicle-card" key={v.id} style={{ position: 'relative' }}>
-                {/* Photo area — clickable to expand photo or upload */}
+                {/* Photo area — clickable to open edit modal or upload */}
                 <div
-                  onClick={() => !isUploadingThis && (photoUrl ? setViewingPhoto({ url: photoUrl, title: `${v.make} ${v.model}`, plate: v.plate_no || 'No Plate Number' }) : handleCardPhotoUpload(v.id))}
+                  onClick={() => !isUploadingThis && (photoUrl ? openEdit(v) : handleCardPhotoUpload(v.id))}
                   style={{
                     height: '160px',
                     position: 'relative',
@@ -290,7 +357,7 @@ export default function Vehicles() {
                     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                     transition: 'opacity 0.2s',
                   }}
-                  title={photoUrl ? 'Click to view full photo' : 'Click to add photo'}
+                  title={photoUrl ? 'Click to edit vehicle' : 'Click to add photo'}
                 >
                   {photoUrl && (
                     <img
@@ -327,34 +394,22 @@ export default function Vehicles() {
                     </>
                   )}
                   {photoUrl && !isUploadingThis && (
-                    <>
-                      <div style={{
-                        position: 'absolute', bottom: '8px', left: '8px',
-                        background: 'rgba(15,23,42,0.7)', borderRadius: '20px',
-                        padding: '3px 8px', display: 'flex', alignItems: 'center', gap: '4px',
-                        color: '#ffffff', fontSize: '11px', fontWeight: 600,
-                        backdropFilter: 'blur(4px)',
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCardPhotoUpload(v.id);
+                      }}
+                      title="Change photo"
+                      style={{
+                        position: 'absolute', bottom: '8px', right: '8px',
+                        background: '#2563eb', borderRadius: '50%',
+                        width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)', cursor: 'pointer',
                         zIndex: 1,
-                      }}>
-                        <i className="fas fa-search-plus" style={{ fontSize: '10px' }}></i> View
-                      </div>
-                      <div
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleCardPhotoUpload(v.id);
-                        }}
-                        title="Change photo"
-                        style={{
-                          position: 'absolute', bottom: '8px', right: '8px',
-                          background: '#3b82f6', borderRadius: '50%',
-                          width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.2)', cursor: 'pointer',
-                          zIndex: 1,
-                        }}
-                      >
-                        <i className="fas fa-camera" style={{ fontSize: '11px', color: 'white' }}></i>
-                      </div>
-                    </>
+                      }}
+                    >
+                      <i className="fas fa-camera" style={{ fontSize: '11px', color: 'white' }}></i>
+                    </div>
                   )}
                 </div>
 
@@ -501,7 +556,41 @@ export default function Vehicles() {
                   </div>
                   <div className="form-group">
                     <label className="form-label">Vehicle Registration Date</label>
-                    <input className="form-input" type="date" value={form.registration_date} onChange={e => setForm({...form, registration_date: e.target.value})} />
+                    <button
+                      type="button"
+                      onClick={openDatePicker}
+                      className="form-input"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        backgroundColor: form.registration_date ? '#f8fafc' : '#ffffff',
+                        borderColor: form.registration_date ? '#93c5fd' : undefined,
+                      }}
+                    >
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <i className="fas fa-calendar-alt" style={{ color: form.registration_date ? '#2563eb' : '#64748b', fontSize: '13px' }}></i>
+                        <span style={{ color: form.registration_date ? '#111827' : '#9ca3af', fontWeight: form.registration_date ? 600 : 400, fontSize: '14px' }}>
+                          {form.registration_date ? formatDisplayDate(form.registration_date) : 'Select date'}
+                        </span>
+                      </span>
+                      {form.registration_date ? (
+                        <span
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setForm({ ...form, registration_date: '' });
+                          }}
+                          title="Clear date"
+                          style={{ color: '#94a3b8', padding: '0 2px', fontSize: '13px' }}
+                        >
+                          <i className="fas fa-times-circle"></i>
+                        </span>
+                      ) : (
+                        <i className="fas fa-chevron-down" style={{ color: '#94a3b8', fontSize: '11px' }}></i>
+                      )}
+                    </button>
                   </div>
                 </div>
                 {/* Footnote */}
@@ -544,6 +633,255 @@ export default function Vehicles() {
           </div>
         </div>
       )}
+
+      {/* Hotel / Flight-Style Interactive Calendar Date Picker Modal */}
+      {showModal && showDatePicker && (() => {
+        const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+        const firstDayOfWeek = new Date(calYear, calMonth, 1).getDay();
+        const today = new Date();
+        const todayYMD = toYMD(today.getFullYear(), today.getMonth(), today.getDate());
+        const currentYear = today.getFullYear();
+        const years = [];
+        for (let y = currentYear + 1; y >= currentYear - 25; y--) {
+          years.push(y);
+        }
+
+        const cells = [];
+        for (let i = 0; i < firstDayOfWeek; i++) cells.push(null);
+        for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+        return (
+          <div
+            className="modal-overlay"
+            style={{ zIndex: 1100 }}
+            onClick={(e) => e.target === e.currentTarget && setShowDatePicker(false)}
+          >
+            <div
+              className="modal-content"
+              style={{
+                maxWidth: '370px',
+                borderRadius: '20px',
+                padding: '20px',
+                boxShadow: '0 20px 40px rgba(15, 23, 42, 0.25)',
+              }}
+            >
+              {/* Top booking-style summary header */}
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                paddingBottom: '14px', marginBottom: '14px', borderBottom: '1px solid #f1f5f9',
+              }}>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', marginBottom: '2px' }}>
+                    Vehicle Registration Date
+                  </div>
+                  <div style={{ fontSize: '17px', fontWeight: 800, color: '#0f172a' }}>
+                    {form.registration_date ? formatDisplayDate(form.registration_date) : 'Select a date'}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowDatePicker(false)}
+                  style={{
+                    width: '32px', height: '32px', borderRadius: '50%', border: 'none',
+                    background: '#f1f5f9', color: '#475569', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px',
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Month & Year Navigation Bar */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                <button
+                  type="button"
+                  onClick={() => stepCalendarMonth(-1)}
+                  style={{
+                    width: '36px', height: '36px', borderRadius: '10px',
+                    border: '1px solid #e2e8f0', background: '#f8fafc',
+                    cursor: 'pointer', color: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  <i className="fas fa-chevron-left" style={{ fontSize: '12px' }}></i>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowYearMonthJump(!showYearMonthJump)}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                    padding: '8px 14px', borderRadius: '10px', border: 'none',
+                    background: '#eff6ff', color: '#1e3a8a', fontWeight: 700, fontSize: '14px', cursor: 'pointer',
+                  }}
+                >
+                  <span>{MONTH_NAMES[calMonth]} {calYear}</span>
+                  <i className={`fas fa-chevron-${showYearMonthJump ? 'up' : 'down'}`} style={{ fontSize: '11px', color: '#2563eb' }}></i>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => stepCalendarMonth(1)}
+                  style={{
+                    width: '36px', height: '36px', borderRadius: '10px',
+                    border: '1px solid #e2e8f0', background: '#f8fafc',
+                    cursor: 'pointer', color: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  <i className="fas fa-chevron-right" style={{ fontSize: '12px' }}></i>
+                </button>
+              </div>
+
+              {showYearMonthJump ? (
+                <div style={{ padding: '4px 0' }}>
+                  <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#64748b', marginBottom: '8px' }}>Select Month</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
+                    {SHORT_MONTHS.map((mName, idx) => {
+                      const active = idx === calMonth;
+                      return (
+                        <button
+                          type="button"
+                          key={mName}
+                          onClick={() => setCalMonth(idx)}
+                          style={{
+                            padding: '8px 4px', borderRadius: '8px', cursor: 'pointer',
+                            border: `1px solid ${active ? '#2563eb' : '#e2e8f0'}`,
+                            background: active ? '#2563eb' : '#f8fafc',
+                            color: active ? '#ffffff' : '#334155',
+                            fontWeight: active ? 700 : 600, fontSize: '12.5px',
+                          }}
+                        >
+                          {mName}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div style={{ fontSize: '11.5px', fontWeight: 700, color: '#64748b', marginTop: '14px', marginBottom: '8px' }}>Select Year</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', maxHeight: '160px', overflowY: 'auto', paddingRight: '2px' }}>
+                    {years.map((yr) => {
+                      const active = yr === calYear;
+                      return (
+                        <button
+                          type="button"
+                          key={yr}
+                          onClick={() => {
+                            setCalYear(yr);
+                            setShowYearMonthJump(false);
+                          }}
+                          style={{
+                            padding: '8px 4px', borderRadius: '8px', cursor: 'pointer',
+                            border: `1px solid ${active ? '#2563eb' : '#e2e8f0'}`,
+                            background: active ? '#2563eb' : '#ffffff',
+                            color: active ? '#ffffff' : '#334155',
+                            fontWeight: active ? 700 : 600, fontSize: '12.5px',
+                          }}
+                        >
+                          {yr}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Day headers */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginBottom: '6px', textAlign: 'center' }}>
+                    {DAY_HEADERS.map((dh) => (
+                      <div key={dh} style={{ fontSize: '11.5px', fontWeight: 700, color: '#94a3b8', padding: '4px 0' }}>
+                        {dh}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* 7-column day grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
+                    {cells.map((day, idx) => {
+                      if (day === null) {
+                        return <div key={`empty-${idx}`} style={{ height: '38px' }} />;
+                      }
+                      const cellYMD = toYMD(calYear, calMonth, day);
+                      const isSelected = form.registration_date === cellYMD;
+                      const isToday = todayYMD === cellYMD;
+
+                      return (
+                        <button
+                          type="button"
+                          key={cellYMD}
+                          onClick={() => selectCalendarDay(day)}
+                          style={{
+                            height: '38px', borderRadius: '10px', cursor: 'pointer',
+                            border: isToday && !isSelected ? '1.5px solid #2563eb' : 'none',
+                            background: isSelected ? '#2563eb' : (isToday ? '#eff6ff' : 'transparent'),
+                            color: isSelected ? '#ffffff' : (isToday ? '#2563eb' : '#1e293b'),
+                            fontWeight: isSelected || isToday ? 700 : 600,
+                            fontSize: '13.5px',
+                            transition: 'all 0.15s',
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isSelected) e.currentTarget.style.background = '#f1f5f9';
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isSelected) e.currentTarget.style.background = isToday ? '#eff6ff' : 'transparent';
+                          }}
+                        >
+                          {day}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+
+              {/* Footer buttons */}
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                marginTop: '14px', paddingTop: '12px', borderTop: '1px solid #f1f5f9',
+              }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForm((prev) => ({ ...prev, registration_date: '' }));
+                    setShowDatePicker(false);
+                  }}
+                  style={{
+                    background: 'none', border: 'none', color: '#64748b',
+                    fontSize: '13px', fontWeight: 600, cursor: 'pointer', padding: '6px 10px',
+                  }}
+                >
+                  Clear
+                </button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const now = new Date();
+                      const ymd = toYMD(now.getFullYear(), now.getMonth(), now.getDate());
+                      setForm((prev) => ({ ...prev, registration_date: ymd }));
+                      setShowDatePicker(false);
+                    }}
+                    style={{
+                      background: '#f1f5f9', border: 'none', borderRadius: '8px',
+                      color: '#2563eb', fontSize: '13px', fontWeight: 600, cursor: 'pointer', padding: '7px 13px',
+                    }}
+                  >
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowDatePicker(false)}
+                    style={{
+                      background: '#2563eb', border: 'none', borderRadius: '8px',
+                      color: '#ffffff', fontSize: '13px', fontWeight: 700, cursor: 'pointer', padding: '7px 16px',
+                    }}
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Delete Confirm Modal */}
       {deleteConfirm && (

@@ -1,4 +1,5 @@
 import React from 'react';
+import { View } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,26 +17,27 @@ export default function TabLayout() {
   const bottomInset = Math.max(insets.bottom, 12);
 
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: '#4f46e5', // Brand primary
-        tabBarInactiveTintColor: '#64748b',
-        header: () => <TopHeader />,
-        headerShown: true,
-        tabBarStyle: {
-          backgroundColor: '#ffffff',
-          borderTopWidth: 1,
-          borderTopColor: '#f1f5f9',
-          height: 52 + bottomInset,
-          paddingBottom: bottomInset,
-          paddingTop: 6,
-        },
-        tabBarLabelStyle: {
-          fontSize: 10,
-          fontWeight: '600',
-        },
-      }}
-    >
+    <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
+      <TopHeader />
+      <Tabs
+        screenOptions={{
+          tabBarActiveTintColor: '#2563eb',
+          tabBarInactiveTintColor: '#64748b',
+          headerShown: false,
+          tabBarStyle: {
+            backgroundColor: '#ffffff',
+            borderTopWidth: 1,
+            borderTopColor: '#f1f5f9',
+            height: 52 + bottomInset,
+            paddingBottom: bottomInset,
+            paddingTop: 6,
+          },
+          tabBarLabelStyle: {
+            fontSize: 10,
+            fontWeight: '600',
+          },
+        }}
+      >
       <Tabs.Screen
         name="index"
         options={{
@@ -85,6 +87,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <TabBarIcon name="user" color={color} />,
         }}
       />
-    </Tabs>
+      </Tabs>
+    </View>
   );
 }

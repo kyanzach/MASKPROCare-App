@@ -13,6 +13,7 @@ import { useAuth } from '@/context/AuthContext';
 import client from '@/api/client';
 import NotificationModal, { NotificationItem } from './NotificationModal';
 import { syncAndAlertNewNotifications } from '@/services/notificationService';
+import { MASKPRO_LOGO_URI } from '@/constants/logoBase64';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://care.maskpro.ph/api';
 
@@ -145,7 +146,7 @@ export default function TopHeader() {
             activeOpacity={0.8}
           >
             <Image
-              source={require('@/assets/images/maskpro_logo.png')}
+              source={{ uri: MASKPRO_LOGO_URI }}
               style={styles.brandLogo}
               resizeMode="contain"
             />
