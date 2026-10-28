@@ -641,13 +641,18 @@ export default function Dashboard() {
               <div className="stats-icon stats-icon-blue" style={{ width: '40px', height: '40px', borderRadius: '12px', fontSize: '16px', background: 'linear-gradient(135deg, #0ea5e9, #1e40af)' }}>
                 <i className="fas fa-car"></i>
               </div>
-              <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#1f2937' }}>My Vehicles</h2>
+              <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#1f2937', margin: 0 }}>My Vehicles</h2>
             </div>
+            {vehicles.length > 0 && (
+              <Link to="/vehicles" style={{ fontSize: '13px', fontWeight: 600, color: '#2563eb', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                See All <i className="fas fa-arrow-right"></i>
+              </Link>
+            )}
           </div>
 
           {vehicles.length > 0 ? (
             <div className="grid-3">
-              {vehicles.slice(0, 3).map((v) => {
+              {vehicles.map((v) => {
                 const vi = getVehicleIcon(v.make, v.model);
                 return (
                   <div className="vehicle-card" key={v.id}>
@@ -698,7 +703,7 @@ export default function Dashboard() {
                       </div>
 
                       <div style={{ display: 'flex', gap: '10px' }}>
-                        <Link to="/vehicles" className="btn-outline btn-sm" style={{ flex: 1, justifyContent: 'center' }}>
+                        <Link to={`/vehicles?vehicle_id=${v.id}`} className="btn-outline btn-sm" style={{ flex: 1, justifyContent: 'center' }}>
                           <i className="fas fa-eye"></i> Details
                         </Link>
                         <button className="btn-gradient btn-sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => navigate('/bookings', { state: { openBooking: true } })}>

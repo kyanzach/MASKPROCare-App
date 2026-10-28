@@ -913,6 +913,16 @@ export default function DashboardScreen() {
       <View style={styles.sectionContainer}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>My Vehicles</Text>
+          {vehicles.length > 0 && (
+            <TouchableOpacity
+              onPress={() => router.push('/(tabs)/vehicles')}
+              activeOpacity={0.7}
+              style={styles.sectionHeaderRight}
+            >
+              <Text style={styles.sectionSeeAll}>See All</Text>
+              <FontAwesome name="angle-right" size={14} color="#2563eb" />
+            </TouchableOpacity>
+          )}
         </View>
 
         {vehicles.length > 0 ? (
@@ -921,7 +931,7 @@ export default function DashboardScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.vehiclesScroll}
           >
-            {vehicles.slice(0, 5).map((vehicle) => {
+            {vehicles.map((vehicle) => {
               const photoUrl = getPhotoUrl(vehicle.photo);
               return (
                 <View key={vehicle.id} style={styles.vehicleCardItem}>
@@ -965,7 +975,7 @@ export default function DashboardScreen() {
                   <View style={styles.vehicleCardActions}>
                     <TouchableOpacity
                       style={styles.vehicleCardBtnOutline}
-                      onPress={() => router.push('/(tabs)/vehicles')}
+                      onPress={() => router.push(`/(tabs)/vehicles?vehicle_id=${vehicle.id}` as any)}
                       activeOpacity={0.7}
                     >
                       <Text style={styles.vehicleCardBtnOutlineText}>Details</Text>

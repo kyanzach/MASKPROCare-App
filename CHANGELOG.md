@@ -1,5 +1,12 @@
 # Changelog
 
+## [v1.14.7] — 2026-10-28
+### Fixed & Improved
+- **My Vehicles Dashboard Display & Deep-Link to Vehicle Details (`frontend/src/pages/Dashboard.jsx`, `frontend/src/pages/Vehicles.jsx`, `mobile/app/(tabs)/index.tsx`, `mobile/app/(tabs)/vehicles.tsx`)**:
+  - Removed the artificial 3-vehicle / 5-vehicle cap on the Main Dashboard so **all** registered vehicles are displayed (`s2`).
+  - Added a `"See All →"` link in the `My Vehicles` header on Web and Mobile.
+  - Updated the **Details** button on each vehicle card in the Dashboard to deep-link to `/vehicles?vehicle_id=X` (`/(tabs)/vehicles?vehicle_id=X` on mobile), automatically opening that specific vehicle's Edit/Details modal.
+
 ## [v1.14.6] — 2026-10-28
 ### Added & Changed
 - **Customer Profile Avatars in Unify Care App Alert Toast (`includes/care_booking_requests_alert.php`, `notification_api.php`)**:

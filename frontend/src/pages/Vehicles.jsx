@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import api from '../api/client';
 
 // Build photo URL helper: points to root domain on production (/uploads/...) or Express dev server
@@ -69,6 +69,7 @@ function getRenewalStatus(registrationDate) {
 }
 
 export default function Vehicles() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -87,6 +88,20 @@ export default function Vehicles() {
   const uploadTargetRef = useRef(null); // which vehicle id to upload for
 
   useEffect(() => { loadVehicles(); }, []);
+
+  // Auto-open vehicle edit/details modal when deep-linked via ?vehicle_id=X
+  useEffect(() => {
+    const targetId = searchParams.get('vehicle_id');
+    if (targetId && vehicles.length > 0) {
+      const target = vehicles.find((v) => String(v.id) === String(targetId));
+      if (target) {
+        openEdit(target);
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete('vehicle_id');
+        setSearchParams(nextParams, { replace: true });
+      }
+    }
+  }, [vehicles, searchParams]);
 
   const loadVehicles = async () => {
     try {

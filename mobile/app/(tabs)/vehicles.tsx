@@ -14,6 +14,7 @@ import {
   Platform,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import client from '@/api/client';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
@@ -115,6 +116,8 @@ interface Vehicle {
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://care.maskpro.ph/api';
 
 export default function VehiclesScreen() {
+  const router = useRouter();
+  const { vehicle_id } = useLocalSearchParams<{ vehicle_id?: string }>();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -158,6 +161,16 @@ export default function VehiclesScreen() {
   useEffect(() => {
     loadVehicles();
   }, []);
+
+  useEffect(() => {
+    if (vehicle_id && vehicles.length > 0) {
+      const target = vehicles.find((v) => String(v.id) === String(vehicle_id));
+      if (target) {
+        openEdit(target);
+        router.setParams({ vehicle_id: '' });
+      }
+    }
+  }, [vehicle_id, vehicles]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
