@@ -665,67 +665,77 @@ export default function VehiclesScreen() {
                 />
               </View>
 
-              {/* Side-by-Side Row: Color + Vehicle Registration Date (Matches Web) */}
-              <View style={styles.twoColRow}>
-                <View style={[styles.inputGroup, styles.colHalf]}>
-                  <Text style={styles.inputLabel} numberOfLines={1}>Color</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="e.g. White"
-                    placeholderTextColor="#9ca3af"
-                    value={form.color}
-                    onChangeText={(val) => setForm({ ...form, color: val })}
-                  />
-                </View>
-
-                <View style={[styles.inputGroup, styles.colHalf]}>
-                  <Text style={styles.inputLabel} numberOfLines={1} adjustsFontSizeToFit>
-                    Vehicle Registration Date
-                  </Text>
-                  <TouchableOpacity
-                    style={[
-                      styles.datePickerTrigger,
-                      form.registration_date ? styles.datePickerTriggerActive : null,
-                    ]}
-                    onPress={openDatePicker}
-                    activeOpacity={0.75}
-                  >
-                    <FontAwesome
-                      name="calendar"
-                      size={13}
-                      color={form.registration_date ? '#2563eb' : '#64748b'}
-                      style={{ marginRight: 7 }}
-                    />
-                    <Text
-                      style={[
-                        styles.datePickerTriggerText,
-                        !form.registration_date && styles.datePickerPlaceholder,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {form.registration_date ? formatDisplayDate(form.registration_date) : 'Select date'}
-                    </Text>
-                    {form.registration_date ? (
-                      <TouchableOpacity
-                        onPress={() => setForm({ ...form, registration_date: '' })}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        style={{ marginLeft: 4 }}
-                      >
-                        <FontAwesome name="times-circle" size={14} color="#94a3b8" />
-                      </TouchableOpacity>
-                    ) : (
-                      <FontAwesome name="chevron-down" size={10} color="#94a3b8" style={{ marginLeft: 4 }} />
-                    )}
-                  </TouchableOpacity>
-                </View>
+              {/* Full-width Color Input */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Color</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="e.g. White"
+                  placeholderTextColor="#9ca3af"
+                  value={form.color}
+                  onChangeText={(val) => setForm({ ...form, color: val })}
+                />
               </View>
 
-              {/* Web-Matched LTO Registration Renewal Footnote Box */}
+              {/* Highlighted Value-Added Feature Guide Box (Placed ABOVE the Registration Date input) */}
               <View style={styles.ltoFootnoteBox}>
-                <FontAwesome name="bell" size={13} color="#3b82f6" style={styles.ltoFootnoteIcon} />
+                <View style={styles.ltoFootnoteHeaderRow}>
+                  <View style={styles.ltoFootnoteTitleWrap}>
+                    <FontAwesome name="bell" size={13} color="#2563eb" style={{ marginRight: 6 }} />
+                    <Text style={styles.ltoFootnoteTitle} numberOfLines={1} adjustsFontSizeToFit>
+                      Complimentary LTO Renewal Reminder
+                    </Text>
+                  </View>
+                  <View style={styles.ltoFreeSmsPill}>
+                    <FontAwesome name="envelope-o" size={10} color="#1d4ed8" style={{ marginRight: 4 }} />
+                    <Text style={styles.ltoFreeSmsPillText} numberOfLines={1}>Free Auto-SMS</Text>
+                  </View>
+                </View>
                 <Text style={styles.ltoFootnoteText}>
-                  Enter your vehicle's registration date and we'll automatically calculate your next renewal — the first 3 years are free in the Philippines, then it's annual. We'll remind you before it's due.
+                  Enter your vehicle's registration date below and we'll automatically calculate your next renewal — the first 3 years are free in the Philippines, then it's annual. We'll send you an automatic <Text style={{ fontWeight: '700', color: '#334155' }}>SMS & app reminder</Text> before it's due.
                 </Text>
+              </View>
+
+              {/* Full-width Vehicle Registration Date Input (Placed at the very last) */}
+              <View style={[styles.inputGroup, { marginBottom: 16 }]}>
+                <Text style={styles.inputLabel} numberOfLines={1}>
+                  Vehicle Registration Date
+                </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.datePickerTrigger,
+                    form.registration_date ? styles.datePickerTriggerActive : null,
+                  ]}
+                  onPress={openDatePicker}
+                  activeOpacity={0.75}
+                >
+                  <FontAwesome
+                    name="calendar"
+                    size={13}
+                    color={form.registration_date ? '#2563eb' : '#64748b'}
+                    style={{ marginRight: 8 }}
+                  />
+                  <Text
+                    style={[
+                      styles.datePickerTriggerText,
+                      !form.registration_date && styles.datePickerPlaceholder,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {form.registration_date ? formatDisplayDate(form.registration_date) : 'Select registration date'}
+                  </Text>
+                  {form.registration_date ? (
+                    <TouchableOpacity
+                      onPress={() => setForm({ ...form, registration_date: '' })}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      style={{ marginLeft: 4 }}
+                    >
+                      <FontAwesome name="times-circle" size={15} color="#94a3b8" />
+                    </TouchableOpacity>
+                  ) : (
+                    <FontAwesome name="chevron-down" size={11} color="#94a3b8" style={{ marginLeft: 4 }} />
+                  )}
+                </TouchableOpacity>
               </View>
 
               {/* Footer Actions (Matches Web: Delete Vehicle on left, Cancel + Update/Add Vehicle on right) */}
@@ -1362,24 +1372,47 @@ const styles = StyleSheet.create({
   },
   ltoFootnoteBox: {
     marginTop: 2,
-    marginBottom: 18,
+    marginBottom: 14,
     paddingVertical: 12,
     paddingHorizontal: 14,
-    backgroundColor: 'rgba(59, 130, 246, 0.05)',
-    borderRadius: 10,
+    backgroundColor: 'rgba(37, 99, 235, 0.05)',
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(59, 130, 246, 0.14)',
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 9,
+    borderColor: 'rgba(37, 99, 235, 0.18)',
   },
-  ltoFootnoteIcon: {
-    marginTop: 2,
+  ltoFootnoteHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+    gap: 8,
+  },
+  ltoFootnoteTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  ltoFootnoteTitle: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#1e3a8a',
+  },
+  ltoFreeSmsPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#dbeafe',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  ltoFreeSmsPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#1d4ed8',
   },
   ltoFootnoteText: {
-    flex: 1,
     fontSize: 12,
-    color: '#6b7280',
+    color: '#475569',
     lineHeight: 18,
   },
   modalFooterBar: {

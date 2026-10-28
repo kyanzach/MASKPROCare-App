@@ -47,6 +47,7 @@ const serviceRoutes = require('./routes/services');
 const loyaltyRoutes = require('./routes/loyalty');
 const adminRoutes = require('./routes/admin');
 const communityRoutes = require('./routes/community');
+const { startLtoReminderScheduler } = require('./services/ltoReminderCron');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/auth/ai-login', aiAuthRoutes);
@@ -101,6 +102,7 @@ app.use((err, req, res, next) => {
 // --- Start ---
 app.listen(PORT, () => {
   console.log(`✅ MaskPro Care API running on port ${PORT} (${process.env.NODE_ENV || 'development'})`);
+  startLtoReminderScheduler();
 });
 
 module.exports = app;

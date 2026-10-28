@@ -1,5 +1,14 @@
 # Changelog
 
+## [v1.15.0] — 2026-10-28
+### Added & Improved
+- **Automated Daily LTO Registration Renewal SMS & In-App Reminder Scheduler (`server/services/ltoReminderCron.js`, `server/index.js`)**:
+  - Added an automated daily LTO registration renewal scheduler (`startLtoReminderScheduler`) that checks all customer vehicles with a `registration_date`, computes their next Philippine LTO renewal date (first 3 years free, then annual), and sends both an **Automated SMS** (iTexMo primary + SMS-it fallback) and an **In-App Notification** (`customer_notifications`) at **30 days** (`30d`) and **7 days** (`7d`) before renewal is due.
+  - Added deduplication table `vehicle_lto_reminder_logs` (`UNIQUE KEY (vehicle_id, renewal_date, milestone)`) so each vehicle is notified once per milestone per renewal cycle.
+- **Full-Width `Color` Input & Highlighted Value-Added LTO Reminder Guide Above `Vehicle Registration Date` (`frontend/src/pages/Vehicles.jsx`, `mobile/app/(tabs)/vehicles.tsx`)**:
+  - Expanded `Color` to a full-width 1-line input on both Web and Native Mobile (iOS & Android).
+  - Placed the highlighted **Complimentary LTO Renewal Reminder** (`Free Auto-SMS` badge) guide card **above** the full-width `Vehicle Registration Date` calendar picker at the bottom of the Add/Edit Vehicle Modal so customers immediately see the added-value reminder service before selecting their registration date.
+
 ## [v1.14.9] — 2026-10-28
 ### Added, Changed & Fixed
 - **Interactive Hotel/Flight-Style Calendar Date Picker & Web-Matched LTO Wording (`mobile/app/(tabs)/vehicles.tsx`, `frontend/src/pages/Vehicles.jsx`)**:

@@ -549,59 +549,73 @@ export default function Vehicles() {
                   <label className="form-label">Plate Number</label>
                   <input className="form-input" value={form.plate_no} onChange={e => setForm({...form, plate_no: e.target.value})} placeholder="e.g. ABC 1234" />
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div className="form-group">
-                    <label className="form-label">Color</label>
-                    <input className="form-input" value={form.color} onChange={e => setForm({...form, color: e.target.value})} placeholder="e.g. White" />
+                <div className="form-group">
+                  <label className="form-label">Color</label>
+                  <input className="form-input" value={form.color} onChange={e => setForm({...form, color: e.target.value})} placeholder="e.g. White" />
+                </div>
+
+                {/* Highlighted Value-Added Feature Guide Box (Placed ABOVE the Registration Date input) */}
+                <div style={{
+                  marginTop: '6px', marginBottom: '12px', padding: '13px 15px',
+                  background: 'linear-gradient(135deg, rgba(37,99,235,0.06), rgba(14,165,233,0.05))',
+                  borderRadius: '12px', border: '1px solid rgba(37,99,235,0.18)',
+                  fontSize: '12px', color: '#475569', lineHeight: '1.5',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '5px', flexWrap: 'wrap' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', fontWeight: 700, color: '#1e3a8a', fontSize: '12.5px' }}>
+                      <i className="fas fa-bell" style={{ color: '#2563eb', fontSize: '13px' }}></i>
+                      Complimentary LTO Renewal Reminder
+                    </span>
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '4px',
+                      background: '#dbeafe', color: '#1d4ed8', fontWeight: 700,
+                      fontSize: '10.5px', padding: '2px 8px', borderRadius: '999px',
+                    }}>
+                      <i className="fas fa-comment-sms" style={{ fontSize: '10px' }}></i> Free Auto-SMS
+                    </span>
                   </div>
-                  <div className="form-group">
-                    <label className="form-label">Vehicle Registration Date</label>
-                    <button
-                      type="button"
-                      onClick={openDatePicker}
-                      className="form-input"
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        cursor: 'pointer',
-                        textAlign: 'left',
-                        backgroundColor: form.registration_date ? '#f8fafc' : '#ffffff',
-                        borderColor: form.registration_date ? '#93c5fd' : undefined,
-                      }}
-                    >
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        <i className="fas fa-calendar-alt" style={{ color: form.registration_date ? '#2563eb' : '#64748b', fontSize: '13px' }}></i>
-                        <span style={{ color: form.registration_date ? '#111827' : '#9ca3af', fontWeight: form.registration_date ? 600 : 400, fontSize: '14px' }}>
-                          {form.registration_date ? formatDisplayDate(form.registration_date) : 'Select date'}
-                        </span>
-                      </span>
-                      {form.registration_date ? (
-                        <span
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setForm({ ...form, registration_date: '' });
-                          }}
-                          title="Clear date"
-                          style={{ color: '#94a3b8', padding: '0 2px', fontSize: '13px' }}
-                        >
-                          <i className="fas fa-times-circle"></i>
-                        </span>
-                      ) : (
-                        <i className="fas fa-chevron-down" style={{ color: '#94a3b8', fontSize: '11px' }}></i>
-                      )}
-                    </button>
+                  <div>
+                    Enter your vehicle's registration date below and we'll automatically calculate your next renewal — the first 3 years are free in the Philippines, then it's annual. We'll send you an automatic <strong>SMS & app reminder</strong> before it's due.
                   </div>
                 </div>
-                {/* Footnote */}
-                <div style={{
-                  marginTop: '4px', padding: '12px 16px', background: 'rgba(59,130,246,0.04)',
-                  borderRadius: '10px', border: '1px solid rgba(59,130,246,0.1)',
-                  fontSize: '12px', color: '#6b7280', lineHeight: '1.5',
-                  display: 'flex', gap: '8px', alignItems: 'flex-start',
-                }}>
-                  <i className="fas fa-bell" style={{ color: '#3b82f6', marginTop: '2px', fontSize: '13px' }}></i>
-                  <span>Enter your vehicle's registration date and we'll automatically calculate your next renewal — the first 3 years are free in the Philippines, then it's annual. We'll remind you before it's due.</span>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Vehicle Registration Date</label>
+                  <button
+                    type="button"
+                    onClick={openDatePicker}
+                    className="form-input"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      backgroundColor: form.registration_date ? '#f8fafc' : '#ffffff',
+                      borderColor: form.registration_date ? '#93c5fd' : undefined,
+                    }}
+                  >
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <i className="fas fa-calendar-alt" style={{ color: form.registration_date ? '#2563eb' : '#64748b', fontSize: '13px' }}></i>
+                      <span style={{ color: form.registration_date ? '#111827' : '#9ca3af', fontWeight: form.registration_date ? 600 : 400, fontSize: '14px' }}>
+                        {form.registration_date ? formatDisplayDate(form.registration_date) : 'Select registration date'}
+                      </span>
+                    </span>
+                    {form.registration_date ? (
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setForm({ ...form, registration_date: '' });
+                        }}
+                        title="Clear date"
+                        style={{ color: '#94a3b8', padding: '0 2px', fontSize: '13px' }}
+                      >
+                        <i className="fas fa-times-circle"></i>
+                      </span>
+                    ) : (
+                      <i className="fas fa-chevron-down" style={{ color: '#94a3b8', fontSize: '11px' }}></i>
+                    )}
+                  </button>
                 </div>
               </div>
               <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
