@@ -1,6 +1,25 @@
 # Changelog
 
-## [v1.13.12] — 2026-10-28
+## [v1.13.13] — 2026-10-28
+### Added
+- **Web App Vehicle Photo Thumbnails (`frontend/src/pages/Dashboard.jsx`)**:
+  - Dashboard vehicle cards now render the vehicle's actual photograph thumbnail (`v.photo`) with automatic fallback to model-branded vehicle icons.
+- **Clickable Dashboard Brand Navigation (`frontend/src/components/Layout.jsx`)**:
+  - Logo and brand text in both top mobile header and desktop sidebar header are now clickable to navigate directly to `/` (main Dashboard).
+
+### Changed
+- **Mobile Header Alignment Fix (`frontend/src/index.css`, `frontend/src/components/Layout.jsx`)**:
+  - Fixed mobile `@media (max-width: 768px)` header styling: removed `flex-direction: column` that forced the bell and profile avatar below the logo.
+  - Profile avatar and notification bell are now strictly locked to the top-right corner on all mobile viewports.
+- **Loyalty Cards Button Clean-up (`frontend/src/pages/Dashboard.jsx`, `mobile/app/(tabs)/index.tsx`)**:
+  - Removed confusing "Use Card" button from the Dashboard Loyalty Cards section.
+  - Replaced with a single full-width high-contrast blue "View Card" button with eye icon linking directly to `/profile?tab=loyalty`.
+
+### Performance
+- **Dashboard Load Optimization (6.1s → <200ms) (`server/routes/loyalty.js`, `frontend/`, `mobile/`)**:
+  - Diagnosed root cause of multi-second lag: `/api/loyalty/cards` was performing 25 sequential external HTTPS round-trips to BoomerangMe API on every request.
+  - Converted BoomerangMe card lookups to concurrent `Promise.all` execution and implemented a 5-minute in-memory TTL cache (`cardCache`).
+  - Decoupled dashboard loading: core stats, vehicles, and bookings now render immediately in ~180ms, while loyalty cards load asynchronously in parallel.
 ### Added
 - **Unify Lightbox Photo Popup Modal (`booking_request_card.php`)**:
   - Replaced opening raw image URLs in new browser tabs with an in-page Bootstrap modal lightbox (`#brPhotoLightboxModal`).

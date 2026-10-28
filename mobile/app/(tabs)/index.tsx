@@ -206,7 +206,7 @@ export default function DashboardScreen() {
       return;
     }
     try {
-      const [statsRes, vehiclesRes, bookingsRes, loyaltyRes] = await Promise.all([
+      const [statsRes, vehiclesRes, bookingsRes] = await Promise.all([
         client.get('/dashboard/stats').catch((err) => {
           if (err?.response?.status !== 401) console.warn('stats fetch error:', err?.message);
           return { data: null };
@@ -219,7 +219,6 @@ export default function DashboardScreen() {
           if (err?.response?.status !== 401) console.warn('bookings fetch error:', err?.message);
           return { data: null };
         }),
-        client.get('/loyalty/cards').catch(() => ({ data: { data: { cards: [] } } })),
       ]);
       setStats(statsRes.data?.data?.stats || null);
 
@@ -236,7 +235,18 @@ export default function DashboardScreen() {
       const reqList: BookingRequest[] =
         bookingsRes.data?.data?.requests || statsRes.data?.data?.pending_requests || [];
       setRequests(reqList);
-      setLoyaltyCards(loyaltyRes.data?.data?.cards || []);
+
+      // Dismiss main loading immediately for sub-200ms render
+      setLoading(false);
+
+      // Fetch loyalty cards (cached on server in memory)
+      client.get('/loyalty/cards')
+        .then((loyaltyRes) => {
+          setLoyaltyCards(loyaltyRes.data?.data?.cards || []);
+        })
+        .catch(() => {
+          setLoyaltyCards([]);
+        });
     } catch (err: any) {
       if (err?.response?.status !== 401) {
         console.error('Dashboard load error:', err);
@@ -1035,22 +1045,16 @@ export default function DashboardScreen() {
 
                   <View style={styles.vehicleCardActions}>
                     <TouchableOpacity
-                      style={styles.vehicleCardBtnOutline}
+                      style={[styles.vehicleCardBtnGradient, { flex: 1 }]}
                       onPress={() => router.push('/(tabs)/profile?tab=loyalty' as any)}
                       activeOpacity={0.7}
                     >
-                      <Text style={styles.vehicleCardBtnOutlineText}>View Card</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.vehicleCardBtnGradient}
-                      onPress={() => router.push('/(tabs)/bookings?openBooking=true' as any)}
-                      activeOpacity={0.7}
-                    >
                       <LinearGradient
-                        colors={catMeta.colors}
-                        style={styles.vehicleCardBtnGradientBg}
+                        colors={['#2563eb', '#1d4ed8']}
+                        style={[styles.vehicleCardBtnGradientBg, { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }]}
                       >
-                        <Text style={styles.vehicleCardBtnGradientText}>Use Card</Text>
+                        <FontAwesome name="eye" size={13} color="#fff" />
+                        <Text style={styles.vehicleCardBtnGradientText}>View Card</Text>
                       </LinearGradient>
                     </TouchableOpacity>
                   </View>

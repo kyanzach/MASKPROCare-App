@@ -1233,9 +1233,9 @@ textarea.form-input { resize: vertical; min-height: 100px; }
   .grid-3 { grid-template-columns: 1fr; }
   .grid-2 { grid-template-columns: 1fr; }
   .tabs-nav { flex-wrap: wrap; }
-  .tab-btn { min-width: 120px; padding: 10px 16px; font-size: 13px; }
-  .top-header { display: flex; flex-direction: column; align-items: flex-start; }
-  .top-header-left h1 { font-size: 22px; }
+  .top-header { display: flex !important; flex-direction: row !important; align-items: center !important; justify-content: space-between !important; margin-bottom: 20px; width: 100%; }
+  .top-header-left h1 { font-size: 20px; }
+  .top-header-right { margin-left: auto; flex-shrink: 0; }
   .stats-card { padding: 16px; }
   .stats-icon { width: 50px; height: 50px; border-radius: 14px; font-size: 20px; }
   .stats-card-value { font-size: 26px; }

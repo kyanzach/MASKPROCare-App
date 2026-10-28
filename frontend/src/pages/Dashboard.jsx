@@ -87,30 +87,59 @@ export default function Dashboard() {
     loadData();
   }, []);
 
+  const getVehiclePhotoUrl = (photoPath) => {
+    if (!photoPath) return null;
+    if (photoPath.startsWith('http')) return photoPath;
+    const base = import.meta.env.VITE_API_URL || '';
+    return `${base}/${photoPath.replace(/^\//, '')}`;
+  };
+
   const loadData = async () => {
     try {
-      const [statsRes, vehiclesRes, bookingsRes, loyaltyRes] = await Promise.all([
-        api.get('/dashboard/stats'),
-        api.get('/vehicles/list'),
-        api.get('/bookings/list'),
-        api.get('/loyalty/cards').catch(() => ({ data: { data: { cards: [] } } })),
+      // 1. Fetch core dashboard data first (stats, vehicles, bookings) for instant ~180ms render
+      const [statsRes, vehiclesRes, bookingsRes] = await Promise.all([
+        api.get('/dashboard/stats').catch(err => {
+          console.warn('Dashboard stats error:', err?.message);
+          return { data: { data: null } };
+        }),
+        api.get('/vehicles/list').catch(err => {
+          console.warn('Vehicles list error:', err?.message);
+          return { data: { data: { vehicles: [] } } };
+        }),
+        api.get('/bookings/list').catch(err => {
+          console.warn('Bookings list error:', err?.message);
+          return { data: { data: { bookings: [] } } };
+        }),
       ]);
-      setStats(statsRes.data.data);
 
-      const statVehicles = statsRes.data.data?.vehicles || [];
+      if (statsRes.data?.data) {
+        setStats(statsRes.data.data);
+      }
+
+      const statVehicles = statsRes.data?.data?.vehicles || [];
       const maintMap = new Map(statVehicles.map((v) => [v.id, v.maintenance]));
-      const rawVehicles = vehiclesRes.data.data?.vehicles || [];
+      const rawVehicles = vehiclesRes.data?.data?.vehicles || [];
       const enrichedVehicles = rawVehicles.map((v) => ({
         ...v,
         maintenance: v.maintenance || maintMap.get(v.id) || null,
       }));
       setVehicles(enrichedVehicles);
-      setBookings(bookingsRes.data.data?.bookings || []);
-      setRequests(bookingsRes.data.data?.requests || statsRes.data.data?.pending_requests || []);
-      setLoyaltyCards(loyaltyRes.data.data?.cards || []);
+      setBookings(bookingsRes.data?.data?.bookings || []);
+      setRequests(bookingsRes.data?.data?.requests || statsRes.data?.data?.pending_requests || []);
+
+      // Core dashboard is ready — dismiss loading immediately!
+      setLoading(false);
+
+      // 2. Fetch loyalty cards (cached on server in memory)
+      api.get('/loyalty/cards')
+        .then(loyaltyRes => {
+          setLoyaltyCards(loyaltyRes.data?.data?.cards || []);
+        })
+        .catch(() => {
+          setLoyaltyCards([]);
+        });
     } catch (err) {
       console.error('Dashboard load error:', err);
-    } finally {
       setLoading(false);
     }
   };
@@ -620,13 +649,38 @@ export default function Dashboard() {
                 return (
                   <div className="vehicle-card" key={v.id}>
                     <div className="vehicle-card-body">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-                        <div className="vehicle-icon" style={{ background: vi.bg }}>
-                          <i className={vi.icon}></i>
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', margin: 0 }}>{v.make} {v.model}</h3>
-                          <p style={{ fontSize: '13px', color: '#64748b', fontWeight: 500, margin: 0 }}>{v.plate_no}</p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
+                        {v.photo ? (
+                          <div style={{
+                            width: '56px',
+                            height: '56px',
+                            borderRadius: '14px',
+                            overflow: 'hidden',
+                            flexShrink: 0,
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                            border: '1px solid #e2e8f0',
+                            background: '#f8fafc',
+                          }}>
+                            <img
+                              src={getVehiclePhotoUrl(v.photo)}
+                              alt={`${v.make} ${v.model}`}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                                if (e.currentTarget.parentElement) {
+                                  e.currentTarget.parentElement.innerHTML = `<div class="vehicle-icon" style="background:${vi.bg};display:flex;align-items:center;justify-content:center;width:100%;height:100%;border-radius:14px;"><i class="${vi.icon}" style="color:#fff;font-size:22px;"></i></div>`;
+                                }
+                              }}
+                            />
+                          </div>
+                        ) : (
+                          <div className="vehicle-icon" style={{ background: vi.bg }}>
+                            <i className={vi.icon}></i>
+                          </div>
+                        )}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.make} {v.model}</h3>
+                          <p style={{ fontSize: '13px', color: '#64748b', fontWeight: 500, margin: '2px 0 0' }}>{v.plate_no || 'No Plate Number'}</p>
                           {v.maintenance?.status === 'overdue' && (
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 600, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', padding: '2px 8px', marginTop: '6px' }}>
                               <i className="fas fa-exclamation-circle"></i> NanoFix Overdue
@@ -677,7 +731,7 @@ export default function Dashboard() {
               <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#1f2937', margin: 0 }}>My Loyalty Cards</h2>
             </div>
             {loyaltyCards.length > 0 && (
-              <Link to="/loyalty" style={{ fontSize: '13px', fontWeight: 600, color: '#4f46e5', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Link to="/profile?tab=loyalty" style={{ fontSize: '13px', fontWeight: 600, color: '#4f46e5', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 See All <i className="fas fa-arrow-right"></i>
               </Link>
             )}
@@ -716,13 +770,28 @@ export default function Dashboard() {
                         </span>
                       </div>
 
-                      <div style={{ display: 'flex', gap: '10px' }}>
-                        <Link to="/loyalty" className="btn-outline btn-sm" style={{ flex: 1, justifyContent: 'center' }}>
-                          <i className="fas fa-eye"></i> View Card
+                      <div>
+                        <Link
+                          to="/profile?tab=loyalty"
+                          className="btn-gradient btn-sm"
+                          style={{
+                            width: '100%',
+                            justifyContent: 'center',
+                            background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                            color: '#ffffff',
+                            fontWeight: 600,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            textDecoration: 'none',
+                            padding: '9px 16px',
+                            borderRadius: '10px',
+                            border: 'none',
+                            boxShadow: '0 2px 6px rgba(37,99,235,0.25)',
+                          }}
+                        >
+                          <i className="fas fa-eye" style={{ color: '#ffffff' }}></i> View Card
                         </Link>
-                        <button className="btn-gradient btn-sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => navigate('/bookings', { state: { openBooking: true } })}>
-                          <i className="fas fa-calendar-check"></i> Use Card
-                        </button>
                       </div>
                     </div>
                   </div>
@@ -734,7 +803,7 @@ export default function Dashboard() {
               <div className="empty-state-icon"><i className="fas fa-credit-card"></i></div>
               <h3>No loyalty cards registered</h3>
               <p>Your warranty and maintenance loyalty cards will appear here once issued.</p>
-              <Link to="/loyalty" className="btn-gradient">
+              <Link to="/profile?tab=loyalty" className="btn-gradient">
                 <i className="fas fa-id-card"></i> View Loyalty Cards
               </Link>
             </div>

@@ -303,7 +303,7 @@ export default function Layout() {
 
       {/* Sidebar */}
       <aside className={`sidebar${sidebarOpen ? ' open' : ''}`}>
-        <div className="sidebar-header">
+        <div className="sidebar-header" style={{ cursor: 'pointer' }} onClick={() => { navigate('/'); setSidebarOpen(false); }}>
           <img src="/maskpro_logo.png" alt="MaskPro" className="sidebar-logo-img" />
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1 }}>
             <div className="sidebar-brand">
@@ -312,7 +312,9 @@ export default function Layout() {
             <span style={{ fontSize: '9px', fontWeight: 700, color: '#fff', background: 'var(--primary-gradient)', padding: '1px 7px', borderRadius: '20px', marginTop: '-2px', letterSpacing: '0.5px' }}>v{APP_VERSION}</span>
           </div>
           {/* Bell in sidebar header */}
-          <BellIcon />
+          <div onClick={(e) => e.stopPropagation()}>
+            <BellIcon />
+          </div>
         </div>
 
         <nav className="sidebar-nav">
@@ -420,20 +422,27 @@ export default function Layout() {
       <div className="main-content">
         {/* Mobile Header */}
         <div className="top-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <button className="menu-toggle" onClick={() => setSidebarOpen(true)}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+            <button className="menu-toggle" onClick={() => setSidebarOpen(true)} title="Open menu" aria-label="Open menu">
               <i className="bi bi-list"></i>
             </button>
-            <div className="top-header-left" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <img src="/maskpro_logo.png" alt="MaskPro" style={{ width: '32px', height: '32px', borderRadius: '8px' }} />
-              <h1>MASKPRO<span style={{ WebkitTextFillColor: '#06b6d4' }}>Care</span></h1>
+            <div
+              className="top-header-left"
+              onClick={() => navigate('/')}
+              role="button"
+              tabIndex={0}
+              title="Back to Dashboard"
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}
+            >
+              <img src="/maskpro_logo.png" alt="MaskPro" style={{ width: '32px', height: '32px', borderRadius: '8px', flexShrink: 0 }} />
+              <h1 style={{ margin: 0, fontSize: '20px', lineHeight: 1 }}>MASKPRO<span style={{ WebkitTextFillColor: '#06b6d4' }}>Care</span></h1>
             </div>
           </div>
-          <div className="top-header-right" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div className="top-header-right" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, marginLeft: 'auto' }}>
             {/* Bell in mobile header */}
             <BellIcon />
             {profilePhoto ? (
-              <img src={profilePhoto} alt="" onClick={() => navigate('/profile')} style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', cursor: 'pointer' }} />
+              <img src={profilePhoto} alt="" onClick={() => navigate('/profile')} style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', cursor: 'pointer', border: '2px solid #e0e7ff' }} />
             ) : (
               <div className="sidebar-avatar" style={{ width: '36px', height: '36px', fontSize: '14px', cursor: 'pointer' }}
                    onClick={() => navigate('/profile')}>
