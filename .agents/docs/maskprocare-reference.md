@@ -234,6 +234,16 @@ ssh root@167.71.217.49 'certbot --nginx -d care.maskpro.ph'
 
 ## 📝 Session Learnings Log
 
+### 2026-10-28: Counter-Date, Finalize-by-Phone & Waitlist (v1.13.10)
+- **Schema:** `booking_requests.status` ENUM = `pending, approved, rejected, cancelled, negotiating, waitlisted`. New cols `counter_date DATETIME NULL` (client's preferred date, never stored in `offered_date`) and `waitlist_id INT NULL` (FK-ish → `nanofix_waitlist.id`).
+- **Client semantics:** `negotiating`/`waitlisted` are shown as **Pending** + secondary badge (mobile, web, `/dashboard/stats`). Client can propose/change preferred date whenever status is `rejected`/`negotiating` and there is no open offer (`offer_status` not `offered`).
+- **counter_date format:** clients send `YYYY-MM-DD HH:MM` (Manila); server regex-validates + rejects past dates. Shared slots: 08,09,10,11,13,14,15,16.
+- **Unify finalize-by-phone:** `set_agreed_date` + `finalized_by_phone=1` → pre-processor updates `booking_date/offered_date`, `offer_status='accepted'`, then sets `$_POST['approve_request']` so the standard approve branch runs (booking, services, SMS reminders, client notice). Unchecked = old behavior (offer sent for client approval).
+- **Unify waitlist:** `move_to_waitlist` inserts into `nanofix_waitlist` directly (sort_order = MAX+1 per branch for waiting/notified), **no SMS** (only `customer_notifications` type `booking_waitlisted`). Approve branch marks waitlist entry `converted` + `converted_booking_id`.
+- **PHP 8 gotcha:** `mysqli_stmt::bind_param` args are by-reference — never pass a ternary/expression; precompute into a variable.
+- **Patch hygiene:** earlier non-idempotent patches duplicated PHP/CSS blocks in `booking_requests.php`. Always use marker-guarded python patches (`CARE_V11310_*`), back up to `/root/*.bak.<ts>`, `php -l` after.
+- **SSH:** sshpass auth fails intermittently; retry with `-o PubkeyAuthentication=no`. In zsh, don't put ssh options in a `$VAR` (no word splitting).
+
 ### 2026-10-20: Mobile Native Polish, TopHeader & Parity Completion
 - **TopHeader & Real-Time Notification Polling:** Built `TopHeader.tsx` and `NotificationModal.tsx` using `useSafeAreaInsets` to provide pixel-for-pixel web topbar parity, polling `/api/notifications/count` every 60s and displaying an interactive native modal sheet for notifications with deep-links to `/bookings`, `/vehicles`, and `/profile`.
 - **Shop Screen:** Ported `Shop.jsx` ("Coming Soon" VIP experience) into native `shop.tsx` and mounted it in `TabLayout`.

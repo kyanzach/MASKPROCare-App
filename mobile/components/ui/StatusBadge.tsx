@@ -53,6 +53,13 @@ export const STATUS_CONFIG: Record<string, StatusConfig> = {
     border: '#a78bfa',
     icon: 'handshake-o',
   },
+  waitlisted: {
+    label: 'Waitlisted',
+    bg: '#fffbeb',
+    color: '#b45309',
+    border: '#fcd34d',
+    icon: 'hourglass-half',
+  },
 };
 
 interface StatusBadgeProps {

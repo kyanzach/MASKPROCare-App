@@ -1,5 +1,27 @@
 # Changelog
 
+## [v1.13.10] — 2026-10-28
+### Added
+- **Client counter-date ("Preferred Date") flow (`mobile/`, `frontend/`, `server/routes/bookings.js`)**:
+  - New `CounterDatePicker` (mobile: date chips + time-slot chips, Sundays skipped) and `CounterDateModal` (web: date input + time-slot select). Both send `counter_date` as `YYYY-MM-DD HH:MM`, replacing the old free-text field.
+  - Clients can **Propose / Change a Preferred Date** at any time during negotiation, including after declining an offer (previously a dead end).
+  - Client's preferred date is shown on the card ("Your Preferred Date: …, our branch will call you to finalize").
+- **Unify Negotiating tab — agent actions (`booking_request_card.php`, `booking_requests.php`)**:
+  - Prominent "Client's Preferred Date (Counter-Offer)" banner on the card.
+  - **Accept Client's Date** and **Set / Edit Agreed Date** open the agreed-date modal, which now has a **"Finalized over the phone"** checkbox (checked by default) plus notes. When checked, the booking is approved right away (booking + services + SMS reminders + client "Booking Approved" notice), with no extra client approval. Unchecked, the date is sent to the client for approval as before.
+  - **Move to Waitlist**: inserts into the existing NanoFix waitlist (`nanofix_waitlist`, Admin Dashboard → Waitlist) with the preferred date and time preference, sets request status `waitlisted`, and sends an in-app/push notice (no SMS). The waitlist entry is marked `converted` when the request is finalized later.
+  - Waitlisted requests stay in the Negotiating tab with a "Waitlisted" badge and a **View in Waitlist** deep-link (`index.php?tab=waitlist`).
+- DB: `booking_requests.status` ENUM gains `'waitlisted'`; new columns `counter_date DATETIME NULL` and `waitlist_id INT NULL`.
+
+### Changed
+- Negotiating and waitlisted requests now stay under **Pending Appointments** on the client (mobile + web), showing "Pending Approval" plus a secondary **Negotiating** / **Waitlisted** badge. Before, they disappeared from Pending while the stat card still counted them.
+- `/dashboard/stats` pending list and count now include `waitlisted` and return `counter_date`.
+- Web Dashboard: replaced native `alert()` calls with an inline dismissible notice.
+
+### Fixed
+- `respond-offer` no longer writes free text into the `offered_date` DATETIME column. Counter dates are validated (format, not in the past, Manila time) and stored in `counter_date`. The endpoint returns 409 when the request is not open for negotiation.
+- Unify approval: precomputed the booking date before `bind_param`, because PHP 8 cannot pass a ternary expression by reference. Removed a duplicated `set_agreed_date` handler and duplicated count/CSS blocks left by an earlier patch.
+
 ## [v1.13.9] — 2026-10-28
 ### Added & Enhanced
 - **Dedicated Negotiations Flow & Tab Lifecycle (`booking_requests.php`, `booking_request_card.php`, `server/routes/bookings.js`, `mobile/`, `frontend/`)**:

@@ -250,14 +250,14 @@ router.get('/list', async (req, res) => {
       const [rows] = await pool.query(`
         SELECT br.request_id, br.booking_date, br.latest_service, br.notes, br.branch_id,
                br.status, br.cancellation_reason, br.rejection_reason, br.offered_date,
-               br.offer_status, br.customer_offer_reply, br.edit_history,
+               br.counter_date, br.offer_status, br.customer_offer_reply, br.edit_history,
                br.time_added,
                v.make, v.model, v.plate_no, v.photo as vehicle_photo,
                GROUP_CONCAT(brs.service_name SEPARATOR ', ') as service_names
         FROM booking_requests br
         LEFT JOIN vehicles v ON br.customer_vehicle_id = v.id
         LEFT JOIN booking_request_services brs ON br.request_id = brs.request_id
-        WHERE br.customer_id = ? AND br.status IN ('pending', 'cancelled', 'rejected', 'negotiating')
+        WHERE br.customer_id = ? AND br.status IN ('pending', 'cancelled', 'rejected', 'negotiating', 'waitlisted')
         GROUP BY br.request_id
         ORDER BY br.time_added DESC
       `, [customerId]);
@@ -883,12 +883,32 @@ router.post('/respond-offer', async (req, res) => {
 
     const request = rows[0];
 
-    if (!request.offered_date) {
-      return res.status(400).json({ success: false, data: null, message: 'No alternative date offered for this request', errors: [] });
+    if (!['rejected', 'negotiating'].includes(request.status)) {
+      return res.status(409).json({ success: false, data: null, message: 'This request is no longer open for negotiation.', errors: [] });
+    }
+
+    if (action === 'accept' && (!request.offered_date || !(request.offer_status === 'offered' || !request.offer_status))) {
+      return res.status(400).json({ success: false, data: null, message: 'There is no open date offer to accept.', errors: [] });
     }
 
     const now = new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila' });
-    const counterDate = req.body.counter_date ? String(req.body.counter_date).trim() : null;
+
+    // Counter date must be a real date/time: 'YYYY-MM-DD HH:MM' (or ISO). Stored in Manila local time.
+    let counterDate = null;
+    if (req.body.counter_date) {
+      const m = String(req.body.counter_date).trim().match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2})/);
+      if (!m) {
+        return res.status(422).json({ success: false, data: null, message: 'Please pick a valid preferred date and time.', errors: [] });
+      }
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+      if (m[1] < today) {
+        return res.status(422).json({ success: false, data: null, message: 'Preferred date cannot be in the past.', errors: [] });
+      }
+      counterDate = `${m[1]} ${m[2]}:${m[3]}:00`;
+    }
+    const counterLabel = counterDate
+      ? new Date(counterDate.replace(' ', 'T') + '+08:00').toLocaleString('en-US', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+      : null;
 
     if (action === 'accept') {
       // Customer approved / accepted the proposed agreed date:
@@ -962,12 +982,12 @@ router.post('/respond-offer', async (req, res) => {
       let noteAppend = '';
       
       if (counterDate) {
-        noteAppend = `Customer requested alternative date on ${now}: Counter-proposed ${counterDate}. Reason: ${declineReason}`;
+        noteAppend = `Customer proposed preferred date on ${now}: ${counterLabel}. Reason: ${declineReason}`;
         const updatedNotes = request.notes ? `${request.notes}\n${noteAppend}` : noteAppend;
 
         await pool.query(
           `UPDATE booking_requests 
-           SET status = 'negotiating', offered_date = ?, offer_status = 'countered', customer_offer_reply = ?, notes = ?
+           SET status = 'negotiating', counter_date = ?, offer_status = 'countered', customer_offer_reply = ?, notes = ?
            WHERE request_id = ? AND customer_id = ?`,
           [counterDate, declineReason, updatedNotes, reqId, customerId]
         );
@@ -1031,7 +1051,7 @@ router.post('/respond-offer', async (req, res) => {
           'offer_declined',
           isCounter ? 'Counter-Date Proposed' : 'Alternative Date Declined',
           isCounter 
-            ? `You proposed ${counterDate} for ${vehName}. Our branch team will review and confirm.` 
+            ? `You proposed ${counterLabel} for ${vehName}. Our branch team will call you to confirm.` 
             : `You declined the proposed date for ${vehName}. Reason: "${declineReason}". Our team will reach out to reschedule.`
         );
         await notifyUnifyStaff(
@@ -1039,9 +1059,9 @@ router.post('/respond-offer', async (req, res) => {
           isCounter ? 'care_offer_countered' : 'care_offer_declined',
           isCounter ? `Schedule Counter-Offer: ${custName}` : `Date Offer Declined: ${custName}`,
           isCounter 
-            ? `${custName} (${vehName}) counter-proposed ${counterDate}. Reason: "${declineReason}".`
+            ? `${custName} (${vehName}) prefers ${counterLabel}. Reason: "${declineReason}". Call to finalize or move to waitlist.`
             : `${custName} declined the date offer. Reason: "${declineReason}". Open Negotiating tab to set agreed date.`,
-          'booking_requests.php?tab=negotiating',
+          `booking_requests.php?tab=negotiating&request_id=${reqId}`,
           reqId
         );
       }

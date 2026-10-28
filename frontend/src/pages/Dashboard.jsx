@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
+import CounterDateModal, { formatCounterDate } from '../components/CounterDateModal';
 
 // Maps raw DB service names → friendly display labels
 const SERVICE_LABEL_MAP = {
@@ -55,7 +56,9 @@ export default function Dashboard() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [respondingOffer, setRespondingOffer] = useState(false);
-  const [declineModal, setDeclineModal] = useState({ open: false, req: null, reason: '', counterDate: '' });
+  const [declineModal, setDeclineModal] = useState({ open: false, req: null, mode: 'decline' });
+  const closeDeclineModal = () => setDeclineModal({ open: false, req: null, mode: 'decline' });
+  const [notice, setNotice] = useState(null); // { type: 'success'|'error', text }
 
   useEffect(() => {
     loadData();
@@ -84,33 +87,34 @@ export default function Dashboard() {
     try {
       await api.post('/bookings/respond-offer', { request_id: requestId, action: 'accept' });
       await loadData();
+      setNotice({ type: 'success', text: 'Agreed date accepted! Your booking is confirmed.' });
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to accept alternative date.');
+      setNotice({ type: 'error', text: err.response?.data?.message || 'Failed to accept alternative date.' });
     } finally {
       setRespondingOffer(false);
     }
   };
 
-  const handleDeclineSubmit = async (e) => {
-    e.preventDefault();
+  const handleDeclineSubmit = async ({ counterDate, reason }) => {
     if (!declineModal.req) return;
-    const reason = declineModal.reason.trim();
-    if (!reason) {
-      alert('Please enter a reason or suggestion.');
-      return;
-    }
     setRespondingOffer(true);
     try {
       await api.post('/bookings/respond-offer', {
         request_id: declineModal.req.request_id,
         action: 'decline',
-        reply_reason: reason,
-        counter_date: declineModal.counterDate.trim(),
+        reply_reason: reason || 'Customer requested reschedule',
+        counter_date: counterDate || undefined,
       });
-      setDeclineModal({ open: false, req: null, reason: '', counterDate: '' });
+      closeDeclineModal();
       await loadData();
+      setNotice({
+        type: 'success',
+        text: counterDate
+          ? `Preferred date sent (${formatCounterDate(counterDate)}). Our branch will call you to finalize it.`
+          : 'Your response has been sent to our branch agent.',
+      });
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to decline alternative date.');
+      setNotice({ type: 'error', text: err.response?.data?.message || 'Failed to submit response.' });
     } finally {
       setRespondingOffer(false);
     }
@@ -132,14 +136,34 @@ export default function Dashboard() {
   const upcomingBookings = bookings.filter(b => b.status === 'Scheduled' || new Date(b.booking_date) >= new Date());
   const recentBookings = bookings.slice(0, 5);
   const pendingAppointments = requests.filter(
-    r => r.status === 'pending' || r.status === 'negotiating' || (r.status === 'rejected' && (r.offered_date || r.rejection_reason))
+    r => ['pending', 'negotiating', 'waitlisted'].includes(r.status) || (r.status === 'rejected' && (r.offered_date || r.rejection_reason))
   );
   const pendingCount = stats?.stats?.pending_requests ?? requests.filter(
-    r => r.status === 'pending' || r.status === 'negotiating' || (r.status === 'rejected' && r.offer_status === 'offered')
+    r => ['pending', 'negotiating', 'waitlisted'].includes(r.status) || (r.status === 'rejected' && r.offer_status === 'offered')
   ).length;
 
   return (
     <div>
+      {notice && (
+        <div
+          role="status"
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px',
+            padding: '12px 16px', borderRadius: '12px', marginBottom: '20px', fontSize: '14px',
+            background: notice.type === 'error' ? '#fef2f2' : '#f0fdf4',
+            border: `1px solid ${notice.type === 'error' ? '#fca5a5' : '#86efac'}`,
+            color: notice.type === 'error' ? '#991b1b' : '#166534',
+          }}
+        >
+          <span>
+            <i className={notice.type === 'error' ? 'fas fa-exclamation-circle' : 'fas fa-check-circle'} style={{ marginRight: 6 }}></i>
+            {notice.text}
+          </span>
+          <button type="button" onClick={() => setNotice(null)} aria-label="Dismiss" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit' }}>
+            <i className="fas fa-times"></i>
+          </button>
+        </div>
+      )}
       {/* Welcome Section */}
       <div className="flex-between mb-32" style={{ flexWrap: 'wrap', gap: '16px' }}>
         <div>
@@ -248,17 +272,19 @@ export default function Dashboard() {
               {pendingAppointments.map((req) => {
                 const isRejected = req.status === 'rejected';
                 const isNegotiating = req.status === 'negotiating';
+                const isWaitlisted = req.status === 'waitlisted';
                 const hasOffer = !!req.offered_date;
                 const isOfferPending = (isRejected || isNegotiating) && hasOffer && (!req.offer_status || req.offer_status === 'offered');
                 const isOfferAccepted = req.offer_status === 'accepted';
                 const isOfferDeclined = req.offer_status === 'declined';
                 const isOfferCountered = req.offer_status === 'countered';
+                const canPropose = (isRejected || isNegotiating) && !isOfferPending;
 
                 return (
                   <div
                     key={req.request_id}
                     style={{
-                      border: isNegotiating ? '1.5px solid #c4b5fd' : isRejected ? '1.5px solid #ef4444' : '1px solid #fde68a',
+                      border: isNegotiating ? '1.5px solid #c4b5fd' : isWaitlisted ? '1.5px solid #fcd34d' : isRejected ? '1.5px solid #ef4444' : '1px solid #fde68a',
                       borderRadius: '14px',
                       padding: '16px',
                       backgroundColor: isNegotiating ? '#fdfaff' : isRejected ? '#fff8f8' : '#fffdf5',
@@ -274,19 +300,35 @@ export default function Dashboard() {
                         </div>
                       </div>
 
-                      <span
-                        className="badge"
-                        style={{
-                          backgroundColor: isNegotiating ? '#ede9fe' : isRejected ? '#fee2e2' : '#fef3c7',
-                          color: isNegotiating ? '#6d28d9' : isRejected ? '#b91c1c' : '#b45309',
-                          border: isNegotiating ? '1px solid #c4b5fd' : undefined,
-                          fontWeight: 700,
-                          fontSize: '12px',
-                        }}
-                      >
-                        <i className={isNegotiating ? 'fas fa-handshake' : isRejected ? 'fas fa-times-circle' : 'fas fa-hourglass-half'} style={{ marginRight: '4px' }}></i>
-                        {isNegotiating ? 'In Negotiation' : isRejected ? 'Request Declined' : 'Pending Approval'}
-                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                        <span
+                          className="badge"
+                          style={{
+                            backgroundColor: isRejected ? '#fee2e2' : '#fef3c7',
+                            color: isRejected ? '#b91c1c' : '#b45309',
+                            fontWeight: 700,
+                            fontSize: '12px',
+                          }}
+                        >
+                          <i className={isRejected ? 'fas fa-times-circle' : 'fas fa-hourglass-half'} style={{ marginRight: '4px' }}></i>
+                          {isRejected ? 'Request Declined' : 'Pending Approval'}
+                        </span>
+                        {(isNegotiating || isWaitlisted) && (
+                          <span
+                            className="badge"
+                            style={{
+                              backgroundColor: isWaitlisted ? '#fffbeb' : '#ede9fe',
+                              color: isWaitlisted ? '#b45309' : '#6d28d9',
+                              border: `1px solid ${isWaitlisted ? '#fcd34d' : '#c4b5fd'}`,
+                              fontWeight: 700,
+                              fontSize: '11px',
+                            }}
+                          >
+                            <i className={isWaitlisted ? 'fas fa-list-ol' : 'fas fa-handshake'} style={{ marginRight: '4px' }}></i>
+                            {isWaitlisted ? 'Waitlisted' : 'Negotiating'}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Rejection Reason */}
@@ -324,7 +366,7 @@ export default function Dashboard() {
                             <button
                               type="button"
                               className="btn btn-sm btn-outline-danger"
-                              onClick={() => setDeclineModal({ open: true, req, reason: '', counterDate: '' })}
+                              onClick={() => setDeclineModal({ open: true, req, mode: 'decline' })}
                               disabled={respondingOffer}
                               style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '6px 14px', borderRadius: '8px', background: '#fff', border: '1px solid #ef4444', color: '#dc2626', cursor: 'pointer' }}
                             >
@@ -335,7 +377,7 @@ export default function Dashboard() {
 
                         {isOfferCountered && (
                           <div style={{ color: '#6d28d9', fontSize: '12px', fontWeight: 600, marginTop: '6px' }}>
-                            <i className="fas fa-hourglass-half"></i> You proposed: {req.offered_date}. Waiting for branch response.
+                            <i className="fas fa-exchange-alt"></i> You suggested a different schedule (see below).
                           </div>
                         )}
 
@@ -349,6 +391,45 @@ export default function Dashboard() {
                           <div style={{ color: '#b91c1c', fontSize: '12px', fontWeight: 600, marginTop: '6px' }}>
                             <i className="fas fa-times-circle"></i> You declined this offer. {req.customer_offer_reply && <span>Reason: "{req.customer_offer_reply}"</span>}
                           </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Client's preferred date / waitlist / propose action */}
+                    {(req.counter_date || isWaitlisted || canPropose) && (
+                      <div style={{
+                        backgroundColor: isWaitlisted ? '#fffbeb' : '#faf5ff',
+                        border: `1px solid ${isWaitlisted ? '#fde68a' : '#ddd6fe'}`,
+                        borderRadius: '10px', padding: '12px', marginTop: '10px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap',
+                      }}>
+                        <div>
+                          {req.counter_date && (
+                            <div style={{ fontSize: '12px', fontWeight: 700, color: isWaitlisted ? '#92400e' : '#5b21b6' }}>
+                              <i className="fas fa-calendar-plus"></i> Your Preferred Date:{' '}
+                              <span style={{ fontSize: '14px', fontWeight: 800, color: isWaitlisted ? '#b45309' : '#6d28d9' }}>
+                                {formatCounterDate(req.counter_date)}
+                              </span>
+                            </div>
+                          )}
+                          <div style={{ fontSize: '12px', color: '#4b5563', marginTop: req.counter_date ? '4px' : 0 }}>
+                            {isWaitlisted
+                              ? "You're on the waitlist. We'll call you as soon as a slot opens for your preferred date."
+                              : req.counter_date
+                              ? 'Our branch will call you to check availability and finalize your schedule.'
+                              : 'None of the offered dates work? Pick your preferred date and our branch will call you.'}
+                          </div>
+                        </div>
+                        {canPropose && (
+                          <button
+                            type="button"
+                            onClick={() => setDeclineModal({ open: true, req, mode: 'propose' })}
+                            disabled={respondingOffer}
+                            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, padding: '8px 14px', borderRadius: '8px', background: '#6d28d9', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '13px' }}
+                          >
+                            <i className="fas fa-calendar-alt"></i>
+                            {req.counter_date ? 'Change Preferred Date' : 'Propose a Preferred Date'}
+                          </button>
                         )}
                       </div>
                     )}
@@ -488,89 +569,15 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Decline Offer Modal */}
-      {declineModal.open && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px'
-        }}>
-          <div style={{
-            backgroundColor: '#fff', borderRadius: '16px', padding: '24px',
-            maxWidth: '420px', width: '100%', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-              <div style={{ width: '40px', height: '40px', borderRadius: '20px', backgroundColor: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626' }}>
-                <i className="fas fa-times" style={{ fontSize: '18px' }}></i>
-              </div>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: '#111827' }}>Decline or Propose New Date</h3>
-                <small style={{ color: '#64748b' }}>
-                  Offered: {declineModal.req?.offered_date ? new Date(declineModal.req.offered_date).toLocaleDateString() : ''}
-                </small>
-              </div>
-            </div>
-
-            <p style={{ fontSize: '13px', color: '#475569', marginBottom: '14px', lineHeight: 1.5 }}>
-              Please state why this date does not work for you, or suggest an alternative:
-            </p>
-
-            <form onSubmit={handleDeclineSubmit}>
-              <textarea
-                rows={2}
-                required
-                value={declineModal.reason}
-                onChange={(e) => setDeclineModal({ ...declineModal, reason: e.target.value })}
-                placeholder="Reason (e.g. Schedule conflict, prefer weekends instead...)"
-                style={{
-                  width: '100%', borderRadius: '10px', border: '1px solid #d1d5db',
-                  padding: '10px 12px', fontSize: '13px', resize: 'vertical',
-                  marginBottom: '10px', boxSizing: 'border-box'
-                }}
-              />
-
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#374151', marginBottom: '4px' }}>
-                Suggest Preferred Date & Time (Optional):
-              </label>
-              <input
-                type="text"
-                value={declineModal.counterDate || ''}
-                onChange={(e) => setDeclineModal({ ...declineModal, counterDate: e.target.value })}
-                placeholder="e.g. Next Saturday Nov 5 at 10:00 AM"
-                style={{
-                  width: '100%', borderRadius: '8px', border: '1px solid #d1d5db',
-                  padding: '8px 12px', fontSize: '13px', marginBottom: '16px', boxSizing: 'border-box'
-                }}
-              />
-
-              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                <button
-                  type="button"
-                  onClick={() => setDeclineModal({ open: false, req: null, reason: '', counterDate: '' })}
-                  disabled={respondingOffer}
-                  style={{
-                    padding: '8px 16px', borderRadius: '8px', border: '1px solid #d1d5db',
-                    background: '#fff', color: '#4b5563', cursor: 'pointer', fontWeight: 600
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={respondingOffer || !declineModal.reason.trim()}
-                  style={{
-                    padding: '8px 18px', borderRadius: '8px', border: 'none',
-                    background: declineModal.counterDate?.trim() ? '#4f46e5' : '#dc2626',
-                    color: '#fff', cursor: 'pointer', fontWeight: 700
-                  }}
-                >
-                  {respondingOffer ? 'Submitting...' : (declineModal.counterDate?.trim() ? 'Propose New Date' : 'Submit & Decline')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Decline / Propose Preferred Date Modal */}
+      <CounterDateModal
+        open={declineModal.open}
+        mode={declineModal.mode}
+        offeredDate={declineModal.req?.offered_date}
+        submitting={respondingOffer}
+        onClose={closeDeclineModal}
+        onSubmit={handleDeclineSubmit}
+      />
     </div>
   );
 }

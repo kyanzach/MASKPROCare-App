@@ -97,14 +97,14 @@ router.get('/stats', async (req, res) => {
       const [rows] = await pool.query(`
         SELECT br.request_id, br.booking_date, br.latest_service, br.notes, br.branch_id,
                br.status, br.cancellation_reason, br.rejection_reason, br.offered_date,
-               br.offer_status, br.customer_offer_reply, br.time_added,
+               br.counter_date, br.offer_status, br.customer_offer_reply, br.time_added,
                v.make, v.model, v.plate_no, v.photo as vehicle_photo,
                GROUP_CONCAT(brs.service_name SEPARATOR ', ') as service_names
         FROM booking_requests br
         LEFT JOIN vehicles v ON br.customer_vehicle_id = v.id
         LEFT JOIN booking_request_services brs ON br.request_id = brs.request_id
         WHERE br.customer_id = ? 
-          AND (br.status = 'pending' OR br.status = 'negotiating' OR (br.status = 'rejected' AND (br.offered_date IS NOT NULL OR br.time_added >= DATE_SUB(NOW(), INTERVAL 30 DAY))))
+          AND (br.status IN ('pending', 'negotiating', 'waitlisted') OR (br.status = 'rejected' AND (br.offered_date IS NOT NULL OR br.time_added >= DATE_SUB(NOW(), INTERVAL 30 DAY))))
         GROUP BY br.request_id
         ORDER BY 
           CASE 
@@ -118,7 +118,7 @@ router.get('/stats', async (req, res) => {
       `, [customerId]);
       pendingRequests = rows;
 
-      pendingCount = rows.filter(r => r.status === 'pending' || r.status === 'negotiating' || (r.status === 'rejected' && r.offer_status === 'offered')).length;
+      pendingCount = rows.filter(r => ['pending', 'negotiating', 'waitlisted'].includes(r.status) || (r.status === 'rejected' && r.offer_status === 'offered')).length;
     } catch { /* ignore */ }
 
     // Completed services count

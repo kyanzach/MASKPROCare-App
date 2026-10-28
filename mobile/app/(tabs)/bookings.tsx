@@ -22,6 +22,7 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import AlertPromptModal, { AlertType } from '@/components/ui/AlertPromptModal';
 import CalendarPicker from '@/components/ui/CalendarPicker';
+import CounterDatePicker, { formatCounterDate } from '@/components/ui/CounterDatePicker';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -75,7 +76,8 @@ interface BookingItem {
   rejection_reason?: string;
   cancellation_reason?: string;
   offered_date?: string;
-  offer_status?: 'offered' | 'accepted' | 'declined' | 'countered';
+  counter_date?: string | null;
+  offer_status?: 'offered' | 'accepted' | 'declined' | 'countered' | null;
   customer_offer_reply?: string;
   vehicle_photo?: string;
 }
@@ -205,12 +207,16 @@ export default function BookingsScreen() {
     item: BookingItem | null;
     reason: string;
     counterDate: string;
+    mode: 'decline' | 'propose';
   }>({
     visible: false,
     item: null,
     reason: '',
     counterDate: '',
+    mode: 'decline',
   });
+  const closeDeclineModal = () =>
+    setDeclineModal({ visible: false, item: null, reason: '', counterDate: '', mode: 'decline' });
 
   // Photo Lightbox modal
   const [viewingPhoto, setViewingPhoto] = useState<{
@@ -248,8 +254,12 @@ export default function BookingsScreen() {
     if (!declineModal.item) return;
     const reason = declineModal.reason.trim();
     const counterDate = declineModal.counterDate.trim();
+    if (declineModal.mode === 'propose' && !counterDate) {
+      showPrompt('warning', 'Pick a Date', 'Please choose your preferred date and time.');
+      return;
+    }
     if (!reason && !counterDate) {
-      showPrompt('warning', 'Input Required', 'Please provide a reason or suggest your preferred alternative date.');
+      showPrompt('warning', 'Input Required', 'Please provide a reason or pick your preferred date.');
       return;
     }
     setRespondingOffer(true);
@@ -260,12 +270,12 @@ export default function BookingsScreen() {
         reply_reason: reason || 'Customer requested reschedule',
         counter_date: counterDate || undefined,
       });
-      setDeclineModal({ visible: false, item: null, reason: '', counterDate: '' });
+      closeDeclineModal();
       showPrompt(
         'success',
-        counterDate ? 'New Date Proposed 📅' : 'Response Sent',
-        counterDate 
-          ? 'Your preferred date has been submitted. Our branch agent will review and confirm.'
+        counterDate ? 'Preferred Date Sent 📅' : 'Response Sent',
+        counterDate
+          ? `We received your preferred schedule (${formatCounterDate(counterDate.replace(' ', 'T'))}). Our branch will call you to finalize it.`
           : 'Your response has been sent to our branch agent.'
       );
       loadData();
@@ -523,6 +533,7 @@ export default function BookingsScreen() {
             {unifiedList.map((item) => {
               const isRejected = item.status === 'rejected';
               const isNegotiating = item.status === 'negotiating';
+              const isWaitlisted = item.status === 'waitlisted';
               const isCancelled = item.status === 'cancelled';
               const opacity = isCancelled ? 0.65 : 1;
               const photoUrl = getPhotoUrl(item.vehicle_photo);
@@ -531,6 +542,7 @@ export default function BookingsScreen() {
               const isOfferAccepted = item.offer_status === 'accepted';
               const isOfferDeclined = item.offer_status === 'declined';
               const isOfferCountered = item.offer_status === 'countered';
+              const canPropose = item.type === 'request' && (isRejected || isNegotiating) && !isOfferPending;
 
               return (
                 <View
@@ -548,7 +560,24 @@ export default function BookingsScreen() {
                       </Text>
                       <Text style={styles.cardTime}>{item.timeStr}</Text>
                     </View>
-                    <StatusBadge status={item.status} />
+                    {isNegotiating || isWaitlisted ? (
+                      <View style={styles.badgeStack}>
+                        <StatusBadge status="pending" />
+                        <View style={[styles.subBadge, isWaitlisted ? styles.subBadgeWaitlist : styles.subBadgeNegotiating]}>
+                          <FontAwesome
+                            name={isWaitlisted ? 'hourglass-half' : 'comments'}
+                            size={9}
+                            color={isWaitlisted ? '#b45309' : '#6d28d9'}
+                            style={{ marginRight: 4 }}
+                          />
+                          <Text style={[styles.subBadgeText, { color: isWaitlisted ? '#b45309' : '#6d28d9' }]}>
+                            {isWaitlisted ? 'Waitlisted' : 'Negotiating'}
+                          </Text>
+                        </View>
+                      </View>
+                    ) : (
+                      <StatusBadge status={item.status} />
+                    )}
                   </View>
 
                   <View style={styles.cardBody}>
@@ -645,7 +674,7 @@ export default function BookingsScreen() {
 
                           <TouchableOpacity
                             style={styles.cardDeclineBtn}
-                            onPress={() => setDeclineModal({ visible: true, item, reason: '', counterDate: '' })}
+                            onPress={() => setDeclineModal({ visible: true, item, reason: '', counterDate: '', mode: 'decline' })}
                             disabled={respondingOffer}
                             activeOpacity={0.8}
                           >
@@ -665,7 +694,7 @@ export default function BookingsScreen() {
                           <FontAwesome name="exchange" size={13} color="#4338ca" style={{ marginRight: 6 }} />
                           <View style={{ flex: 1 }}>
                             <Text style={[styles.cardOfferAcceptedText, { color: '#4338ca' }]}>
-                              You proposed a counter date: {item.offered_date ? new Date(item.offered_date).toLocaleString() : ''}
+                              You suggested a different schedule (see below).
                             </Text>
                             {item.customer_offer_reply ? (
                               <Text style={styles.cardOfferReplyText}>Note: "{item.customer_offer_reply}"</Text>
@@ -686,6 +715,62 @@ export default function BookingsScreen() {
                             ) : null}
                           </View>
                         </View>
+                      ) : null}
+                    </View>
+                  ) : null}
+
+                  {/* Negotiation panel: client's preferred date / waitlist status / propose action */}
+                  {item.type === 'request' && (item.counter_date || isWaitlisted || canPropose) ? (
+                    <View style={[styles.negotiationPanel, isWaitlisted && styles.negotiationPanelWaitlist]}>
+                      {item.counter_date ? (
+                        <View style={styles.cardOfferHeader}>
+                          <View style={[styles.cardOfferIcon, { backgroundColor: isWaitlisted ? '#fef3c7' : '#ede9fe' }]}>
+                            <FontAwesome
+                              name={isWaitlisted ? 'hourglass-half' : 'calendar-plus-o'}
+                              size={13}
+                              color={isWaitlisted ? '#b45309' : '#6d28d9'}
+                            />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={[styles.cardOfferLabel, { color: isWaitlisted ? '#92400e' : '#5b21b6' }]}>
+                              Your Preferred Date:
+                            </Text>
+                            <Text style={[styles.cardOfferDate, { color: isWaitlisted ? '#b45309' : '#6d28d9' }]}>
+                              {formatCounterDate(item.counter_date)}
+                            </Text>
+                          </View>
+                        </View>
+                      ) : null}
+
+                      <Text style={styles.negotiationHint}>
+                        {isWaitlisted
+                          ? "You're on the waitlist. We'll call you as soon as a slot opens for your preferred date."
+                          : item.counter_date
+                          ? 'Our branch will call you to check availability and finalize your schedule.'
+                          : 'None of the offered dates work? Pick your preferred date and our branch will call you.'}
+                      </Text>
+
+                      {canPropose ? (
+                        <TouchableOpacity
+                          style={styles.proposeBtn}
+                          onPress={() =>
+                            setDeclineModal({
+                              visible: true,
+                              item,
+                              reason: '',
+                              counterDate: '',
+                              mode: 'propose',
+                            })
+                          }
+                          disabled={respondingOffer}
+                          activeOpacity={0.8}
+                          accessibilityRole="button"
+                        >
+                          <FontAwesome name="calendar" size={12} color="#ffffff" style={{ marginRight: 6 }} />
+                          <Text style={styles.proposeBtnText}>
+                            {item.counter_date ? 'Change Preferred Date' : 'Propose a Preferred Date'}
+                          </Text>
+                        </TouchableOpacity>
                       ) : null}
                     </View>
                   ) : null}
@@ -1097,7 +1182,7 @@ export default function BookingsScreen() {
         visible={declineModal.visible}
         transparent={true}
         animationType="fade"
-        onRequestClose={() => setDeclineModal({ visible: false, item: null, reason: '', counterDate: '' })}
+        onRequestClose={closeDeclineModal}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -1105,32 +1190,41 @@ export default function BookingsScreen() {
         >
           <View style={styles.promptModalCard}>
             <View style={styles.promptModalHeader}>
-              <View style={styles.promptIconCircle}>
-                <FontAwesome name="calendar-times-o" size={18} color="#dc2626" />
+              <View style={[styles.promptIconCircle, declineModal.mode === 'propose' && { backgroundColor: '#ede9fe' }]}>
+                <FontAwesome
+                  name={declineModal.mode === 'propose' ? 'calendar-plus-o' : 'calendar-times-o'}
+                  size={18}
+                  color={declineModal.mode === 'propose' ? '#6d28d9' : '#dc2626'}
+                />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.promptModalTitle}>Decline or Propose New Date</Text>
+                <Text style={styles.promptModalTitle}>
+                  {declineModal.mode === 'propose' ? 'Propose a Preferred Date' : 'Decline or Propose New Date'}
+                </Text>
                 <Text style={styles.promptModalSubtitle}>
-                  {declineModal.item?.offered_date
-                    ? new Date(declineModal.item.offered_date).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })
+                  {declineModal.mode === 'propose'
+                    ? 'Our branch will call you to finalize'
+                    : declineModal.item?.offered_date
+                    ? `Offered: ${formatCounterDate(declineModal.item.offered_date)}`
                     : ''}
                 </Text>
               </View>
             </View>
 
-            <Text style={styles.promptInstructionText}>
-              Please state why this schedule doesn't work, or suggest an alternative:
+            <Text style={[styles.promptInstructionText, { marginBottom: 6, fontWeight: '700', color: '#374151' }]}>
+              {declineModal.mode === 'propose' ? 'Your Preferred Date & Time:' : 'Suggest Preferred Date & Time (Optional):'}
             </Text>
+            <CounterDatePicker
+              value={declineModal.counterDate}
+              onChange={(v) => setDeclineModal((prev) => ({ ...prev, counterDate: v }))}
+            />
 
+            <Text style={[styles.promptInstructionText, { marginTop: 12 }]}>
+              {declineModal.mode === 'propose' ? 'Note for the branch (optional):' : "Why doesn't the offered schedule work?"}
+            </Text>
             <TextInput
-              style={styles.promptInput}
-              placeholder="Reason (e.g. Schedule conflict, out of town...)"
+              style={[styles.promptInput, { marginBottom: 12 }]}
+              placeholder="e.g. Schedule conflict, out of town..."
               placeholderTextColor="#9ca3af"
               multiline
               numberOfLines={2}
@@ -1138,21 +1232,10 @@ export default function BookingsScreen() {
               onChangeText={(text) => setDeclineModal((prev) => ({ ...prev, reason: text }))}
             />
 
-            <Text style={[styles.promptInstructionText, { marginTop: 8, marginBottom: 4, fontWeight: '700', color: '#374151' }]}>
-              Suggest Preferred Date & Time (Optional):
-            </Text>
-            <TextInput
-              style={[styles.promptInput, { height: 42, textAlignVertical: 'center', marginBottom: 12 }]}
-              placeholder="e.g. Next Saturday Nov 5 at 10:00 AM"
-              placeholderTextColor="#9ca3af"
-              value={declineModal.counterDate}
-              onChangeText={(text) => setDeclineModal((prev) => ({ ...prev, counterDate: text }))}
-            />
-
             <View style={styles.promptModalActions}>
               <TouchableOpacity
                 style={styles.promptCancelBtn}
-                onPress={() => setDeclineModal({ visible: false, item: null, reason: '', counterDate: '' })}
+                onPress={closeDeclineModal}
                 disabled={respondingOffer}
               >
                 <Text style={styles.promptCancelBtnText}>Cancel</Text>
@@ -1167,7 +1250,7 @@ export default function BookingsScreen() {
                   <ActivityIndicator size="small" color="#ffffff" />
                 ) : (
                   <Text style={styles.promptConfirmBtnText}>
-                    {declineModal.counterDate.trim() ? 'Propose New Date' : 'Submit & Decline'}
+                    {declineModal.counterDate.trim() ? 'Send Preferred Date' : 'Submit & Decline'}
                   </Text>
                 )}
               </TouchableOpacity>
@@ -1565,6 +1648,64 @@ const styles = StyleSheet.create({
   cancelSubmitButtonText: {
     color: '#ffffff',
     fontSize: 14,
+    fontWeight: '700',
+  },
+
+  // ─── Negotiation badges & panel ───
+  badgeStack: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  subBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  subBadgeNegotiating: {
+    backgroundColor: '#f5f3ff',
+    borderColor: '#c4b5fd',
+  },
+  subBadgeWaitlist: {
+    backgroundColor: '#fffbeb',
+    borderColor: '#fcd34d',
+  },
+  subBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  negotiationPanel: {
+    backgroundColor: '#faf5ff',
+    borderColor: '#ddd6fe',
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 10,
+  },
+  negotiationPanelWaitlist: {
+    backgroundColor: '#fffbeb',
+    borderColor: '#fde68a',
+  },
+  negotiationHint: {
+    fontSize: 12,
+    color: '#4b5563',
+    lineHeight: 17,
+    marginTop: 8,
+  },
+  proposeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#6d28d9',
+    minHeight: 44,
+    borderRadius: 10,
+    marginTop: 10,
+  },
+  proposeBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
     fontWeight: '700',
   },
 
