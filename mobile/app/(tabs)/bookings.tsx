@@ -423,14 +423,16 @@ export default function BookingsScreen() {
     try {
       if (cancelTarget.type === 'request') {
         await client.post('/bookings/cancel', { type: 'request', request_id: cancelTarget.id, reason });
+        setCancelTarget(null);
+        showPrompt('success', 'Request Cancelled', 'Your booking request has been cancelled.');
       } else {
-        await client.post('/bookings/cancel', { type: 'booking', booking_id: cancelTarget.id, reason });
+        const res = await client.post('/bookings/cancel', { type: 'booking', booking_id: cancelTarget.id, reason });
+        setCancelTarget(null);
+        showPrompt('success', 'Cancellation Requested', res.data?.message || 'Your request has been submitted. Our branch will review and send you an SMS confirmation shortly.');
       }
-      setCancelTarget(null);
-      showPrompt('success', 'Booking Cancelled', 'Your booking appointment has been cancelled successfully.');
       loadData();
     } catch (err: any) {
-      showPrompt('error', 'Cancellation Failed', err.response?.data?.message || 'Failed to cancel booking.');
+      showPrompt('error', 'Cancellation Failed', err.response?.data?.message || 'Failed to submit cancellation request.');
     } finally {
       setCancelling(false);
     }
@@ -491,6 +493,7 @@ export default function BookingsScreen() {
 
   const canCancel = (item: BookingItem) => {
     if (item.type === 'request') return item.status === 'pending';
+    if (item.status === 'cancel_requested') return false;
     return item.status === 'scheduled';
   };
 
@@ -771,6 +774,16 @@ export default function BookingsScreen() {
                           </Text>
                         </TouchableOpacity>
                       ) : null}
+                    </View>
+                  ) : null}
+
+                  {/* Cancellation Requested Notice */}
+                  {item.status === 'cancel_requested' ? (
+                    <View style={styles.cancelRequestedBanner}>
+                      <FontAwesome name="clock-o" size={12} color="#b45309" style={{ marginRight: 6 }} />
+                      <Text style={styles.cancelRequestedBannerText}>
+                        Cancellation request submitted — Our branch will review and send an SMS confirmation shortly.
+                      </Text>
                     </View>
                   ) : null}
 
@@ -1648,6 +1661,23 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '700',
+  },
+  cancelRequestedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fffbeb',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginTop: 10,
+  },
+  cancelRequestedBannerText: {
+    fontSize: 12,
+    color: '#92400e',
+    flex: 1,
+    lineHeight: 16,
   },
 
   // ─── Negotiation badges & panel ───

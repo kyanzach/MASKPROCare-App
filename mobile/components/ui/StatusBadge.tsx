@@ -60,6 +60,13 @@ export const STATUS_CONFIG: Record<string, StatusConfig> = {
     border: '#fcd34d',
     icon: 'hourglass-half',
   },
+  cancel_requested: {
+    label: 'Cancel Requested',
+    bg: '#fffbeb',
+    color: '#b45309',
+    border: '#fcd34d',
+    icon: 'clock-o',
+  },
 };
 
 interface StatusBadgeProps {

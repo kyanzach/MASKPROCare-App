@@ -1,6 +1,15 @@
 # Changelog
 
-## [v1.14.1] — 2026-10-28
+## [v1.14.2] — 2026-10-28
+### Added
+- **Booking Cancellation Approval Workflow (Option A) (`server/routes/bookings.js`, `frontend/src/pages/Bookings.jsx`, `mobile/app/(tabs)/bookings.tsx`, `mobile/components/ui/StatusBadge.tsx`)**:
+  - Implemented branch review workflow for confirmed live appointment cancellations.
+  - When customer cancels a confirmed booking in Care (web or mobile):
+    - Appends `CANCEL_REQUESTED: <reason>` in `bookings.notes` while preserving the booking on the schedule pending branch review.
+    - Sets booking status to `cancel_requested` in Care App with an amber "Cancellation Requested" badge and helpful customer status banner.
+    - Dispatches a staff notification to Unify staff and branch managers linking directly to `bookings.php` to review and confirm the cancellation.
+    - When confirmed in Unify by an agent, Unify's built-in cancellation engine dispatches the official SMS confirmation to the customer's phone and frees the slot.
+    - Unapproved initial booking requests (`booking_requests`) remain instantly cancellable and move to the Unify "Cancelled" tab.
 ### Fixed
 - **Cancel Booking Fatal 500 Error (`server/routes/bookings.js`)**:
   - Removed query to non-existent table `booking_services_to_perform` (which caused `ER_NO_SUCH_TABLE` 500 crash and displayed "Failed to cancel. Please try again.").

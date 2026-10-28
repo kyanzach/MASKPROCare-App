@@ -31,13 +31,14 @@ const EDIT_REASONS = [
 ];
 
 const STATUS_CONFIG = {
-  pending:     { label: 'Pending',     bg: '#fef3c7', color: '#92400e', border: '#fbbf24', icon: 'fa-hourglass-half' },
-  negotiating: { label: 'Negotiating', bg: '#ede9fe', color: '#6d28d9', border: '#a78bfa', icon: 'fa-handshake' },
-  waitlisted:  { label: 'Waitlisted',  bg: '#fffbeb', color: '#b45309', border: '#fcd34d', icon: 'fa-list-ol' },
-  scheduled:   { label: 'Scheduled',   bg: '#dbeafe', color: '#1e40af', border: '#3b82f6', icon: 'fa-calendar-check' },
-  done:        { label: 'Done',        bg: '#d1fae5', color: '#065f46', border: '#10b981', icon: 'fa-check-circle' },
-  cancelled:   { label: 'Cancelled',   bg: '#fee2e2', color: '#991b1b', border: '#ef4444', icon: 'fa-times-circle' },
-  rejected:    { label: 'Rejected',    bg: '#fee2e2', color: '#991b1b', border: '#ef4444', icon: 'fa-ban' },
+  pending:          { label: 'Pending',                 bg: '#fef3c7', color: '#92400e', border: '#fbbf24', icon: 'fa-hourglass-half' },
+  negotiating:      { label: 'Negotiating',             bg: '#ede9fe', color: '#6d28d9', border: '#a78bfa', icon: 'fa-handshake' },
+  waitlisted:       { label: 'Waitlisted',              bg: '#fffbeb', color: '#b45309', border: '#fcd34d', icon: 'fa-list-ol' },
+  scheduled:        { label: 'Scheduled',               bg: '#dbeafe', color: '#1e40af', border: '#3b82f6', icon: 'fa-calendar-check' },
+  done:             { label: 'Done',                    bg: '#d1fae5', color: '#065f46', border: '#10b981', icon: 'fa-check-circle' },
+  cancel_requested: { label: 'Cancellation Requested',   bg: '#fffbeb', color: '#b45309', border: '#fcd34d', icon: 'fa-clock' },
+  cancelled:        { label: 'Cancelled',               bg: '#fee2e2', color: '#991b1b', border: '#ef4444', icon: 'fa-times-circle' },
+  rejected:         { label: 'Rejected',                bg: '#fee2e2', color: '#991b1b', border: '#ef4444', icon: 'fa-ban' },
 };
 
 export default function Bookings() {
@@ -280,15 +281,17 @@ export default function Bookings() {
     setCancelling(true);
     setError('');
     try {
+      let res;
       if (cancelTarget.type === 'request') {
-        await api.post('/bookings/cancel', { type: 'request', request_id: cancelTarget.id, reason });
+        res = await api.post('/bookings/cancel', { type: 'request', request_id: cancelTarget.id, reason });
+        setSuccess('Booking request cancelled successfully.');
       } else {
-        await api.post('/bookings/cancel', { type: 'booking', booking_id: cancelTarget.id, reason });
+        res = await api.post('/bookings/cancel', { type: 'booking', booking_id: cancelTarget.id, reason });
+        setSuccess(res.data?.message || 'Cancellation request submitted. Our branch will review and send you an SMS confirmation shortly.');
       }
-      setSuccess('Booking cancelled successfully.');
       setCancelTarget(null);
       loadData();
-      setTimeout(() => setSuccess(''), 4000);
+      setTimeout(() => setSuccess(''), 5000);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to cancel.');
     } finally { setCancelling(false); }
@@ -376,6 +379,7 @@ export default function Bookings() {
   // --- Helpers ---
   const canCancel = (item) => {
     if (item.type === 'request') return item.status === 'pending';
+    if (item.status === 'cancel_requested') return false;
     return item.status === 'scheduled'; // only future bookings
   };
   const canEdit = (item) => {
@@ -522,6 +526,16 @@ export default function Bookings() {
                                 {item.counter_date ? 'Change Preferred Date' : 'Propose a Preferred Date'}
                               </button>
                             )}
+                          </div>
+                        )}
+                        {item.status === 'cancel_requested' && (
+                          <div style={{
+                            fontSize: '12px', padding: '7px 10px', borderRadius: '8px', marginTop: '6px',
+                            background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e',
+                            display: 'flex', alignItems: 'center', gap: '6px',
+                          }}>
+                            <i className="fas fa-clock" style={{ color: '#d97706' }}></i>
+                            <span>Cancellation request submitted — Our branch will review and send an SMS confirmation shortly.</span>
                           </div>
                         )}
                       </td>

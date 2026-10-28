@@ -221,9 +221,14 @@ router.get('/list', async (req, res) => {
 
         const isCancelledByNotes = (row.notes || '').includes('CANCELLED:');
         const isCancelledByStatus = serviceStatuses.includes('cancelled');
+        const isCancelRequested = (row.notes || '').includes('CANCEL_REQUESTED:') && !isCancelledByNotes && !isCancelledByStatus;
 
         if (isCancelledByNotes || isCancelledByStatus) {
           row.status = 'cancelled';
+        } else if (isCancelRequested) {
+          row.status = 'cancel_requested';
+          const match = (row.notes || '').match(/CANCEL_REQUESTED:\s*([^—\n]+)/);
+          if (match) row.cancellation_reason = match[1].trim();
         } else {
           // Check for other Unify statuses
           const isDone = serviceStatuses.includes('done');
@@ -517,14 +522,20 @@ router.post('/cancel', async (req, res) => {
 
       return res.json({ success: true, data: null, message: 'Booking request cancelled successfully', errors: [] });
     } else {
-      // Cancel approved booking
+      // Cancel approved booking -> Option A: Submit Cancellation Request for Branch Review & SMS Confirmation
       const bId = parseInt(booking_id || 0, 10);
       if (!bId || bId <= 0) {
         return res.status(422).json({ success: false, data: null, message: 'Booking ID is required', errors: [] });
       }
 
       const [bookings] = await pool.query(
-        "SELECT booking_id, booking_date, notes FROM bookings WHERE booking_id = ? AND customer_id = ?",
+        `SELECT b.booking_id, b.booking_date, b.notes, b.branch_id, v.make, v.model,
+                GROUP_CONCAT(DISTINCT bst.service_name SEPARATOR ', ') as service_names
+         FROM bookings b
+         LEFT JOIN vehicles v ON b.customer_vehicle_id = v.id
+         LEFT JOIN bookings_service_types bst ON b.booking_id = bst.booking_id
+         WHERE b.booking_id = ? AND b.customer_id = ?
+         GROUP BY b.booking_id`,
         [bId, req.user.customer_id]
       );
       if (bookings.length === 0) {
@@ -535,43 +546,53 @@ router.post('/cancel', async (req, res) => {
       if ((booking.notes || '').includes('CANCELLED:')) {
         return res.status(409).json({ success: false, data: null, message: 'This booking is already cancelled', errors: [] });
       }
+      if ((booking.notes || '').includes('CANCEL_REQUESTED:')) {
+        return res.status(409).json({ success: false, data: null, message: 'A cancellation request has already been submitted for this booking', errors: [] });
+      }
 
       const bookingDate = new Date(booking.booking_date).toISOString().slice(0, 10);
       if (bookingDate < new Date().toISOString().slice(0, 10)) {
         return res.status(422).json({ success: false, data: null, message: 'Cannot cancel a past booking', errors: [] });
       }
 
-      // Cancel by appending to notes (matches Unify pattern)
+      // Record cancellation request in notes (leaves booking on schedule for agent review & official Unify SMS cancellation)
       const now = new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila', month: 'short', day: '2-digit', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
-      const cancelNote = `CANCELLED: ${cancelReason} — Cancelled by customer via app on ${now}`;
+      const cancelNote = `CANCEL_REQUESTED: ${cancelReason} — Requested by customer via app on ${now}`;
       const updatedNotes = booking.notes ? `${booking.notes}\n${cancelNote}` : cancelNote;
 
       await pool.query("UPDATE bookings SET notes = ? WHERE booking_id = ?", [updatedNotes, bId]);
-      await pool.query("UPDATE bookings_service_types SET status = 'Cancelled' WHERE booking_id = ?", [bId]);
-      await pool.query("UPDATE sms_reminders SET sms_status = 'Cancelled' WHERE booking_id = ? AND sms_status = 'Pending'", [bId]);
 
       try {
         const [custRows] = await pool.query("SELECT full_name FROM customers WHERE id = ?", [req.user.customer_id]);
         const custName = custRows[0]?.full_name || 'Customer';
+        const dateStr = new Date(booking.booking_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const vInfo = [booking.make, booking.model].filter(Boolean).join(' ') || 'Vehicle';
+
         await createCustomerNotification(
           req.user.customer_id,
-          'booking_cancelled',
-          'Appointment Cancelled',
-          `Your appointment #${bId} has been cancelled.`
+          'cancellation_requested',
+          'Cancellation Request Submitted',
+          `Your request to cancel appointment #${bId} (${vInfo}) has been submitted. Our branch agent will review your request and send an SMS confirmation shortly.`
         );
+
         await notifyUnifyStaff(
-          req.user.branch_id,
-          'care_booking_cancelled',
-          `Appointment Cancelled: ${custName}`,
-          `${custName} cancelled booking #${bId}. Reason: "${cancelReason}".`,
-          'booking_requests.php',
+          booking.branch_id || req.user.branch_id,
+          'care_booking_cancel_request',
+          `Cancellation Request: ${custName}`,
+          `${custName} requested cancellation for booking #${bId} (${vInfo} on ${dateStr}). Reason: "${cancelReason}". Please review and confirm in Unify.`,
+          'bookings.php',
           bId
         );
       } catch (e) {
         console.warn('Cancel notification error:', e);
       }
 
-      return res.json({ success: true, data: null, message: 'Booking cancelled successfully', errors: [] });
+      return res.json({
+        success: true,
+        data: { status: 'cancel_requested' },
+        message: 'Cancellation request submitted. Our branch will review and send you an SMS confirmation shortly.',
+        errors: []
+      });
     }
   } catch (err) {
     console.error('Booking cancel error:', err);
