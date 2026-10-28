@@ -335,7 +335,7 @@ export default function Loyalty() {
   };
 
   // Category order for display
-  const categoryOrder = ['coating', 'tint', 'ppf', 'wash', 'gift', 'other'];
+  const categoryOrder = ['coating', 'ppf', 'tint', 'wash', 'gift', 'other'];
 
   return (
     <div className="page-container" style={{ maxWidth: '1200px', margin: '0 auto', padding: '24px' }}>

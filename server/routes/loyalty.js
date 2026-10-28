@@ -134,6 +134,14 @@ router.get('/cards', authenticateToken, async (req, res) => {
 
     console.log('[Loyalty] Total cards formatted:', cards.length);
 
+    // Sort cards by category priority: Nano Ceramic Coating → PPF → Nano Ceramic Tint → Wash → Gift → Other
+    const CATEGORY_PRIORITY = { coating: 1, ppf: 2, tint: 3, wash: 4, gift: 5, other: 6 };
+    cards.sort((a, b) => {
+      const pa = CATEGORY_PRIORITY[a.category] || 99;
+      const pb = CATEGORY_PRIORITY[b.category] || 99;
+      return pa - pb;
+    });
+
     // Group by category for organized display
     const grouped = {};
     cards.forEach(card => {

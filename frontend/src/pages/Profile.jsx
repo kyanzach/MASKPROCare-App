@@ -12,7 +12,7 @@ const CATEGORY_META = {
   gift:    { label: 'Gift Card',             icon: 'bi-gift', gradient: 'linear-gradient(135deg, #8b5cf6, #a78bfa)' },
   other:   { label: 'Other',                 icon: 'bi-card-text', gradient: 'linear-gradient(135deg, #64748b, #94a3b8)' },
 };
-const CATEGORY_ORDER = ['coating', 'tint', 'ppf', 'wash', 'gift', 'other'];
+const CATEGORY_ORDER = ['coating', 'ppf', 'tint', 'wash', 'gift', 'other'];
 
 // ── PDF417 Barcode Component ────────────────────────────────
 function PDF417Barcode({ text, fullWidth = false }) {

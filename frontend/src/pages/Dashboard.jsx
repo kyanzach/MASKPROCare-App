@@ -50,12 +50,15 @@ function getVehicleIcon(make, model = '') {
 // Category display config for Loyalty Cards
 const CATEGORY_META = {
   coating: { label: 'Nano Ceramic Coating', icon: 'fas fa-shield-alt', gradient: 'linear-gradient(135deg, #3b82f6, #6366f1)' },
-  tint:    { label: 'Nano Ceramic Tint',    icon: 'fas fa-sun', gradient: 'linear-gradient(135deg, #0ea5e9, #38bdf8)' },
   ppf:     { label: 'Paint Protection Film', icon: 'fas fa-fire', gradient: 'linear-gradient(135deg, #ef4444, #f97316)' },
+  tint:    { label: 'Nano Ceramic Tint',    icon: 'fas fa-sun', gradient: 'linear-gradient(135deg, #0ea5e9, #38bdf8)' },
   wash:    { label: 'Care Wash',             icon: 'fas fa-star', gradient: 'linear-gradient(135deg, #10b981, #34d399)' },
   gift:    { label: 'Gift Card',             icon: 'fas fa-gift', gradient: 'linear-gradient(135deg, #8b5cf6, #a78bfa)' },
   other:   { label: 'Other',                 icon: 'fas fa-file-alt', gradient: 'linear-gradient(135deg, #64748b, #94a3b8)' },
 };
+const LOYALTY_CATEGORY_PRIORITY = { coating: 1, ppf: 2, tint: 3, wash: 4, gift: 5, other: 6 };
+const sortLoyaltyCards = (cards = []) =>
+  [...cards].sort((a, b) => (LOYALTY_CATEGORY_PRIORITY[a.category] || 99) - (LOYALTY_CATEGORY_PRIORITY[b.category] || 99));
 
 function getCounterLabel(category) {
   switch (category) {
@@ -133,7 +136,7 @@ export default function Dashboard() {
       // 2. Fetch loyalty cards (cached on server in memory)
       api.get('/loyalty/cards')
         .then(loyaltyRes => {
-          setLoyaltyCards(loyaltyRes.data?.data?.cards || []);
+          setLoyaltyCards(sortLoyaltyCards(loyaltyRes.data?.data?.cards || []));
         })
         .catch(() => {
           setLoyaltyCards([]);

@@ -119,12 +119,22 @@ interface LoyaltyCard {
 
 const CATEGORY_META: Record<string, { label: string; icon: React.ComponentProps<typeof FontAwesome>['name']; colors: [string, string] }> = {
   coating: { label: 'Nano Ceramic Coating', icon: 'shield', colors: ['#3b82f6', '#6366f1'] },
-  tint:    { label: 'Nano Ceramic Tint',    icon: 'sun-o', colors: ['#0ea5e9', '#38bdf8'] },
   ppf:     { label: 'Paint Protection Film', icon: 'fire', colors: ['#ef4444', '#f97316'] },
+  tint:    { label: 'Nano Ceramic Tint',    icon: 'sun-o', colors: ['#0ea5e9', '#38bdf8'] },
   wash:    { label: 'Care Wash',             icon: 'star', colors: ['#10b981', '#34d399'] },
   gift:    { label: 'Gift Card',             icon: 'gift', colors: ['#8b5cf6', '#a78bfa'] },
   other:   { label: 'Other',                 icon: 'file-text-o', colors: ['#64748b', '#94a3b8'] },
 };
+const LOYALTY_CATEGORY_PRIORITY: Record<string, number> = {
+  coating: 1,
+  ppf: 2,
+  tint: 3,
+  wash: 4,
+  gift: 5,
+  other: 6,
+};
+const sortLoyaltyCards = (cards: LoyaltyCard[] = []) =>
+  [...cards].sort((a, b) => (LOYALTY_CATEGORY_PRIORITY[a.category] || 99) - (LOYALTY_CATEGORY_PRIORITY[b.category] || 99));
 
 function getCounterLabel(category: string) {
   switch (category) {
@@ -242,7 +252,7 @@ export default function DashboardScreen() {
       // Fetch loyalty cards (cached on server in memory)
       client.get('/loyalty/cards')
         .then((loyaltyRes) => {
-          setLoyaltyCards(loyaltyRes.data?.data?.cards || []);
+          setLoyaltyCards(sortLoyaltyCards(loyaltyRes.data?.data?.cards || []));
         })
         .catch(() => {
           setLoyaltyCards([]);

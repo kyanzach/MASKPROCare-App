@@ -35,7 +35,7 @@ const CATEGORY_META: Record<string, { label: string; icon: React.ComponentProps<
   other:   { label: 'Other',                 icon: 'file-text-o', colors: ['#64748b', '#94a3b8'] },
 };
 
-const CATEGORY_ORDER = ['coating', 'tint', 'ppf', 'wash', 'gift', 'other'];
+const CATEGORY_ORDER = ['coating', 'ppf', 'tint', 'wash', 'gift', 'other'];
 
 function getCounterLabel(category: string) {
   switch (category) {

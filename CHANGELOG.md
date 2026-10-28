@@ -1,5 +1,12 @@
 # Changelog
 
+## [v1.14.6] — 2026-10-28
+### Added & Changed
+- **Customer Profile Avatars in Unify Care App Alert Toast (`includes/care_booking_requests_alert.php`, `notification_api.php`)**:
+  - Added customer circular profile photo (`c.profile_photo`) with 2-letter initials fallback on the left of each booking activity item row in Unify's Floating Smart Toast (both initial server render and 25-second live polling).
+- **My Loyalty Cards Sorting Priority (`server/routes/loyalty.js`, `frontend/src/pages/Dashboard.jsx`, `frontend/src/pages/Profile.jsx`, `frontend/src/pages/Loyalty.jsx`, `mobile/app/(tabs)/index.tsx`, `mobile/app/(tabs)/profile.tsx`)**:
+  - Updated Loyalty Cards sorting order across the Main Dashboard, Profile, and API to prioritize: **1. Nano Ceramic Coating (`coating`) → 2. PPF Cards (`ppf`) → 3. Nano Ceramic Tint (`tint`)**.
+
 ## [v1.14.5] — 2026-10-28
 ### Changed & Improved
 - **Modern Bootstrap 5 Modals for Cancellation Review (`booking_requests.php`, `booking_request_card.php`)**:
