@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.14.8] — 2026-10-28
+### Fixed
+- **Exclude Cancelled Appointments from Dashboard "Upcoming Appointments" (`mobile/app/(tabs)/index.tsx`, `frontend/src/pages/Dashboard.jsx`, `server/routes/dashboard.js`)**:
+  - Fixed `upcomingBookings` filter on both Mobile and Web Dashboards where future-dated appointments with `status === 'cancelled'` still passed `new Date(b.booking_date) >= new Date()` and rendered with a hardcoded `"Scheduled"` badge.
+  - Cancelled, completed, and rejected appointments are now strictly excluded from `Upcoming Appointments` on both client and server (`GET /api/dashboard/stats`), while appointments with `status === 'cancel_requested'` render an amber `"Cancel Requested"` badge.
+
 ## [v1.14.7] — 2026-10-28
 ### Fixed & Improved
 - **My Vehicles Dashboard Display & Deep-Link to Vehicle Details (`frontend/src/pages/Dashboard.jsx`, `frontend/src/pages/Vehicles.jsx`, `mobile/app/(tabs)/index.tsx`, `mobile/app/(tabs)/vehicles.tsx`)**:

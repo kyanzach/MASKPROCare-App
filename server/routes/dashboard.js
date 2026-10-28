@@ -145,6 +145,7 @@ router.get('/stats', async (req, res) => {
         LEFT JOIN vehicles v ON b.customer_vehicle_id = v.id
         WHERE b.customer_id = ? AND b.booking_date >= NOW()
         AND (b.notes IS NULL OR b.notes NOT LIKE '%CANCELLED:%')
+        AND NOT EXISTS (SELECT 1 FROM bookings_service_types bst WHERE bst.booking_id = b.booking_id AND bst.status = 'Cancelled')
         ORDER BY b.booking_date ASC
         LIMIT 5
       `, [customerId]);
@@ -161,6 +162,7 @@ router.get('/stats', async (req, res) => {
         LEFT JOIN vehicles v ON b.customer_vehicle_id = v.id
         WHERE b.customer_id = ? AND b.booking_date < NOW()
         AND (b.notes IS NULL OR b.notes NOT LIKE '%CANCELLED:%')
+        AND NOT EXISTS (SELECT 1 FROM bookings_service_types bst WHERE bst.booking_id = b.booking_id AND bst.status = 'Cancelled')
         ORDER BY b.booking_date DESC
         LIMIT 5
       `, [customerId]);

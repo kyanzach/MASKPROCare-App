@@ -198,7 +198,11 @@ export default function Dashboard() {
   const impersonation = JSON.parse(localStorage.getItem('impersonation') || 'null');
   const displayName = impersonation?.customerName || customer?.full_name || customer?.first_name || '';
   const firstName = displayName?.split(' ')[0] || 'there';
-  const upcomingBookings = bookings.filter(b => b.status === 'Scheduled' || new Date(b.booking_date) >= new Date());
+  const upcomingBookings = bookings.filter((b) => {
+    const st = String(b.status || '').toLowerCase();
+    if (st === 'cancelled' || st === 'completed' || st === 'done' || st === 'rejected') return false;
+    return st === 'scheduled' || st === 'cancel_requested' || new Date(b.booking_date) >= new Date();
+  });
   const recentBookings = bookings.slice(0, 5);
   const pendingAppointments = requests.filter(
     r => ['pending', 'negotiating', 'waitlisted'].includes(r.status) || (r.status === 'rejected' && (r.offered_date || r.rejection_reason))
@@ -613,7 +617,13 @@ export default function Dashboard() {
                           </div>
                         </td>
                         <td style={{ fontSize: '14px', fontWeight: 500 }}>{b.formatted_services || getServiceLabel(b.latest_service)}</td>
-                        <td><span className="badge badge-success">Scheduled</span></td>
+                        <td>
+                          {String(b.status || '').toLowerCase() === 'cancel_requested' ? (
+                            <span className="badge badge-warning">Cancellation Requested</span>
+                          ) : (
+                            <span className="badge badge-success">Scheduled</span>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}

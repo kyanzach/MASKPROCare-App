@@ -361,9 +361,11 @@ export default function DashboardScreen() {
   }
 
   const firstName = user?.full_name?.trim() ? user.full_name.trim().split(' ')[0] : 'there';
-  const upcomingBookings = bookings.filter(
-    (b) => b.status === 'Scheduled' || new Date(b.booking_date) >= new Date()
-  );
+  const upcomingBookings = bookings.filter((b) => {
+    const st = String(b.status || '').toLowerCase();
+    if (st === 'cancelled' || st === 'completed' || st === 'done' || st === 'rejected') return false;
+    return st === 'scheduled' || st === 'cancel_requested' || new Date(b.booking_date) >= new Date();
+  });
 
   // Pending appointments: still awaiting a confirmed slot — pending, negotiating (date talks),
   // waitlisted, or rejected requests that still need the client's attention.
@@ -858,9 +860,15 @@ export default function DashboardScreen() {
                       <Text style={styles.appointmentDate}>{formatBookingDate(booking.booking_date)}</Text>
                       <Text style={styles.appointmentTime}>{formatBookingTime(booking.booking_date)}</Text>
                     </View>
-                    <View style={styles.statusBadge}>
-                      <Text style={styles.statusBadgeText}>Scheduled</Text>
-                    </View>
+                    {String(booking.status || '').toLowerCase() === 'cancel_requested' ? (
+                      <View style={[styles.statusBadge, { backgroundColor: '#fef3c7' }]}>
+                        <Text style={[styles.statusBadgeText, { color: '#b45309' }]}>Cancel Requested</Text>
+                      </View>
+                    ) : (
+                      <View style={styles.statusBadge}>
+                        <Text style={styles.statusBadgeText}>Scheduled</Text>
+                      </View>
+                    )}
                   </View>
 
                   <View style={styles.appointmentBody}>
