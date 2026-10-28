@@ -59,7 +59,7 @@ async function getVehicleServiceStatus(vehicleId) {
 router.get('/list', async (req, res) => {
   try {
     const [vehicles] = await pool.query(
-      "SELECT * FROM vehicles WHERE customer_id = ? ORDER BY created_at DESC",
+      "SELECT *, DATE_FORMAT(registration_date, '%Y-%m-%d') AS registration_date FROM vehicles WHERE customer_id = ? ORDER BY created_at DESC",
       [req.user.customer_id]
     );
 
@@ -84,7 +84,7 @@ router.get('/detail/:id', async (req, res) => {
     }
 
     const [vehicles] = await pool.query(
-      "SELECT * FROM vehicles WHERE id = ? AND customer_id = ?",
+      "SELECT *, DATE_FORMAT(registration_date, '%Y-%m-%d') AS registration_date FROM vehicles WHERE id = ? AND customer_id = ?",
       [vehicleId, req.user.customer_id]
     );
 
@@ -139,10 +139,10 @@ router.post('/create', async (req, res) => {
 
     const [result] = await pool.query(
       "INSERT INTO vehicles (customer_id, make, model, plate_no, color, registration_date, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())",
-      [req.user.customer_id, trimMake, trimModel, trimPlate, trimColor, regDate]
+      [req.user.customer_id, trimMake, trimModel, trimPlate, trimColor, regDate ? regDate.slice(0, 10) : null]
     );
 
-    const [created] = await pool.query("SELECT * FROM vehicles WHERE id = ?", [result.insertId]);
+    const [created] = await pool.query("SELECT *, DATE_FORMAT(registration_date, '%Y-%m-%d') AS registration_date FROM vehicles WHERE id = ?", [result.insertId]);
 
     return res.status(201).json({ success: true, data: { vehicle: created[0] }, message: 'Vehicle added successfully', errors: [] });
   } catch (err) {
@@ -163,7 +163,7 @@ async function handleUpdate(req, res) {
     }
 
     // Verify ownership
-    const [existing] = await pool.query("SELECT * FROM vehicles WHERE id = ? AND customer_id = ?", [vehicleId, req.user.customer_id]);
+    const [existing] = await pool.query("SELECT *, DATE_FORMAT(registration_date, '%Y-%m-%d') AS registration_date FROM vehicles WHERE id = ? AND customer_id = ?", [vehicleId, req.user.customer_id]);
     if (existing.length === 0) {
       return res.status(404).json({ success: false, data: null, message: 'Vehicle not found', errors: [] });
     }
@@ -171,13 +171,14 @@ async function handleUpdate(req, res) {
     const ev = existing[0];
     const make = String(req.body.make ?? ev.make).trim();
     const model = String(req.body.model ?? ev.model).trim();
-    const plateNo = String(req.body.plate_no ?? ev.plate_no).trim();
+    const plateNo = String(req.body.plate_no ?? ev.plate_no ?? '').trim();
     const color = String(req.body.color ?? ev.color ?? '').trim();
-    const regDate = req.body.registration_date !== undefined
+    const rawRegDate = req.body.registration_date !== undefined
       ? (String(req.body.registration_date).trim() || null)
       : (req.body.registration_expiry !== undefined
         ? (String(req.body.registration_expiry).trim() || null)
         : (ev.registration_date || null));
+    const regDate = rawRegDate ? String(rawRegDate).slice(0, 10) : null;
 
     // Check duplicate plate if changed
     if (plateNo && plateNo !== ev.plate_no) {
@@ -192,7 +193,7 @@ async function handleUpdate(req, res) {
       [make, model, plateNo, color, regDate, vehicleId, req.user.customer_id]
     );
 
-    const [updated] = await pool.query("SELECT * FROM vehicles WHERE id = ?", [vehicleId]);
+    const [updated] = await pool.query("SELECT *, DATE_FORMAT(registration_date, '%Y-%m-%d') AS registration_date FROM vehicles WHERE id = ?", [vehicleId]);
     return res.json({ success: true, data: { vehicle: updated[0] }, message: 'Vehicle updated successfully', errors: [] });
   } catch (err) {
     console.error('Vehicle update error:', err);

@@ -119,7 +119,7 @@ router.get('/stats', async (req, res) => {
     const sixMonthsAgo = new Date(Date.now() - 6 * 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
     // Get vehicles
-    const [vehicles] = await pool.query("SELECT * FROM vehicles WHERE customer_id = ? ORDER BY created_at DESC", [customerId]);
+    const [vehicles] = await pool.query("SELECT *, DATE_FORMAT(registration_date, '%Y-%m-%d') AS registration_date FROM vehicles WHERE customer_id = ? ORDER BY created_at DESC", [customerId]);
     const totalVehicles = vehicles.length;
 
     // NanoFix maintenance (replaces the old generic "needs service" calc, which compared a Date to a string and always returned 0)

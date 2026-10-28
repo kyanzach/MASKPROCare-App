@@ -1,5 +1,13 @@
 # Changelog
 
+## [v1.15.1] — 2026-10-28
+### Fixed
+- **Added `registration_date` Column to Production `vehicles` Table & Normalized Date Formatting (`server/routes/vehicles.js`, `server/routes/dashboard.js`, `unify_maskpro.vehicles`)**:
+  - Added `registration_date DATE NULL DEFAULT NULL AFTER color` to the production `vehicles` table, resolving `ER_BAD_FIELD_ERROR: Unknown column 'registration_date' in 'field list'` when creating or updating a vehicle.
+  - Updated `GET /api/vehicles/list`, `GET /api/vehicles/detail/:id`, `POST /api/vehicles/create`, `POST /api/vehicles/update`, and `GET /api/dashboard/stats` to select `DATE_FORMAT(registration_date, '%Y-%m-%d') AS registration_date` so `registration_date` is always returned as a clean `'YYYY-MM-DD'` string.
+- **Prevent Title & Badge Overlap in Mobile LTO Renewal Reminder Card (`mobile/app/(tabs)/vehicles.tsx`)**:
+  - Added `flex: 1`, `flexShrink: 1`, `overflow: 'hidden'`, and `paddingRight: 6` to the `Complimentary LTO Renewal Reminder` title text and `flexShrink: 0` on the `Free Auto-SMS` pill badge on iOS and Android so the title never collides with or overlaps the pill badge.
+
 ## [v1.15.0] — 2026-10-28
 ### Added & Improved
 - **Automated Daily LTO Registration Renewal SMS & In-App Reminder Scheduler (`server/services/ltoReminderCron.js`, `server/index.js`)**:

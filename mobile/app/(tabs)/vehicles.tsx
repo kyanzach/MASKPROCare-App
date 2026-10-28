@@ -681,13 +681,18 @@ export default function VehiclesScreen() {
               <View style={styles.ltoFootnoteBox}>
                 <View style={styles.ltoFootnoteHeaderRow}>
                   <View style={styles.ltoFootnoteTitleWrap}>
-                    <FontAwesome name="bell" size={13} color="#2563eb" style={{ marginRight: 6 }} />
-                    <Text style={styles.ltoFootnoteTitle} numberOfLines={1} adjustsFontSizeToFit>
+                    <FontAwesome name="bell" size={12} color="#2563eb" style={{ marginRight: 6, flexShrink: 0 }} />
+                    <Text
+                      style={styles.ltoFootnoteTitle}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.75}
+                    >
                       Complimentary LTO Renewal Reminder
                     </Text>
                   </View>
                   <View style={styles.ltoFreeSmsPill}>
-                    <FontAwesome name="envelope-o" size={10} color="#1d4ed8" style={{ marginRight: 4 }} />
+                    <FontAwesome name="comment" size={10} color="#1d4ed8" style={{ marginRight: 4 }} />
                     <Text style={styles.ltoFreeSmsPillText} numberOfLines={1}>Free Auto-SMS</Text>
                   </View>
                 </View>
@@ -1385,28 +1390,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 6,
-    gap: 8,
+    gap: 10,
   },
   ltoFootnoteTitleWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    flexShrink: 1,
+    paddingRight: 6,
+    overflow: 'hidden',
   },
   ltoFootnoteTitle: {
-    fontSize: 12.5,
+    flex: 1,
+    flexShrink: 1,
+    fontSize: 11,
     fontWeight: '700',
     color: '#1e3a8a',
   },
   ltoFreeSmsPill: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 0,
     backgroundColor: '#dbeafe',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 999,
   },
   ltoFreeSmsPillText: {
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: '700',
     color: '#1d4ed8',
   },
