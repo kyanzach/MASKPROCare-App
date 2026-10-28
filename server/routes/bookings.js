@@ -303,7 +303,7 @@ router.get('/detail/:id', async (req, res) => {
     }
 
     // Get services
-    const [services] = await pool.query("SELECT * FROM booking_services_to_perform WHERE booking_id = ?", [bookingId]);
+    const [services] = await pool.query("SELECT * FROM bookings_service_types WHERE booking_id = ?", [bookingId]);
 
     return res.json({ success: true, data: { booking, services }, message: 'Booking details retrieved', errors: [] });
   } catch (err) {
@@ -547,8 +547,8 @@ router.post('/cancel', async (req, res) => {
       const updatedNotes = booking.notes ? `${booking.notes}\n${cancelNote}` : cancelNote;
 
       await pool.query("UPDATE bookings SET notes = ? WHERE booking_id = ?", [updatedNotes, bId]);
-      await pool.query("UPDATE booking_services_to_perform SET status = 'Cancelled' WHERE booking_id = ?", [bId]);
       await pool.query("UPDATE bookings_service_types SET status = 'Cancelled' WHERE booking_id = ?", [bId]);
+      await pool.query("UPDATE sms_reminders SET sms_status = 'Cancelled' WHERE booking_id = ? AND sms_status = 'Pending'", [bId]);
 
       try {
         const [custRows] = await pool.query("SELECT full_name FROM customers WHERE id = ?", [req.user.customer_id]);

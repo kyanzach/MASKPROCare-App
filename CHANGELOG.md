@@ -1,6 +1,15 @@
 # Changelog
 
-## [v1.14.0] — 2026-10-28
+## [v1.14.1] — 2026-10-28
+### Fixed
+- **Cancel Booking Fatal 500 Error (`server/routes/bookings.js`)**:
+  - Removed query to non-existent table `booking_services_to_perform` (which caused `ER_NO_SUCH_TABLE` 500 crash and displayed "Failed to cancel. Please try again.").
+  - Properly updated `bookings_service_types.status = 'Cancelled'` and cleared pending appointment SMS in `sms_reminders`.
+  - Fixed service lookup query in `GET /api/bookings/detail/:id` from `booking_services_to_perform` to `bookings_service_types`.
+
+### Changed
+- **Booking Cancellation Reasons (`frontend/src/pages/Bookings.jsx`, `mobile/app/(tabs)/bookings.tsx`)**:
+  - Removed "Found another provider" option from the cancellation reason dropdown across both web and native mobile apps.
 ### Added
 - **AI Helper Login (Izumi Verification Assistant) (`server/routes/aiAuth.js`, `frontend/src/components/AiLoginModal.jsx`)**:
   - Implemented interactive conversational identity verification for elderly or SMS-delayed customers.

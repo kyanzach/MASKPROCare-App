@@ -20,7 +20,6 @@ const CANCEL_REASONS = [
   'Schedule conflict',
   'Vehicle issue',
   'Service no longer needed',
-  'Found another provider',
   'Financial reasons',
   'Others',
 ];
