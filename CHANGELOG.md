@@ -1,5 +1,10 @@
 # Changelog
 
+## [v1.14.5] — 2026-10-28
+### Changed & Improved
+- **Modern Bootstrap 5 Modals for Cancellation Review (`booking_requests.php`, `booking_request_card.php`)**:
+  - Replaced native browser `confirm()` popups on **Confirm Cancellation & Send SMS** and **Keep Booking (Dismiss Request)** with modern centered Bootstrap 5 modals (`#confirmCancelReqModal` and `#keepBookingModal`) displaying customer name, request `#ID`, vehicle, booking date/time, and client cancellation reason.
+
 ## [v1.14.4] — 2026-10-28
 ### Fixed & Improved
 - **Collapsible Booking Request Cards & Timeline in Unify (`booking_requests.php`, `booking_request_card.php`)**:
