@@ -1,5 +1,14 @@
 # Changelog
 
+## [v1.15.4] — 2026-10-29
+### Added & Enhanced
+- **Smart Drip SMS `maskpro.link` Device-Bound (TOFU) Magic Link Gatekeeper (`server/routes/auth.js`, `frontend/src/pages/MagicLinkGate.jsx`, `frontend/src/App.jsx`, `frontend/src/pages/Bookings.jsx`)**:
+  - Added `POST /api/auth/magic-verify` implementing **TOFU (Trust-On-First-Use) Device Locking** against `care_magic_links`:
+    - Ignores SMS/chat link preview bots (`WhatsApp`, `iMessage`, `Google-PageRenderer`, `Viber`, etc.) so automated link unfurling never consumes the customer's first-open device lock.
+    - On the first real browser open (whether on the phone that received the SMS or on another device the customer forwarded their link to first), generates and stores a persistent `mp_care_device_token` (`HttpOnly; Secure; SameSite=Lax; Max-Age=31536000` cookie + `localStorage`), binds `bound_device_token_hash`, `bound_platform`, `bound_user_agent`, and `bound_ip`, issues a 30-day JWT session without OTP, and deep-links straight to `/bookings?openBooking=true&vehicle_id={vehicle_id}&service=NanoFix`.
+    - Subsequent opens on the same bound device log the customer in immediately; opens on any other device return HTTP `403` (`DEVICE_LOCKED_ELSEWHERE`) and render a friendly **"Already Active on Another Device ({bound_platform})"** screen with a 1-tap **"Login Here with Mobile Number"** fallback so the customer never hits a dead end.
+  - Updated `Bookings.jsx` to parse `?openBooking=true&vehicle_id=X&service=NanoFix` query parameters and automatically open the New Booking modal with the customer's vehicle and `Maintenance (NanoFix)` pre-selected.
+
 ## [v1.15.3] — 2026-10-29
 ### Changed & Enhanced
 - **No-Plate Hint in New Booking Vehicle Selector (`frontend/src/pages/Bookings.jsx`, `mobile/app/(tabs)/bookings.tsx`)**:

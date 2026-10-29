@@ -13,6 +13,7 @@ import Shop from './pages/Shop';
 import Community from './pages/Community';
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
+import MagicLinkGate from './pages/MagicLinkGate';
 import './index.css';
 
 function ProtectedRoute({ children }) {
@@ -28,6 +29,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={isAuthenticated ? <Navigate to="/" /> : <Login />} />
+      <Route path="/m/:slug" element={<MagicLinkGate />} />
       <Route path="/admin-login" element={<AdminLogin />} />
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/terms" element={<Terms />} />

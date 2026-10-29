@@ -82,11 +82,29 @@ export default function Bookings() {
   const location = useLocation();
   useEffect(() => { loadData(); }, []);
   useEffect(() => {
-    if (location.state?.openBooking) {
-      openBookingModal();
-      window.history.replaceState({}, document.title);
+    const params = new URLSearchParams(location.search);
+    const shouldOpenFromQuery = params.get('openBooking') === 'true';
+    const qVehicleId = params.get('vehicle_id') || '';
+    const qServiceRaw = params.get('service') || '';
+    const qService = (qServiceRaw === 'NanoFix' || qServiceRaw === 'Nano Fix (Maintenance)')
+      ? 'Nano Fix (Maintenance)'
+      : qServiceRaw;
+
+    if (location.state?.openBooking || shouldOpenFromQuery) {
+      setError('');
+      setBookingForm({
+        vehicle_id: qVehicleId ? String(qVehicleId) : (location.state?.vehicle_id ? String(location.state.vehicle_id) : ''),
+        service_type: qService || location.state?.service_type || '',
+        booking_date: '',
+        booking_time: '',
+        notes: '',
+      });
+      setAvailableDates([]);
+      setCalendarMonth(new Date());
+      setShowBookingModal(true);
+      window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, [location.state]);
+  }, [location.state, location.search]);
 
   const loadData = async () => {
     try {
@@ -99,7 +117,14 @@ export default function Bookings() {
       setBookings(data?.bookings || []);
       setRequests(data?.requests || []);
       setVehicles(vehiclesRes.data.data?.vehicles || []);
-      setServiceTypes(servicesRes.data.data?.service_types || []);
+      let loadedServices = servicesRes.data.data?.service_types || [];
+      if (!loadedServices.some(s => s.api_name === 'Nano Fix (Maintenance)')) {
+        loadedServices = [
+          { api_name: 'Nano Fix (Maintenance)', label: 'Maintenance (NanoFix)', category: 'Maintenance' },
+          ...loadedServices,
+        ];
+      }
+      setServiceTypes(loadedServices);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   };
