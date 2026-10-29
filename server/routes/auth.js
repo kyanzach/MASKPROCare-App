@@ -534,12 +534,12 @@ router.post('/magic-verify', async (req, res) => {
       return res.status(403).json({
         success: false,
         code: 'IP_BLOCKED',
-        message: 'Access from this network IP has been blocked due to security policy or excessive unauthorized attempts.',
+        message: 'Access from this network IP has been restricted by MaskPro Security Shield.',
         data: {
           slug: cleanSlug,
           attempted_platform: resolvedPlatform,
           ip: clientIp,
-          reason: ipBlockRows[0]?.reason || 'Network IP blocked by MaskPro Security',
+          reason: 'Access from this network IP has been restricted by MaskPro Security Shield due to repeated unauthorized access attempts.',
         },
       });
     }
@@ -577,13 +577,13 @@ router.post('/magic-verify', async (req, res) => {
       return res.status(403).json({
         success: false,
         code: 'DEVICE_BLOCKED',
-        message: 'This device has been blocked from accessing smart maintenance links due to unauthorized access attempts.',
+        message: 'This device has been restricted by MaskPro Security Shield from accessing smart maintenance links.',
         data: {
           slug: cleanSlug,
           attempted_platform: resolvedPlatform,
           bound_platform: matchedLink?.bound_platform || 'another device',
           ip: clientIp,
-          reason: devBlockRows[0]?.reason || 'Device blocked by MaskPro Security',
+          reason: 'Access from this device has been restricted by MaskPro Security Shield due to unauthorized access attempts.',
         },
       });
     }

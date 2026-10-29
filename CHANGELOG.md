@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.17.6] — 2026-10-29
+### Fixed & Added
+- **Removed Admin Identity OPSEC Leak on Public Security Blocked Page & Added iOS/Android Pagination Bars (`server/routes/auth.js`, `frontend/src/pages/MagicLinkGate.jsx`, `mobile/app/admin.tsx`)**:
+  - Removed internal admin names (`Manually blocked by Admin (Ryan Paco)`) from the public `403 DEVICE_BLOCKED` / `IP_BLOCKED` response in `server/routes/auth.js` and `frontend/src/pages/MagicLinkGate.jsx` so blocked external devices only see a neutral `"Access from this device has been restricted by MaskPro Security Shield"` message while keeping the admin audit trail private in the database.
+  - Added full pagination footer controls (`Prev`, page number pills, `Next`, and `Showing X–Y of Z`) plus smart lazy-prefetching to both **Who Uses the App (10/page)** and **Magic Link Security & Intrusion Log (5/page)** on iOS and Android (`mobile/app/admin.tsx`), along with event filter pills (`All`, `Blocked`, `Opens`, `Bots`).
+
 ## [v1.17.5] — 2026-10-29
 ### Changed
 - **Widened Admin Control Center Wrapper & Tuned Magic Link Security Table Column Widths (`frontend/src/pages/AdminPanel.jsx`)**:

@@ -48,6 +48,13 @@ export default function AdminPanelScreen() {
   const [dashData, setDashData] = useState<any>(null);
   const [dashLoading, setDashLoading] = useState(false);
 
+  // Pagination & Lazy-Prefetch state for Who Uses the App (10/page) & Magic Link Security (5/page)
+  const [activeUsersPage, setActiveUsersPage] = useState(1);
+  const [secLogPage, setSecLogPage] = useState(1);
+  const [secLogFilter, setSecLogFilter] = useState<'all' | 'blocked' | 'authorized' | 'bot'>('all');
+  const activeLimitRef = useRef<number>(20);
+  const secLimitRef = useRef<number>(15);
+
   // Moderation state
   const [modFilter, setModFilter] = useState<'pending' | 'sos' | 'approved' | 'rejected'>('pending');
   const [modPosts, setModPosts] = useState<any[]>([]);
@@ -124,10 +131,12 @@ export default function AdminPanelScreen() {
     return () => clearInterval(interval);
   }, [isAdmin]);
 
-  const loadDashboard = async (silent = false) => {
+  const loadDashboard = async (silent = false, customActiveLimit?: number, customSecLimit?: number) => {
     if (!silent) setDashLoading(true);
     try {
-      const res = await client.get('/admin/dashboard');
+      const aLim = customActiveLimit || activeLimitRef.current;
+      const sLim = customSecLimit || secLimitRef.current;
+      const res = await client.get(`/admin/dashboard?active_limit=${aLim}&sec_limit=${sLim}`);
       if (res.data?.success) {
         setDashData(res.data.data);
       }
@@ -135,6 +144,33 @@ export default function AdminPanelScreen() {
       // silent background error handling
     } finally {
       if (!silent) setDashLoading(false);
+    }
+  };
+
+  const handleActivePageChange = (nextPage: number) => {
+    setActiveUsersPage(nextPage);
+    const needed = (nextPage + 2) * 10;
+    if (needed > activeLimitRef.current) {
+      activeLimitRef.current = needed;
+      loadDashboard(true, activeLimitRef.current, secLimitRef.current);
+    }
+  };
+
+  const handleSecPageChange = (nextPage: number) => {
+    setSecLogPage(nextPage);
+    const needed = (nextPage + 2) * 5;
+    if (needed > secLimitRef.current) {
+      secLimitRef.current = needed;
+      loadDashboard(true, activeLimitRef.current, secLimitRef.current);
+    }
+  };
+
+  const handleSecFilterChange = (nextFilter: 'all' | 'blocked' | 'authorized' | 'bot') => {
+    setSecLogFilter(nextFilter);
+    setSecLogPage(1);
+    if (nextFilter !== 'all' && secLimitRef.current < 40) {
+      secLimitRef.current = 40;
+      loadDashboard(true, activeLimitRef.current, secLimitRef.current);
     }
   };
 
@@ -470,99 +506,336 @@ export default function AdminPanelScreen() {
             </View>
           </View>
 
-          {/* 2nd to Last: Who Uses the App (10 per page) */}
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Who Uses the App (Recent Active Users)</Text>
-            {activeUsers.slice(0, 10).map((u: any) => (
-              <View key={u.telemetry_id} style={styles.activeUserRow}>
-                <View style={{ flex: 1, marginRight: 8 }}>
-                  <Text style={styles.activeUserName}>{u.full_name}</Text>
-                  <Text style={styles.activeUserSub}>
-                    {u.platform?.toUpperCase()} • {u.device_label || u.app_type} • {timeAgo(u.last_seen_at)}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.miniImpBtn}
-                  onPress={() => handleImpersonatePress(u.customer_id, u.full_name)}
-                >
-                  <Text style={styles.miniImpBtnText}>Login as</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </View>
-
-          {/* Last Widget: Magic Link Security & Intrusion Audit Log (5 per page) */}
+          {/* 2nd to Last: Who Uses the App (10 per page + Lazy Prefetch) */}
           <View style={styles.sectionCard}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Magic Link Security & Intrusion Log</Text>
+              <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Who Uses the App (Recent Active Users)</Text>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#60a5fa' }}>
+                10 / page
+              </Text>
+            </View>
+            {(() => {
+              const ACTIVE_PER_PAGE = 10;
+              const totalActive = Number(dashData?.active_users_total) || activeUsers.length;
+              const totalActivePages = Math.max(1, Math.ceil(totalActive / ACTIVE_PER_PAGE));
+              const safeActivePage = Math.min(activeUsersPage, totalActivePages);
+              const pagedActive = activeUsers.slice(
+                (safeActivePage - 1) * ACTIVE_PER_PAGE,
+                safeActivePage * ACTIVE_PER_PAGE
+              );
+
+              if (activeUsers.length === 0) {
+                return <Text style={{ color: '#94a3b8', fontSize: 13 }}>No active user sessions yet.</Text>;
+              }
+
+              return (
+                <>
+                  {pagedActive.map((u: any) => (
+                    <View key={u.telemetry_id} style={styles.activeUserRow}>
+                      <View style={{ flex: 1, marginRight: 8 }}>
+                        <Text style={styles.activeUserName}>{u.full_name}</Text>
+                        <Text style={styles.activeUserSub}>
+                          {u.platform?.toUpperCase()} • {u.device_label || u.app_type} • {timeAgo(u.last_seen_at)}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.miniImpBtn}
+                        onPress={() => handleImpersonatePress(u.customer_id, u.full_name)}
+                      >
+                        <Text numberOfLines={1} style={styles.miniImpBtnText}>Login as</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+
+                  {/* Pagination Footer Bar (10 per page) */}
+                  <View style={{
+                    marginTop: 12,
+                    paddingTop: 10,
+                    borderTopWidth: 1,
+                    borderTopColor: 'rgba(148, 163, 184, 0.16)',
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: 8,
+                  }}>
+                    <Text style={{ fontSize: 11.5, color: '#94a3b8', fontWeight: '600' }}>
+                      Showing {(safeActivePage - 1) * ACTIVE_PER_PAGE + 1}–{Math.min(safeActivePage * ACTIVE_PER_PAGE, totalActive)} of {totalActive}
+                    </Text>
+
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <TouchableOpacity
+                        disabled={safeActivePage <= 1}
+                        onPress={() => handleActivePageChange(safeActivePage - 1)}
+                        style={{
+                          paddingHorizontal: 10,
+                          paddingVertical: 5,
+                          borderRadius: 8,
+                          borderWidth: 1,
+                          borderColor: safeActivePage <= 1 ? '#1e293b' : '#334155',
+                          backgroundColor: safeActivePage <= 1 ? '#0f172a' : '#1e293b',
+                          opacity: safeActivePage <= 1 ? 0.5 : 1,
+                        }}
+                      >
+                        <Text numberOfLines={1} style={{ fontSize: 11.5, fontWeight: '700', color: '#e2e8f0' }}>Prev</Text>
+                      </TouchableOpacity>
+
+                      {Array.from({ length: totalActivePages }, (_, idx) => idx + 1).slice(0, 5).map((pNum) => {
+                        const isCurr = safeActivePage === pNum;
+                        return (
+                          <TouchableOpacity
+                            key={pNum}
+                            onPress={() => handleActivePageChange(pNum)}
+                            style={{
+                              minWidth: 28,
+                              height: 28,
+                              borderRadius: 8,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              borderWidth: 1,
+                              borderColor: isCurr ? '#f59e0b' : '#334155',
+                              backgroundColor: isCurr ? 'rgba(245, 158, 11, 0.2)' : '#1e293b',
+                            }}
+                          >
+                            <Text style={{ fontSize: 11.5, fontWeight: '800', color: isCurr ? '#fbbf24' : '#cbd5e1' }}>
+                              {pNum}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+
+                      <TouchableOpacity
+                        disabled={safeActivePage >= totalActivePages}
+                        onPress={() => handleActivePageChange(safeActivePage + 1)}
+                        style={{
+                          paddingHorizontal: 10,
+                          paddingVertical: 5,
+                          borderRadius: 8,
+                          borderWidth: 1,
+                          borderColor: safeActivePage >= totalActivePages ? '#1e293b' : '#334155',
+                          backgroundColor: safeActivePage >= totalActivePages ? '#0f172a' : '#1e293b',
+                          opacity: safeActivePage >= totalActivePages ? 0.5 : 1,
+                        }}
+                      >
+                        <Text numberOfLines={1} style={{ fontSize: 11.5, fontWeight: '700', color: '#e2e8f0' }}>Next</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </>
+              );
+            })()}
+          </View>
+
+          {/* Last Widget: Magic Link Security & Intrusion Audit Log (5 per page + Lazy Prefetch) */}
+          <View style={styles.sectionCard}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Magic Link Security & Intrusion Log</Text>
+              </View>
               <Text style={{ fontSize: 11, fontWeight: '700', color: '#f87171' }}>
                 Blocked: {securityOverview.blocked_attempts || 0}
               </Text>
             </View>
-            {magicSecurityLogs.length === 0 ? (
-              <Text style={{ color: '#94a3b8', fontSize: 13 }}>No security events yet.</Text>
-            ) : (
-              magicSecurityLogs.slice(0, 5).map((log: any) => {
-                const isIntrusion = log.event_type !== 'first_bind' && log.event_type !== 'authorized_access' && log.event_type !== 'preview_bot_ignored';
-                const isDeviceBlocked = Number(log.is_device_blocked) > 0;
-                const isIpBlocked = Number(log.is_ip_blocked) > 0;
+
+            {/* Filter Pills on Mobile */}
+            <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+              {([
+                { key: 'all', label: `All (${securityOverview.total_all_events ?? magicSecurityLogs.length})` },
+                { key: 'blocked', label: `Blocked (${securityOverview.total_intrusion_events ?? 0})` },
+                { key: 'authorized', label: `Opens (${securityOverview.total_authorized_events ?? 0})` },
+                { key: 'bot', label: `Bots (${securityOverview.total_bot_events ?? 0})` },
+              ] as const).map((f) => {
+                const active = secLogFilter === f.key;
                 return (
-                  <View key={log.id} style={[styles.activeUserRow, { flexDirection: 'column', alignItems: 'flex-start', gap: 6 }]}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
-                      <Text style={styles.activeUserName}>
-                        {log.customer_name || 'Unknown Target'} (/m/{log.slug})
-                      </Text>
-                      <Text style={{ fontSize: 11, fontWeight: '700', color: isIntrusion ? '#f87171' : '#34d399' }}>
-                        {isIntrusion ? `HTTP ${log.http_status || 403} Blocked` : `HTTP ${log.http_status || 200} Bound`}
-                      </Text>
-                    </View>
-                    <Text style={styles.activeUserSub}>
-                      Attempted: {log.attempted_platform || 'Unknown'} {log.bound_platform ? `• Locked: ${log.bound_platform}` : ''}
+                  <TouchableOpacity
+                    key={f.key}
+                    onPress={() => handleSecFilterChange(f.key)}
+                    style={{
+                      paddingHorizontal: 9,
+                      paddingVertical: 4,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: active ? '#f59e0b' : '#334155',
+                      backgroundColor: active ? 'rgba(245, 158, 11, 0.18)' : '#0f172a',
+                    }}
+                  >
+                    <Text numberOfLines={1} style={{ fontSize: 11, fontWeight: '700', color: active ? '#fbbf24' : '#94a3b8' }}>
+                      {f.label}
                     </Text>
-                    {log.browser_detail ? (
-                      <Text style={styles.activeUserSub}>
-                        {log.browser_detail} • {log.os_detail || ''}
-                      </Text>
-                    ) : null}
-                    <Text style={styles.activeUserSub}>
-                      IP: {log.ip_address} • {log.location || 'PH'} • {timeAgo(log.created_at)}
-                    </Text>
-                    {isIntrusion && (
-                      <View style={{ flexDirection: 'row', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
-                        <TouchableOpacity
-                          style={[styles.miniImpBtn, { borderColor: '#f59e0b' }]}
-                          onPress={() => handleSecurityAction({
-                            action: isDeviceBlocked ? 'unblock_device' : 'block_device',
-                            log_id: log.id,
-                            device_fingerprint: log.device_fingerprint,
-                            device_token_hash: log.device_token_hash,
-                            device_label: log.attempted_platform,
-                            ip_address: log.ip_address,
-                            user_agent: log.user_agent,
-                          })}
-                        >
-                          <Text numberOfLines={1} style={styles.miniImpBtnText}>
-                            {isDeviceBlocked ? 'Unblock Device' : `Block Device (${log.device_attempt_count}/10)`}
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.miniImpBtn, { borderColor: '#ef4444' }]}
-                          onPress={() => handleSecurityAction({
-                            action: isIpBlocked ? 'unblock_ip' : 'block_ip',
-                            log_id: log.id,
-                            ip_address: log.ip_address,
-                          })}
-                        >
-                          <Text numberOfLines={1} style={[styles.miniImpBtnText, { color: '#f87171' }]}>
-                            {isIpBlocked ? 'Unblock IP' : `Block IP (${log.ip_attempt_count}/100)`}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  </View>
+                  </TouchableOpacity>
                 );
-              })
-            )}
+              })}
+            </View>
+
+            {(() => {
+              const filteredSecLogs = magicSecurityLogs.filter((log: any) => {
+                const isIntr = log.event_type !== 'first_bind' && log.event_type !== 'authorized_access' && log.event_type !== 'preview_bot_ignored';
+                if (secLogFilter === 'blocked') return isIntr;
+                if (secLogFilter === 'authorized') return log.event_type === 'first_bind' || log.event_type === 'authorized_access';
+                if (secLogFilter === 'bot') return log.event_type === 'preview_bot_ignored';
+                return true;
+              });
+
+              const SEC_PER_PAGE = 5;
+              const totalFilteredCount =
+                secLogFilter === 'all'
+                  ? Number(securityOverview.total_all_events || filteredSecLogs.length)
+                  : secLogFilter === 'blocked'
+                  ? Number(securityOverview.total_intrusion_events || filteredSecLogs.length)
+                  : secLogFilter === 'authorized'
+                  ? Number(securityOverview.total_authorized_events || filteredSecLogs.length)
+                  : Number(securityOverview.total_bot_events || filteredSecLogs.length);
+              const totalSecPages = Math.max(1, Math.ceil(totalFilteredCount / SEC_PER_PAGE));
+              const safeSecPage = Math.min(secLogPage, totalSecPages);
+              const pagedSecLogs = filteredSecLogs.slice(
+                (safeSecPage - 1) * SEC_PER_PAGE,
+                safeSecPage * SEC_PER_PAGE
+              );
+
+              if (filteredSecLogs.length === 0) {
+                return <Text style={{ color: '#94a3b8', fontSize: 13 }}>No security events match this filter.</Text>;
+              }
+
+              return (
+                <>
+                  {pagedSecLogs.map((log: any) => {
+                    const isIntrusion = log.event_type !== 'first_bind' && log.event_type !== 'authorized_access' && log.event_type !== 'preview_bot_ignored';
+                    const isDeviceBlocked = Number(log.is_device_blocked) > 0;
+                    const isIpBlocked = Number(log.is_ip_blocked) > 0;
+                    return (
+                      <View key={log.id} style={[styles.activeUserRow, { flexDirection: 'column', alignItems: 'flex-start', gap: 6 }]}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
+                          <Text style={styles.activeUserName}>
+                            {log.customer_name || 'Unknown Target'} (/m/{log.slug})
+                          </Text>
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: isIntrusion ? '#f87171' : '#34d399' }}>
+                            {isIntrusion ? `HTTP ${log.http_status || 403} Blocked` : `HTTP ${log.http_status || 200} Bound`}
+                          </Text>
+                        </View>
+                        <Text style={styles.activeUserSub}>
+                          Attempted: {log.attempted_platform || 'Unknown'} {log.bound_platform ? `• Locked: ${log.bound_platform}` : ''}
+                        </Text>
+                        {log.browser_detail ? (
+                          <Text style={styles.activeUserSub}>
+                            {log.browser_detail} • {log.os_detail || ''}
+                          </Text>
+                        ) : null}
+                        <Text style={styles.activeUserSub}>
+                          IP: {log.ip_address} • {log.location || 'PH'} • {timeAgo(log.created_at)}
+                        </Text>
+                        {isIntrusion && (
+                          <View style={{ flexDirection: 'row', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                            <TouchableOpacity
+                              style={[styles.miniImpBtn, { borderColor: isDeviceBlocked ? '#10b981' : '#f59e0b' }]}
+                              onPress={() => handleSecurityAction({
+                                action: isDeviceBlocked ? 'unblock_device' : 'block_device',
+                                log_id: log.id,
+                                device_fingerprint: log.device_fingerprint,
+                                device_token_hash: log.device_token_hash,
+                                device_label: log.attempted_platform,
+                                ip_address: log.ip_address,
+                                user_agent: log.user_agent,
+                              })}
+                            >
+                              <Text numberOfLines={1} style={[styles.miniImpBtnText, isDeviceBlocked && { color: '#34d399' }]}>
+                                {isDeviceBlocked ? 'Unblock Device' : `Block Device (${log.device_attempt_count}/10)`}
+                              </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[styles.miniImpBtn, { borderColor: isIpBlocked ? '#10b981' : '#ef4444' }]}
+                              onPress={() => handleSecurityAction({
+                                action: isIpBlocked ? 'unblock_ip' : 'block_ip',
+                                log_id: log.id,
+                                ip_address: log.ip_address,
+                              })}
+                            >
+                              <Text numberOfLines={1} style={[styles.miniImpBtnText, { color: isIpBlocked ? '#34d399' : '#f87171' }]}>
+                                {isIpBlocked ? 'Unblock IP' : `Block IP (${log.ip_attempt_count}/100)`}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })}
+
+                  {/* Pagination Footer Bar (5 per page) */}
+                  <View style={{
+                    marginTop: 12,
+                    paddingTop: 10,
+                    borderTopWidth: 1,
+                    borderTopColor: 'rgba(148, 163, 184, 0.16)',
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: 8,
+                  }}>
+                    <Text style={{ fontSize: 11.5, color: '#94a3b8', fontWeight: '600' }}>
+                      Showing {(safeSecPage - 1) * SEC_PER_PAGE + 1}–{Math.min(safeSecPage * SEC_PER_PAGE, totalFilteredCount)} of {totalFilteredCount} (5/page)
+                    </Text>
+
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <TouchableOpacity
+                        disabled={safeSecPage <= 1}
+                        onPress={() => handleSecPageChange(safeSecPage - 1)}
+                        style={{
+                          paddingHorizontal: 10,
+                          paddingVertical: 5,
+                          borderRadius: 8,
+                          borderWidth: 1,
+                          borderColor: safeSecPage <= 1 ? '#1e293b' : '#334155',
+                          backgroundColor: safeSecPage <= 1 ? '#0f172a' : '#1e293b',
+                          opacity: safeSecPage <= 1 ? 0.5 : 1,
+                        }}
+                      >
+                        <Text numberOfLines={1} style={{ fontSize: 11.5, fontWeight: '700', color: '#e2e8f0' }}>Prev</Text>
+                      </TouchableOpacity>
+
+                      {Array.from({ length: totalSecPages }, (_, idx) => idx + 1).slice(0, 5).map((pNum) => {
+                        const isCurr = safeSecPage === pNum;
+                        return (
+                          <TouchableOpacity
+                            key={pNum}
+                            onPress={() => handleSecPageChange(pNum)}
+                            style={{
+                              minWidth: 28,
+                              height: 28,
+                              borderRadius: 8,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              borderWidth: 1,
+                              borderColor: isCurr ? '#f59e0b' : '#334155',
+                              backgroundColor: isCurr ? 'rgba(245, 158, 11, 0.2)' : '#1e293b',
+                            }}
+                          >
+                            <Text style={{ fontSize: 11.5, fontWeight: '800', color: isCurr ? '#fbbf24' : '#cbd5e1' }}>
+                              {pNum}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+
+                      <TouchableOpacity
+                        disabled={safeSecPage >= totalSecPages}
+                        onPress={() => handleSecPageChange(safeSecPage + 1)}
+                        style={{
+                          paddingHorizontal: 10,
+                          paddingVertical: 5,
+                          borderRadius: 8,
+                          borderWidth: 1,
+                          borderColor: safeSecPage >= totalSecPages ? '#1e293b' : '#334155',
+                          backgroundColor: safeSecPage >= totalSecPages ? '#0f172a' : '#1e293b',
+                          opacity: safeSecPage >= totalSecPages ? 0.5 : 1,
+                        }}
+                      >
+                        <Text numberOfLines={1} style={{ fontSize: 11.5, fontWeight: '700', color: '#e2e8f0' }}>Next</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </>
+              );
+            })()}
           </View>
         </ScrollView>
       )}

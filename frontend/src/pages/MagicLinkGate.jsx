@@ -278,7 +278,9 @@ export default function MagicLinkGate() {
                 Security Protection Active
               </div>
               <div>
-                {state.meta?.reason || state.errorMessage}
+                {state.blockType === 'IP_BLOCKED'
+                  ? 'Access from this network IP has been restricted by MaskPro Security Shield due to repeated unauthorized access attempts.'
+                  : 'Access from this device has been restricted by MaskPro Security Shield. Please sign in below using your registered mobile number.'}
               </div>
               {state.meta?.ip && (
                 <div style={{ marginTop: '6px', fontSize: '11.5px', fontFamily: 'monospace', color: '#991b1b' }}>
