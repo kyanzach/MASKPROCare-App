@@ -1,5 +1,14 @@
 # Changelog
 
+## [v1.15.3] — 2026-10-29
+### Changed & Enhanced
+- **No-Plate Hint in New Booking Vehicle Selector (`frontend/src/pages/Bookings.jsx`, `mobile/app/(tabs)/bookings.tsx`)**:
+  - Updated the vehicle selector fallback text in the New Booking modal from `No plate` to `No plate (Update in My Vehicle)` on both Web and Native Mobile.
+- **Thin Full-Width PDF417 Barcode on Dashboard VIP Cards (`frontend/src/pages/Dashboard.jsx`, `mobile/app/(tabs)/index.tsx`, `mobile/components/ui/PDF417Barcode.tsx`)**:
+  - Added a sleek, thin (`28px` height), full-width PDF417 barcode strip right above the `View Card` button on each Dashboard VIP card on both Web and Native Mobile.
+- **Renamed `My Loyalty Cards` / `Loyalty Cards` to `My VIP Cards` / `VIP Cards` (`frontend/src/pages/Dashboard.jsx`, `frontend/src/pages/Profile.jsx`, `mobile/app/(tabs)/index.tsx`, `mobile/app/(tabs)/profile.tsx`)**:
+  - Updated the Dashboard section heading to `My VIP Cards` (with royal blue icon styling) and the Profile tab label to `VIP Cards` across Web and Native Mobile.
+
 ## [v1.15.2] — 2026-10-29
 ### Fixed & Improved
 - **Expanded Automotive Color Dot Resolution on Web & Native Mobile (`frontend/src/pages/Vehicles.jsx`, `mobile/app/(tabs)/vehicles.tsx`)**:

@@ -847,7 +847,7 @@ export default function BookingsScreen() {
                             onPress={() => setBookingForm({ ...bookingForm, vehicle_id: String(v.id) })}
                           >
                             <Text style={[styles.dropdownItemText, isSelected && styles.dropdownItemTextSelected]}>
-                              {v.make} {v.model} {v.plate_no ? `— ${v.plate_no}` : ''}
+                              {v.make} {v.model} — {v.plate_no || 'No plate (Update in My Vehicle)'}
                             </Text>
                           </TouchableOpacity>
                         );

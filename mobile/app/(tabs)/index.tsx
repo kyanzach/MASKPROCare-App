@@ -22,6 +22,7 @@ import EmptyState from '@/components/ui/EmptyState';
 import VehicleIcon, { getVehicleConfig } from '@/components/ui/VehicleIcon';
 import AlertPromptModal, { AlertType } from '@/components/ui/AlertPromptModal';
 import CounterDatePicker, { formatCounterDate } from '@/components/ui/CounterDatePicker';
+import PDF417Barcode from '@/components/ui/PDF417Barcode';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -1016,10 +1017,10 @@ export default function DashboardScreen() {
         )}
       </View>
 
-      {/* ─── My Loyalty Cards Section ─── */}
+      {/* ─── My VIP Cards Section ─── */}
       <View style={styles.sectionContainer}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>My Loyalty Cards</Text>
+          <Text style={styles.sectionTitle}>My VIP Cards</Text>
           {loyaltyCards.length > 0 && (
             <TouchableOpacity
               onPress={() => router.push('/(tabs)/profile?tab=loyalty' as any)}
@@ -1027,7 +1028,7 @@ export default function DashboardScreen() {
               style={styles.sectionHeaderRight}
             >
               <Text style={styles.sectionSeeAll}>See All</Text>
-              <FontAwesome name="angle-right" size={14} color="#4f46e5" />
+              <FontAwesome name="angle-right" size={14} color="#2563eb" />
             </TouchableOpacity>
           )}
         </View>
@@ -1071,6 +1072,10 @@ export default function DashboardScreen() {
                     </Text>
                   </View>
 
+                  <View style={{ marginBottom: 10, paddingTop: 4, borderTopWidth: 1, borderTopColor: '#f1f5f9' }}>
+                    <PDF417Barcode text={String(card.id)} height={5} thinFullWidth />
+                  </View>
+
                   <View style={styles.vehicleCardActions}>
                     <TouchableOpacity
                       style={[styles.vehicleCardBtnGradient, { flex: 1 }]}
@@ -1093,8 +1098,8 @@ export default function DashboardScreen() {
         ) : (
           <EmptyState
             icon="credit-card"
-            title="No loyalty cards yet"
-            description="Your warranty and maintenance loyalty cards will appear here once issued."
+            title="No VIP cards yet"
+            description="Your warranty and maintenance VIP cards will appear here once issued."
             actionText="View Profile"
             onAction={() => router.push('/(tabs)/profile?tab=loyalty' as any)}
           />

@@ -620,7 +620,7 @@ export default function Bookings() {
                   {vehicles.length > 0 ? (
                     <select className="form-select" value={bookingForm.vehicle_id} onChange={e => handleVehicleChange(e.target.value)} required>
                       <option value="">Choose a vehicle...</option>
-                      {vehicles.map(v => <option key={v.id} value={v.id}>{v.make} {v.model} — {v.plate_no || 'No plate'}</option>)}
+                      {vehicles.map(v => <option key={v.id} value={v.id}>{v.make} {v.model} — {v.plate_no || 'No plate (Update in My Vehicle)'}</option>)}
                     </select>
                   ) : (
                     <div style={{ padding: '16px', background: '#fef2f2', borderRadius: '12px', color: '#dc2626', fontSize: '14px' }}>

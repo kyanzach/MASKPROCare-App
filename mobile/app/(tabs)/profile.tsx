@@ -420,7 +420,7 @@ export default function ProfileScreen() {
         >
           <View style={styles.loyaltyTabTitle}>
             <Text style={[styles.tabButtonText, activeTab === 'loyalty' && styles.tabButtonTextActive]}>
-              Loyalty Cards
+              VIP Cards
             </Text>
             {loyaltyCards.length > 0 ? (
               <View style={styles.loyaltyBadge}>

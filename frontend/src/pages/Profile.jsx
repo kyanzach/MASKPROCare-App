@@ -566,7 +566,7 @@ export default function Profile() {
         </button>
         <button style={tabStyle(activeTab === 'loyalty')} onClick={() => setActiveTab('loyalty')}>
           <i className="bi bi-ticket-perforated"></i>
-          Loyalty Cards
+          VIP Cards
           {loyaltyLoaded && loyaltyCards.length > 0 && (
             <span style={{
               background: '#3b82f6', color: 'white', fontSize: '11px', fontWeight: 700,

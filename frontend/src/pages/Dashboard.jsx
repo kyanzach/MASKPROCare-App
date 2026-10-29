@@ -1,8 +1,42 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
 import CounterDateModal, { formatCounterDate } from '../components/CounterDateModal';
+
+function ThinPDF417Barcode({ text }) {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    if (!canvasRef.current || !text) return;
+    let cancelled = false;
+    import('bwip-js').then((bwipjs) => {
+      if (cancelled || !canvasRef.current) return;
+      try {
+        bwipjs.toCanvas(canvasRef.current, {
+          bcid: 'pdf417',
+          text: String(text),
+          scale: 2,
+          height: 5,
+          includetext: false,
+        });
+      } catch (err) {
+        console.error('PDF417 render error:', err);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [text]);
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{
+        width: '100%',
+        height: '28px',
+        display: 'block',
+        borderRadius: '4px',
+      }}
+    />
+  );
+}
 
 // Maps raw DB service names → friendly display labels
 const SERVICE_LABEL_MAP = {
@@ -738,18 +772,18 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* My Loyalty Cards */}
+      {/* My VIP Cards */}
       <div className="card-modern mb-32">
         <div className="card-modern-body">
           <div className="flex-between mb-24">
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div className="stats-icon" style={{ width: '40px', height: '40px', borderRadius: '12px', fontSize: '16px', background: 'linear-gradient(135deg, #8b5cf6, #6366f1)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div className="stats-icon" style={{ width: '40px', height: '40px', borderRadius: '12px', fontSize: '16px', background: 'linear-gradient(135deg, #2563eb, #1e40af)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <i className="fas fa-id-card"></i>
               </div>
-              <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#1f2937', margin: 0 }}>My Loyalty Cards</h2>
+              <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#1f2937', margin: 0 }}>My VIP Cards</h2>
             </div>
             {loyaltyCards.length > 0 && (
-              <Link to="/profile?tab=loyalty" style={{ fontSize: '13px', fontWeight: 600, color: '#4f46e5', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Link to="/profile?tab=loyalty" style={{ fontSize: '13px', fontWeight: 600, color: '#2563eb', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 See All <i className="fas fa-arrow-right"></i>
               </Link>
             )}
@@ -778,7 +812,7 @@ export default function Dashboard() {
 
                       <div style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        background: '#f8fafc', padding: '8px 12px', borderRadius: '8px', marginBottom: '16px',
+                        background: '#f8fafc', padding: '8px 12px', borderRadius: '8px', marginBottom: '12px',
                         fontSize: '12px', border: '1px solid #f1f5f9'
                       }}>
                         <span style={{ color: '#64748b', fontWeight: 600 }}>{getCounterLabel(card.category)}</span>
@@ -786,6 +820,11 @@ export default function Dashboard() {
                           {card.visitsUsed}
                           {card.visitsTotal > 0 && <span style={{ color: '#94a3b8', fontWeight: 500 }}> / {card.visitsTotal}</span>}
                         </span>
+                      </div>
+
+                      {/* Thin Full-Width Barcode above View Card button */}
+                      <div style={{ marginBottom: '12px', padding: '6px 0 2px', borderTop: '1px solid #f1f5f9' }}>
+                        <ThinPDF417Barcode text={String(card.id)} />
                       </div>
 
                       <div>
@@ -819,10 +858,10 @@ export default function Dashboard() {
           ) : (
             <div className="empty-state">
               <div className="empty-state-icon"><i className="fas fa-credit-card"></i></div>
-              <h3>No loyalty cards registered</h3>
-              <p>Your warranty and maintenance loyalty cards will appear here once issued.</p>
+              <h3>No VIP cards registered</h3>
+              <p>Your warranty and maintenance VIP cards will appear here once issued.</p>
               <Link to="/profile?tab=loyalty" className="btn-gradient">
-                <i className="fas fa-id-card"></i> View Loyalty Cards
+                <i className="fas fa-id-card"></i> View VIP Cards
               </Link>
             </div>
           )}
