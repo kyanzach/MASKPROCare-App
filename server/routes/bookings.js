@@ -81,6 +81,19 @@ function normalizeServiceName(name) {
   return SERVICE_NAME_MAP[name] || name;
 }
 
+// --- Helper: Check if a branch is marked closed on a specific YYYY-MM-DD date ---
+async function getBranchClosedReason(dateStr, branchId) {
+  if (!branchId || branchId <= 0 || !dateStr) return null;
+  try {
+    const [rows] = await pool.query(
+      "SELECT reason FROM branch_closed_dates WHERE branch_id = ? AND closed_date = ? LIMIT 1",
+      [branchId, String(dateStr).slice(0, 10)]
+    );
+    if (rows.length > 0) return rows[0].reason || 'Branch Closed';
+  } catch { /* table may not exist yet */ }
+  return null;
+}
+
 // --- Helper: Get branch-specific capacity from DB (matches Unify's booking_capacity.php) ---
 // Capacity is ALWAYS read from branch_booking_capacity table, managed by admins in Unify.
 // 0 = unlimited (never full). No hardcoded defaults.
@@ -347,6 +360,17 @@ router.post('/create', async (req, res) => {
 
     // Get branch
     const branchId = await getCustomerBranch(customerId, req.user.branch_id, vehicle_id);
+
+    // Check if branch is closed on this date (holidays / non-operating days)
+    const closedReason = await getBranchClosedReason(booking_date, branchId);
+    if (closedReason) {
+      const formattedDate = new Date(booking_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+      return res.status(409).json({
+        success: false, data: null,
+        message: `Our branch is closed on ${formattedDate} (${closedReason}). Please select another date.`,
+        errors: []
+      });
+    }
 
     // Check capacity
     const available = await getAvailableSlots(booking_date, String(service_type).trim(), branchId);
@@ -716,6 +740,19 @@ async function handleAvailability(req, res) {
         for (const r of rows) bookingCounts[r.dt] = r.cnt;
       } catch { /* ignore */ }
 
+      // Fetch branch closed dates (holidays / non-operating days) for this month
+      const closedDatesMap = {};
+      try {
+        const [closedRows] = await pool.query(`
+          SELECT DATE_FORMAT(closed_date, '%Y-%m-%d') as dt, reason
+          FROM branch_closed_dates
+          WHERE branch_id = ? AND closed_date >= ? AND closed_date <= ?
+        `, [branchId, monthStart, monthEnd]);
+        for (const cr of closedRows) {
+          closedDatesMap[cr.dt] = cr.reason || 'Branch Closed';
+        }
+      } catch { /* table may not exist yet */ }
+
       // Look up capacity using normalized service name
       const max = branchCapacity[normalizedService] ?? 0; // 0 = unlimited (from DB)
 
@@ -726,7 +763,8 @@ async function handleAvailability(req, res) {
         const dateStr = toLocalDateStr(current); // Local timezone, NOT UTC
         const dayOfWeek = current.getDay(); // 0=Sun
 
-        if (dayOfWeek !== 0) { // Skip Sundays
+        // Skip Sundays and branch-marked closed dates so Web, Android, and iOS automatically render them as Closed/disabled
+        if (dayOfWeek !== 0 && !closedDatesMap[dateStr]) {
           const booked = bookingCounts[dateStr] || 0;
 
           // Compute status matching Unify's logic:
@@ -760,7 +798,7 @@ async function handleAvailability(req, res) {
 
       return res.json({
         success: true,
-        data: { dates: availableDates, capacity: max, branch_id: branchId },
+        data: { dates: availableDates, closed_dates: closedDatesMap, capacity: max, branch_id: branchId },
         message: 'Available dates retrieved',
         errors: []
       });
@@ -769,6 +807,20 @@ async function handleAvailability(req, res) {
       const date = String(body.date || '').trim();
       if (!date) {
         return res.status(422).json({ success: false, data: null, message: 'Date is required', errors: [] });
+      }
+
+      // If branch is marked closed on this date, return all slots unavailable
+      const closedReason = await getBranchClosedReason(date, branchId);
+      if (closedReason) {
+        return res.json({
+          success: true,
+          data: {
+            times: TIME_SLOTS.map(slot => ({ time: slot.time, label: slot.label, available: false })),
+            closed_reason: closedReason
+          },
+          message: `Branch closed (${closedReason})`,
+          errors: []
+        });
       }
 
       const now = new Date();
@@ -838,7 +890,7 @@ router.post('/edit-request', async (req, res) => {
 
     // Verify request
     const [requests] = await pool.query(
-      "SELECT request_id, booking_date, status, edit_history, notes FROM booking_requests WHERE request_id = ? AND customer_id = ?",
+      "SELECT request_id, customer_vehicle_id, branch_id, booking_date, status, edit_history, notes FROM booking_requests WHERE request_id = ? AND customer_id = ?",
       [reqId, req.user.customer_id]
     );
     if (requests.length === 0) {
@@ -848,6 +900,18 @@ router.post('/edit-request', async (req, res) => {
     const request = requests[0];
     if (request.status !== 'pending') {
       return res.status(409).json({ success: false, data: null, message: `This request has already been ${request.status} and cannot be edited`, errors: [] });
+    }
+
+    // Check if branch is closed on new_date
+    const reqBranchId = request.branch_id || await getCustomerBranch(req.user.customer_id, req.user.branch_id, request.customer_vehicle_id);
+    const closedReason = await getBranchClosedReason(new_date, reqBranchId);
+    if (closedReason) {
+      const formattedDate = new Date(new_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+      return res.status(409).json({
+        success: false, data: null,
+        message: `Our branch is closed on ${formattedDate} (${closedReason}). Please select another date.`,
+        errors: []
+      });
     }
 
     // Check if another request or booking already exists for this vehicle on new_date
@@ -967,6 +1031,16 @@ router.post('/respond-offer', async (req, res) => {
       const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
       if (m[1] < today) {
         return res.status(422).json({ success: false, data: null, message: 'Preferred date cannot be in the past.', errors: [] });
+      }
+      const reqBranchId = request.branch_id || await getCustomerBranch(customerId, req.user.branch_id, request.customer_vehicle_id);
+      const closedReason = await getBranchClosedReason(m[1], reqBranchId);
+      if (closedReason) {
+        const formattedDate = new Date(m[1] + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+        return res.status(409).json({
+          success: false, data: null,
+          message: `Our branch is closed on ${formattedDate} (${closedReason}). Please select another date.`,
+          errors: []
+        });
       }
       counterDate = `${m[1]} ${m[2]}:${m[3]}:00`;
     }

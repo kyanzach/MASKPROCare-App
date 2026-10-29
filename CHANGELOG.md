@@ -1,5 +1,15 @@
 # Changelog
 
+## [v1.15.9] — 2026-10-29
+### Fixed & Added
+- **Centered Mobile Header Notifications Dropdown Inside Viewport (`frontend/src/components/Layout.jsx`, `frontend/src/index.css`)**:
+  - Fixed the mobile Bell icon Notifications dropdown clipping off the left edge of the phone screen (`otifications`) when anchored to the Bell icon (`~66px` from the right edge of the header).
+  - Passed `placement="sidebar" | "mobile"` to `<BellIcon />`, changed click-outside detection to `[data-notif-container="true"]` so both desktop and mobile Bell instances work independently, and styled `.notif-dropdown-mobile` on `@media (max-width: 768px)` with `position: fixed; top: 68px; left: 12px; right: 12px; max-width: 420px; margin: 0 auto;` so the dropdown card is always centered inside the mobile viewport with `12px` left/right margins.
+- **Reflected Unify `Branch Schedule` Closed Dates & Holidays in MaskPro Care App (`server/routes/bookings.js`, `frontend/src/pages/Bookings.jsx`)**:
+  - Updated `/api/bookings/availability` (`get_available_dates` and `get_available_times`) in `server/routes/bookings.js` to query `branch_closed_dates` for the customer's branch, omitting closed dates from `availableDates` (so Web, Android, and iOS automatically render them as `Closed` / unselectable) and returning `closed_dates` reason labels.
+  - Added server-side closed-date validation in `POST /api/bookings/create`, `POST /api/bookings/edit-request`, and `POST /api/bookings/respond-offer` (`counter_date`) to prevent booking on branch-closed dates.
+  - Updated `frontend/src/pages/Bookings.jsx` to display the closed reason in the date tooltip (`Closed: <reason>`), strikethrough on closed future dates, and a `Closed` badge in the calendar legend.
+
 ## [v1.15.8] — 2026-10-29
 ### Fixed & Improved
 - **Mobile Web Screen Optimization Across `care.maskpro.ph` (`frontend/src/index.css`, `frontend/src/pages/Bookings.jsx`, `frontend/src/components/Layout.jsx`, `frontend/src/components/CounterDateModal.jsx`, `frontend/src/pages/Dashboard.jsx`, `frontend/src/pages/Profile.jsx`, `frontend/src/pages/Shop.jsx`, `frontend/src/pages/Community.jsx`)**:

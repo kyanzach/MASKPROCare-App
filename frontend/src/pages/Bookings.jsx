@@ -54,6 +54,7 @@ export default function Bookings() {
   const [serviceTypes, setServiceTypes] = useState([]);
   const [bookingForm, setBookingForm] = useState({ vehicle_id: '', service_type: '', booking_date: '', booking_time: '', notes: '' });
   const [availableDates, setAvailableDates] = useState([]);
+  const [closedDates, setClosedDates] = useState({});
   const [loadingDates, setLoadingDates] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
@@ -72,6 +73,7 @@ export default function Bookings() {
   const [editing, setEditing] = useState(false);
   const [editCalendarMonth, setEditCalendarMonth] = useState(new Date());
   const [editAvailableDates, setEditAvailableDates] = useState([]);
+  const [editClosedDates, setEditClosedDates] = useState({});
   const [editLoadingDates, setEditLoadingDates] = useState(false);
 
   // Offer response
@@ -209,6 +211,7 @@ export default function Bookings() {
         params: { action: 'get_available_dates', service_type: serviceType, vehicle_id: vehicleId, month },
       });
       setAvailableDates(res.data.data?.dates || []);
+      setClosedDates(res.data.data?.closed_dates || {});
     } catch (err) { console.error(err); }
     finally { setLoadingDates(false); }
   };
@@ -226,6 +229,7 @@ export default function Bookings() {
       loadAvailability(bookingForm.service_type, bookingForm.vehicle_id, calendarMonth);
     } else {
       setAvailableDates([]);
+      setClosedDates({});
     }
   }, [bookingForm.service_type, bookingForm.vehicle_id, calendarMonth]);
 
@@ -257,13 +261,14 @@ export default function Bookings() {
         isLimited: !isPast && !isSunday && (dateInfo ? dateInfo.status === 'limited' : false),
         isUnavailable: !isPast && !isSunday && (dateInfo ? dateInfo.status === 'full' : false),
         isClosed,
+        closedReason: closedDates[dateStr] || null,
         isSelected: bookingForm.booking_date === dateStr,
         capacity: dateInfo?.capacity,
         booked: dateInfo?.booked,
       });
     }
     return days;
-  }, [calendarMonth, availableDates, bookingForm.booking_date]);
+  }, [calendarMonth, availableDates, closedDates, bookingForm.booking_date]);
 
   const handleBookingSubmit = async (e) => {
     e.preventDefault();
@@ -346,6 +351,7 @@ export default function Bookings() {
         params: { action: 'get_available_dates', service_type: serviceType, month },
       });
       setEditAvailableDates(res.data.data?.dates || []);
+      setEditClosedDates(res.data.data?.closed_dates || {});
     } catch (err) { console.error(err); }
     finally { setEditLoadingDates(false); }
   };
@@ -380,13 +386,14 @@ export default function Bookings() {
         isLimited: !isPast && !isSunday && (dateInfo ? dateInfo.status === 'limited' : false),
         isUnavailable: !isPast && !isSunday && (dateInfo ? dateInfo.status === 'full' : false),
         isClosed,
+        closedReason: editClosedDates[dateStr] || null,
         isSelected: editDate === dateStr,
         capacity: dateInfo?.capacity,
         booked: dateInfo?.booked,
       });
     }
     return days;
-  }, [editCalendarMonth, editAvailableDates, editDate]);
+  }, [editCalendarMonth, editAvailableDates, editClosedDates, editDate]);
 
   const handleEdit = async () => {
     const reason = editReason === 'Others' ? editReasonCustom.trim() : editReason;
@@ -1047,13 +1054,14 @@ function renderCalendar(month, setMonth, days, onSelect) {
           const canClick = (d.isAvailable || d.isLimited) && !d.isPast && !d.isSunday && !d.isClosed;
           return (
             <button key={d.dateStr} type="button" onClick={() => canClick && onSelect(d.dateStr)}
-              title={d.isPast ? 'Past Date' : d.isClosed || d.isSunday ? 'Closed' : d.isLimited ? 'Almost Full' : d.isUnavailable ? 'Fully Booked' : 'Available'}
+              title={d.isPast ? 'Past Date' : d.isSunday ? 'Closed (Sunday)' : d.isClosed ? (d.closedReason ? `Closed: ${d.closedReason}` : 'Closed') : d.isLimited ? 'Almost Full' : d.isUnavailable ? 'Fully Booked' : 'Available'}
               style={{
                 width: '100%', minWidth: 0, padding: 0,
                 aspectRatio: '1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                 borderRadius: '8px', position: 'relative', boxSizing: 'border-box',
                 border: d.isSelected ? '2px solid #1e40af'
                   : (d.isPast || d.isSunday) ? '1.5px solid #f3f4f6'
+                  : d.isClosed ? '1.5px solid #e2e8f0'
                   : d.isToday ? '2px solid #2563eb'
                   : d.isLimited ? '1.5px solid #fcd34d'
                   : d.isAvailable ? '1.5px solid #86efac'
@@ -1076,7 +1084,7 @@ function renderCalendar(month, setMonth, days, onSelect) {
                 fontSize: 'clamp(12px, 3.3vw, 14px)',
                 cursor: canClick ? 'pointer' : 'not-allowed',
                 transition: 'all 0.15s ease',
-                textDecoration: d.isUnavailable && !d.isPast ? 'line-through' : 'none',
+                textDecoration: (d.isUnavailable || d.isClosed) && !d.isPast ? 'line-through' : 'none',
               }}>
               {d.day}
             </button>
@@ -1092,6 +1100,9 @@ function renderCalendar(month, setMonth, days, onSelect) {
         </span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: '#fee2e2', border: '1px solid #fca5a5', color: '#b91c1c', whiteSpace: 'nowrap' }}>
           <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#dc2626' }}></span>Full
+        </span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: '#f1f5f9', border: '1px solid #cbd5e1', color: '#64748b', whiteSpace: 'nowrap' }}>
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#94a3b8' }}></span>Closed
         </span>
       </div>
     </div>

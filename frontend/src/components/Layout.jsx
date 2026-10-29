@@ -129,7 +129,7 @@ export default function Layout() {
   // Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (notifRef.current && !notifRef.current.contains(e.target)) {
+      if (!e.target.closest?.('[data-notif-container="true"]')) {
         setNotifOpen(false);
       }
     };
@@ -172,8 +172,8 @@ export default function Layout() {
   ];
 
   // Bell icon component (reused in sidebar + mobile header)
-  const BellIcon = ({ style }) => (
-    <div ref={notifRef} style={{ position: 'relative', ...style }}>
+  const BellIcon = ({ style, placement = 'mobile' }) => (
+    <div data-notif-container="true" style={{ position: 'relative', ...style }}>
       <button
         onClick={toggleNotifDropdown}
         style={{
@@ -200,13 +200,15 @@ export default function Layout() {
 
       {/* Notification Dropdown */}
       {notifOpen && (
-        <div style={{
-          position: 'absolute', top: '100%', right: 0, width: 'min(360px, calc(100vw - 24px))',
-          background: 'white', borderRadius: '16px',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.15), 0 4px 16px rgba(0,0,0,0.08)',
-          border: '1px solid rgba(59,130,246,0.1)',
-          zIndex: 300, overflow: 'hidden', marginTop: '8px',
-        }}>
+        <div
+          className={`notif-dropdown-panel notif-dropdown-${placement}`}
+          style={{
+            background: 'white', borderRadius: '16px',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.18), 0 4px 16px rgba(0,0,0,0.08)',
+            border: '1px solid rgba(59,130,246,0.14)',
+            zIndex: 1200, overflow: 'hidden',
+          }}
+        >
           {/* Header */}
           <div style={{
             padding: '16px 20px', borderBottom: '1px solid #e2e8f0',
@@ -313,7 +315,7 @@ export default function Layout() {
           </div>
           {/* Bell in sidebar header */}
           <div onClick={(e) => e.stopPropagation()}>
-            <BellIcon />
+            <BellIcon placement="sidebar" />
           </div>
         </div>
 
@@ -440,7 +442,7 @@ export default function Layout() {
           </div>
           <div className="top-header-right" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, marginLeft: 'auto' }}>
             {/* Bell in mobile header */}
-            <BellIcon />
+            <BellIcon placement="mobile" />
             {profilePhoto ? (
               <img src={profilePhoto} alt="" onClick={() => navigate('/profile')} style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', cursor: 'pointer', border: '2px solid #e0e7ff' }} />
             ) : (

@@ -1259,6 +1259,19 @@ textarea.form-input { resize: vertical; min-height: 100px; }
   background: rgba(59, 130, 246, 0.08);
 }
 
+/* Notification Dropdown Positioning */
+.notif-dropdown-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: -200px;
+  width: 350px;
+  max-width: calc(100vw - 24px);
+}
+
+.notif-dropdown-mobile {
+  display: none;
+}
+
 /* Booking Calendar & Responsive Booking List */
 .booking-calendar-box {
   background: rgba(255, 255, 255, 0.95);
@@ -1303,6 +1316,21 @@ textarea.form-input { resize: vertical; min-height: 100px; }
   .card-modern-body { padding: 16px; }
   .vehicle-card-body { padding: 16px; }
   .profile-grid { grid-template-columns: 1fr !important; }
+
+  /* Notification dropdown centered on mobile screen */
+  .notif-dropdown-sidebar {
+    display: none !important;
+  }
+  .notif-dropdown-mobile {
+    display: block !important;
+    position: fixed !important;
+    top: 68px !important;
+    left: 12px !important;
+    right: 12px !important;
+    width: auto !important;
+    max-width: 420px !important;
+    margin: 0 auto !important;
+  }
 
   /* Modals on mobile */
   .modal-overlay {
