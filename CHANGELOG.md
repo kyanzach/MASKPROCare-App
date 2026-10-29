@@ -1,5 +1,10 @@
 # Changelog
 
+## [v1.15.2] — 2026-10-29
+### Fixed & Improved
+- **Expanded Automotive Color Dot Resolution on Web & Native Mobile (`frontend/src/pages/Vehicles.jsx`, `mobile/app/(tabs)/vehicles.tsx`)**:
+  - Expanded `COLOR_MAP` with 60+ automotive colors (`pink`, `hot pink`, `light pink`, `rose`, `rose gold`, `sonic titanium`, `titanium`, `platinum`, `magenta`, `fuchsia`, `coral`, `champagne`, `bronze`, `copper`, `gunmetal`, `charcoal`, `teal`, `turquoise`, `jade`, `emerald`, etc.) and added substring fallback matching so multi-word or custom OEM colors like `Pink` and `Sonic Titanium` render accurate color dots instead of gray.
+
 ## [v1.15.1] — 2026-10-28
 ### Fixed
 - **Added `registration_date` Column to Production `vehicles` Table & Normalized Date Formatting (`server/routes/vehicles.js`, `server/routes/dashboard.js`, `unify_maskpro.vehicles`)**:

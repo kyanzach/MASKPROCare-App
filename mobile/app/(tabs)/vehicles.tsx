@@ -26,19 +26,44 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const COLOR_MAP: Record<string, string> = {
+  'pearl white': '#f5f5f0', 'midnight black': '#1a1a1a', 'midnight blue': '#1e3a5f',
+  'sonic titanium': '#b4b8bc', 'jade metallic': '#00a86b', 'metallic gray': '#6b7280',
+  'metallic grey': '#6b7280', 'dark gray': '#4b5563', 'dark grey': '#4b5563',
+  'space gray': '#52525b', 'space grey': '#52525b', 'dark blue': '#1e3a8a',
+  'light blue': '#93c5fd', 'sky blue': '#38bdf8', 'navy blue': '#1e40af',
+  'royal blue': '#2563eb', 'hot pink': '#ec4899', 'light pink': '#f9a8d4',
+  'rose gold': '#e0a899', 'blackish red': '#5c1a1a', 'wine red': '#722f37',
+  'cherry red': '#990012', 'forest green': '#166534', 'army green': '#4b5320',
+  'olive green': '#556b2f', 'mint green': '#6ee7b7',
   'red': '#dc2626', 'blue': '#2563eb', 'black': '#1f2937', 'white': '#e5e7eb',
   'silver': '#9ca3af', 'gray': '#6b7280', 'grey': '#6b7280', 'green': '#16a34a',
   'yellow': '#eab308', 'orange': '#ea580c', 'brown': '#92400e', 'gold': '#d97706',
-  'maroon': '#7f1d1d', 'beige': '#d4c5a9', 'ivory': '#fffff0', 'cream': '#fffdd0',
-  'blackish red': '#5c1a1a', 'midnight blue': '#1e3a5f', 'pearl white': '#f5f5f0',
-  'wine red': '#722f37', 'dark blue': '#1e3a8a', 'light blue': '#93c5fd',
-  'sky blue': '#38bdf8', 'navy blue': '#1e40af',
+  'pink': '#ec4899', 'rose': '#f43f5e', 'magenta': '#d946ef', 'fuchsia': '#d946ef',
+  'coral': '#fb7185', 'salmon': '#fb7185', 'peach': '#fdba74', 'lavender': '#c4b5fd',
+  'violet': '#8b5cf6', 'purple': '#9333ea', 'lilac': '#c4b5fd', 'plum': '#701a75',
+  'indigo': '#4f46e5', 'maroon': '#7f1d1d', 'beige': '#d4c5a9', 'ivory': '#fffff0',
+  'cream': '#fffdd0', 'navy': '#1e3a5f', 'bronze': '#cd7f32', 'copper': '#b87333',
+  'champagne': '#f7e7ce', 'pearl': '#eae0c8', 'tan': '#d2b48c', 'khaki': '#c3b091',
+  'sand': '#e2ca76', 'camel': '#c19a6b', 'mocha': '#6f4e37', 'coffee': '#6f4e37',
+  'chocolate': '#7b3f00', 'titanium': '#9ca3af', 'platinum': '#d4d4d8',
+  'gunmetal': '#4b5563', 'charcoal': '#374151', 'graphite': '#3f3f46', 'slate': '#64748b',
+  'burgundy': '#800020', 'crimson': '#dc143c', 'scarlet': '#ff2400', 'ruby': '#9b111e',
+  'wine': '#722f37', 'teal': '#14b8a6', 'cyan': '#06b6d4', 'turquoise': '#40e0d0',
+  'aqua': '#00ffff', 'mint': '#34d399', 'jade': '#00a86b', 'emerald': '#10b981',
+  'olive': '#808000', 'lime': '#84cc16', 'sage': '#9caf88', 'mustard': '#eab308',
+  'amber': '#f59e0b',
 };
 
 function getColorHex(colorName: string) {
   if (!colorName) return '#94a3b8';
   const key = colorName.toLowerCase().trim();
-  return COLOR_MAP[key] || '#94a3b8';
+  if (!key) return '#94a3b8';
+  if (key.startsWith('#') && (key.length === 4 || key.length === 7)) return key;
+  if (COLOR_MAP[key]) return COLOR_MAP[key];
+  for (const [k, hex] of Object.entries(COLOR_MAP)) {
+    if (key.includes(k)) return hex;
+  }
+  return '#94a3b8';
 }
 
 function getNextRenewal(registrationDate: string) {
