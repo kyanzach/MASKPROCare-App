@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.17.7] — 2026-10-29
+### Fixed
+- **Fixed Mobile Web Admin Tab Bar Overlapping & iOS Header Button Clipping (`frontend/src/pages/AdminPanel.jsx`, `mobile/app/admin.tsx`)**:
+  - Updated the 3-tab navigation bar in `AdminPanel.jsx` to use clean single-word labels (`Dashboard`, `Moderation`, `Impersonate`) with `flex: 1, minWidth: 0, overflow: 'hidden'`, eliminating text overlap and horizontal scrollbars on Mobile Web while matching the native iOS & Android segmented tab bar.
+  - Added `flex: 1` and single-line truncation to `headerLeft` in `mobile/app/admin.tsx` so the top-right `App` and sign-out buttons never clip on narrower iOS/Android viewports.
+
 ## [v1.17.6] — 2026-10-29
 ### Fixed & Added
 - **Removed Admin Identity OPSEC Leak on Public Security Blocked Page & Added iOS/Android Pagination Bars (`server/routes/auth.js`, `frontend/src/pages/MagicLinkGate.jsx`, `mobile/app/admin.tsx`)**:

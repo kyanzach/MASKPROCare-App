@@ -411,44 +411,44 @@ export default function AdminPanel() {
 
       {/* ─── 3-Tab Navigation Bar ──────────────────────────────────── */}
       <div style={{
-        display: 'flex', gap: '8px', marginBottom: '24px', overflowX: 'auto',
-        background: '#f1f5f9', padding: '6px', borderRadius: '14px',
+        display: 'flex', gap: '6px', marginBottom: '24px',
+        background: '#f1f5f9', padding: '5px', borderRadius: '14px', width: '100%',
       }}>
         <button
           onClick={() => switchTab('dashboard')}
           style={{
-            flex: 1, minWidth: '150px', padding: '10px 16px', borderRadius: '10px', border: 'none',
+            flex: 1, minWidth: 0, padding: '10px 8px', borderRadius: '10px', border: 'none',
             background: activeTab === 'dashboard' ? 'white' : 'transparent',
             color: activeTab === 'dashboard' ? '#0f172a' : '#64748b',
-            fontWeight: 700, fontSize: '13.5px', cursor: 'pointer', fontFamily: 'inherit',
+            fontWeight: 700, fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit',
             boxShadow: activeTab === 'dashboard' ? '0 2px 8px rgba(15,23,42,0.06)' : 'none',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-            whiteSpace: 'nowrap',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+            whiteSpace: 'nowrap', overflow: 'hidden',
           }}
         >
-          <i className="bi bi-bar-chart-line-fill" style={{ color: activeTab === 'dashboard' ? '#2563eb' : '#64748b' }}></i>
-          <span>Dashboard & Usage</span>
+          <i className="bi bi-bar-chart-line-fill" style={{ color: activeTab === 'dashboard' ? '#2563eb' : '#64748b', flexShrink: 0 }}></i>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Dashboard</span>
         </button>
 
         <button
           onClick={() => switchTab('moderation')}
           style={{
-            flex: 1, minWidth: '170px', padding: '10px 16px', borderRadius: '10px', border: 'none',
+            flex: 1, minWidth: 0, padding: '10px 8px', borderRadius: '10px', border: 'none',
             background: activeTab === 'moderation' ? 'white' : 'transparent',
             color: activeTab === 'moderation' ? '#0f172a' : '#64748b',
-            fontWeight: 700, fontSize: '13.5px', cursor: 'pointer', fontFamily: 'inherit',
+            fontWeight: 700, fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit',
             boxShadow: activeTab === 'moderation' ? '0 2px 8px rgba(15,23,42,0.06)' : 'none',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-            whiteSpace: 'nowrap',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+            whiteSpace: 'nowrap', overflow: 'hidden',
           }}
         >
-          <i className="bi bi-shield-check" style={{ color: activeTab === 'moderation' ? '#d97706' : '#64748b' }}></i>
-          <span>Community Moderation</span>
+          <i className="bi bi-shield-check" style={{ color: activeTab === 'moderation' ? '#d97706' : '#64748b', flexShrink: 0 }}></i>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Moderation</span>
           {(modCounts.pending > 0 || modCounts.active_sos > 0) && (
             <span style={{
               background: modCounts.pending > 0 ? '#f59e0b' : '#ef4444',
               color: 'white', fontSize: '11px', fontWeight: 800,
-              padding: '1px 7px', borderRadius: '20px',
+              padding: '1px 6px', borderRadius: '20px', flexShrink: 0,
             }}>
               {modCounts.pending > 0 ? modCounts.pending : modCounts.active_sos}
             </span>
@@ -458,25 +458,17 @@ export default function AdminPanel() {
         <button
           onClick={() => switchTab('impersonate')}
           style={{
-            flex: 1, minWidth: '170px', padding: '10px 16px', borderRadius: '10px', border: 'none',
+            flex: 1, minWidth: 0, padding: '10px 8px', borderRadius: '10px', border: 'none',
             background: activeTab === 'impersonate' ? 'white' : 'transparent',
             color: activeTab === 'impersonate' ? '#0f172a' : '#64748b',
-            fontWeight: 700, fontSize: '13.5px', cursor: 'pointer', fontFamily: 'inherit',
+            fontWeight: 700, fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit',
             boxShadow: activeTab === 'impersonate' ? '0 2px 8px rgba(15,23,42,0.06)' : 'none',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-            whiteSpace: 'nowrap',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+            whiteSpace: 'nowrap', overflow: 'hidden',
           }}
         >
-          <i className="bi bi-person-bounding-box" style={{ color: activeTab === 'impersonate' ? '#10b981' : '#64748b' }}></i>
-          <span>Customer Impersonate</span>
-          {pagination.total > 0 && (
-            <span style={{
-              background: '#e2e8f0', color: '#334155', fontSize: '11px', fontWeight: 700,
-              padding: '1px 7px', borderRadius: '20px',
-            }}>
-              {pagination.total.toLocaleString()}
-            </span>
-          )}
+          <i className="bi bi-person-bounding-box" style={{ color: activeTab === 'impersonate' ? '#10b981' : '#64748b', flexShrink: 0 }}></i>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Impersonate</span>
         </button>
       </div>
 

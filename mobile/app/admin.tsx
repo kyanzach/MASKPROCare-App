@@ -340,9 +340,9 @@ export default function AdminPanelScreen() {
           <View style={styles.headerBadge}>
             <FontAwesome name="shield" size={16} color="#f59e0b" />
           </View>
-          <View>
-            <Text style={styles.headerTitle}>Admin Panel</Text>
-            <Text style={styles.headerSubtitle}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerTitle} numberOfLines={1}>Admin Panel</Text>
+            <Text style={styles.headerSubtitle} numberOfLines={1}>
               Analytics, Moderation & Impersonate
             </Text>
           </View>
@@ -1128,7 +1128,9 @@ const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
+    flex: 1,
+    marginRight: 8,
   },
   headerBadge: {
     width: 38,
