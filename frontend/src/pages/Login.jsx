@@ -351,8 +351,17 @@ export default function Login() {
         <div className="login-help-section">
           <p>
             Need help? Contact our support team at{' '}
-            <a href="tel:+63-1800-1-550-0037">
-              <i className="fas fa-phone"></i> +63-1800-1-550-0037
+            <a
+              href="tel:+63180015500037"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <i className="fas fa-phone"></i>
+              <span>+63-1800-1-550-0037</span>
             </a>
           </p>
         </div>

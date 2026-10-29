@@ -1,5 +1,10 @@
 # Changelog
 
+## [v1.17.13] — 2026-10-30
+### Fixed
+- **Fixed Support Phone Icon Alignment & 1-Tap Dialer Shortcut on Login Screen (`mobile/app/login.tsx`, `frontend/src/pages/Login.jsx`)**:
+  - Separated the support toll-free number (`+63-1800-1-550-0037`) into its own single-line `flexDirection: 'row'` clickable button (`supportPhoneBtn`) on iOS & Android (`mobile/app/login.tsx`) and `inline-flex` `white-space: nowrap` link (`tel:+63180015500037`) on Web (`frontend/src/pages/Login.jsx`), keeping the phone icon directly beside the toll-free number instead of stranding at the end of the previous line.
+
 ## [v1.17.12] — 2026-10-30
 ### Added & Fixed
 - **Added Izumi AI Login Helper Modal & Trigger Buttons to Native iOS & Android Login Screen (`mobile/app/login.tsx`, `mobile/components/ui/AiLoginModal.tsx`, `mobile/app/admin.tsx`)**:

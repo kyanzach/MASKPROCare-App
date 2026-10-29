@@ -453,18 +453,21 @@ export default function LoginScreen() {
         </View>
 
         {/* Support Help Footer */}
-        <TouchableOpacity
-          style={styles.supportHelp}
-          onPress={() => Linking.openURL('tel:+63180015500037')}
-          activeOpacity={0.8}
-        >
+        <View style={styles.supportHelp}>
           <Text style={styles.supportText}>
-            Need help? Contact our support team at{' '}
-            <Text style={styles.supportPhone}>
-              <FontAwesome name="phone" size={12} color="#93c5fd" /> +63-1800-1-550-0037
-            </Text>
+            Need help? Contact our support team at
           </Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.supportPhoneBtn}
+            onPress={() => Linking.openURL('tel:+63180015500037')}
+            activeOpacity={0.75}
+          >
+            <FontAwesome name="phone" size={13} color="#93c5fd" />
+            <Text numberOfLines={1} style={styles.supportPhone}>
+              +63-1800-1-550-0037
+            </Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
 
       {/* Izumi AI Identity Verification Helper Modal */}
@@ -734,14 +737,25 @@ const styles = StyleSheet.create({
     marginTop: 24,
     alignItems: 'center',
     paddingHorizontal: 16,
+    gap: 4,
   },
   supportText: {
     color: '#cbd5e1',
     fontSize: 13,
     textAlign: 'center',
   },
+  supportPhoneBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+  },
   supportPhone: {
     color: '#93c5fd',
+    fontSize: 13.5,
     fontWeight: '700',
   },
 });
