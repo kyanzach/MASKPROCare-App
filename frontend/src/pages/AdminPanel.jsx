@@ -316,7 +316,7 @@ export default function AdminPanel() {
   const activeUsers = dashData?.active_users || [];
 
   return (
-    <div style={{ maxWidth: '1180px', margin: '0 auto' }}>
+    <div style={{ maxWidth: '1580px', width: '100%', margin: '0 auto' }}>
       {/* Impersonation Confirmation Modal */}
       {confirmModal && (
         <div style={{
@@ -1017,14 +1017,14 @@ export default function AdminPanel() {
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead>
                         <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                          <th style={{ padding: '11px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Target Account & Vehicle</th>
-                          <th style={{ padding: '11px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Exact Accessed URL & Server Log</th>
-                          <th style={{ padding: '11px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Security Event</th>
-                          <th style={{ padding: '11px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Device, Browser, OS & Fingerprint</th>
-                          <th style={{ padding: '11px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>IP Address & Geo / ISP</th>
-                          <th style={{ padding: '11px 14px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Attempts</th>
-                          <th style={{ padding: '11px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>When</th>
-                          <th style={{ padding: '11px 16px', textAlign: 'right', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Security Actions</th>
+                          <th style={{ padding: '11px 12px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Target Account & Vehicle</th>
+                          <th style={{ padding: '11px 10px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Exact Accessed URL & Server Log</th>
+                          <th style={{ padding: '11px 10px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Security Event</th>
+                          <th style={{ padding: '11px 10px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Device, Browser, OS & Fingerprint</th>
+                          <th style={{ padding: '11px 10px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>IP Address & Geo / ISP</th>
+                          <th style={{ padding: '11px 10px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Attempts</th>
+                          <th style={{ padding: '11px 10px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>When</th>
+                          <th style={{ padding: '11px 12px', textAlign: 'right', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Security Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1069,7 +1069,7 @@ export default function AdminPanel() {
                               }}
                             >
                               {/* 1. Target Account & Vehicle */}
-                              <td style={{ padding: '14px 16px', minWidth: '175px' }}>
+                              <td style={{ padding: '13px 12px', minWidth: '150px' }}>
                                 <div style={{ fontWeight: 800, fontSize: '13.5px', color: '#0f172a' }}>
                                   {log.customer_name || 'Unknown / Guessed Link'}
                                 </div>
@@ -1095,7 +1095,7 @@ export default function AdminPanel() {
                               </td>
 
                               {/* 2. Exact Accessed URL & Server Log */}
-                              <td style={{ padding: '14px 14px', minWidth: '250px', maxWidth: '300px' }}>
+                              <td style={{ padding: '13px 10px', minWidth: '190px', maxWidth: '250px' }}>
                                 <div style={{
                                   display: 'flex', alignItems: 'center', gap: '6px',
                                   background: '#f8fafc', border: '1px solid #e2e8f0',
@@ -1150,7 +1150,7 @@ export default function AdminPanel() {
                               </td>
 
                               {/* 3. Security Event */}
-                              <td style={{ padding: '14px 14px', minWidth: '155px' }}>
+                              <td style={{ padding: '13px 10px', minWidth: '140px' }}>
                                 <span style={{
                                   display: 'inline-flex', alignItems: 'center', gap: '5px',
                                   padding: '4px 10px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 700,
@@ -1177,7 +1177,7 @@ export default function AdminPanel() {
                               </td>
 
                               {/* 4. Device, Browser, OS & Fingerprint */}
-                              <td style={{ padding: '14px 14px', minWidth: '250px', maxWidth: '310px' }}>
+                              <td style={{ padding: '13px 10px', minWidth: '205px', maxWidth: '265px' }}>
                                 <div style={{ fontSize: '12.5px', fontWeight: 800, color: isIntrusion ? '#dc2626' : '#0f172a' }}>
                                   <i className={`bi ${/iPhone|Android|Mobile/i.test(log.attempted_platform || '') ? 'bi-phone-fill' : 'bi-laptop'}`} style={{ marginRight: '5px' }}></i>
                                   Attempted: {log.attempted_platform || 'Unknown Device'}
@@ -1225,7 +1225,7 @@ export default function AdminPanel() {
                               </td>
 
                               {/* 5. IP Address & Geo / ISP */}
-                              <td style={{ padding: '14px 14px', minWidth: '185px' }}>
+                              <td style={{ padding: '13px 10px', minWidth: '150px' }}>
                                 <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', fontFamily: 'monospace' }}>
                                   {log.ip_address}
                                 </div>
@@ -1241,7 +1241,7 @@ export default function AdminPanel() {
                               </td>
 
                               {/* 6. Attempts & Brute-Force Thresholds */}
-                              <td style={{ padding: '14px 14px', textAlign: 'center', minWidth: '130px' }}>
+                              <td style={{ padding: '13px 10px', textAlign: 'center', minWidth: '115px' }}>
                                 {isIntrusion ? (
                                   <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '5px', fontSize: '11.5px', width: '100%' }}>
                                     <div style={{
@@ -1297,7 +1297,7 @@ export default function AdminPanel() {
                               </td>
 
                               {/* 7. When */}
-                              <td style={{ padding: '14px 14px', fontSize: '12px', color: '#475569', whiteSpace: 'nowrap' }}>
+                              <td style={{ padding: '13px 10px', fontSize: '12px', color: '#475569', whiteSpace: 'nowrap' }}>
                                 <div style={{ fontWeight: 800, color: '#0f172a' }}>{formatTimeAgo(log.created_at)}</div>
                                 <div style={{ fontSize: '11px', color: '#475569', marginTop: '2px' }}>
                                   {log.created_at ? new Date(log.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
@@ -1308,7 +1308,7 @@ export default function AdminPanel() {
                               </td>
 
                               {/* 8. Security Actions */}
-                              <td style={{ padding: '14px 16px', textAlign: 'right', minWidth: '150px' }}>
+                              <td style={{ padding: '13px 12px', textAlign: 'right', minWidth: '135px' }}>
                                 <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
                                   {isIntrusion && log.device_fingerprint && (
                                     <button

@@ -1,5 +1,10 @@
 # Changelog
 
+## [v1.17.5] — 2026-10-29
+### Changed
+- **Widened Admin Control Center Wrapper & Tuned Magic Link Security Table Column Widths (`frontend/src/pages/AdminPanel.jsx`)**:
+  - Increased the outer container width in `AdminPanel.jsx` from `maxWidth: '1180px'` to `maxWidth: '1580px'` (`width: '100%'`) and refined the 8 column `minWidth`s and cell paddings in the **Magic Link Security & Intrusion Audit Log** table so all 8 columns fit side-by-side without horizontal scrolling on desktop screens.
+
 ## [v1.17.4] — 2026-10-29
 ### Added & Changed
 - **Reordered Admin Dashboard Bottom Widgets, Added Smart Lazy-Prefetch Pagination (10/page & 5/page), and Added Dedicated Device/IP Blocked Security Gate UI (`server/routes/admin.js`, `server/routes/auth.js`, `frontend/src/pages/AdminPanel.jsx`, `frontend/src/pages/MagicLinkGate.jsx`, `mobile/app/admin.tsx`)**:
