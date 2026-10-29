@@ -57,6 +57,7 @@ export default function CommunityScreen() {
   // Form states (Create post) — MASKPRO S.O.S. is first & default open
   const [isPosting, setIsPosting] = useState(false);
   const [title, setTitle] = useState('');
+  const [location, setLocation] = useState('');
   const [body, setBody] = useState('');
   const [postType, setPostType] = useState<'sos' | 'discussion'>('sos');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -123,10 +124,12 @@ export default function CommunityScreen() {
         type: postType,
         title: title.trim(),
         body: body.trim(),
+        location: postType === 'sos' && location.trim() ? location.trim() : null,
       });
 
       if (res.data?.success) {
         setTitle('');
+        setLocation('');
         setBody('');
         setIsPosting(false);
         fetchPosts();
@@ -277,6 +280,14 @@ export default function CommunityScreen() {
           </View>
 
           <Text style={styles.postCardTitle}>{post.title}</Text>
+          {post.location ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, backgroundColor: 'transparent' }}>
+              <FontAwesome name="map-marker" size={13} color="#dc2626" style={{ marginRight: 5 }} />
+              <Text style={{ fontSize: 12.5, fontWeight: '600', color: '#dc2626' }} numberOfLines={1}>
+                {post.location}
+              </Text>
+            </View>
+          ) : null}
           <Text style={styles.postBody} numberOfLines={4}>
             {post.body}
           </Text>
@@ -455,6 +466,19 @@ export default function CommunityScreen() {
                   placeholderTextColor="#9ca3af"
                 />
 
+                {postType === 'sos' && (
+                  <>
+                    <Text style={styles.label}>Current Location (Optional)</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="E.g. SM Lanang Premier parking, Davao City"
+                      value={location}
+                      onChangeText={setLocation}
+                      placeholderTextColor="#9ca3af"
+                    />
+                  </>
+                )}
+
                 <Text style={styles.label}>Details</Text>
                 <TextInput
                   style={[styles.input, styles.textArea]}
@@ -487,7 +511,9 @@ export default function CommunityScreen() {
                     {isSubmitting ? (
                       <ActivityIndicator size="small" color="#ffffff" />
                     ) : (
-                      <Text style={styles.submitButtonText}>Publish</Text>
+                      <Text numberOfLines={1} adjustsFontSizeToFit style={styles.submitButtonText}>
+                        {postType === 'sos' ? 'Broadcast S.O.S.' : 'Publish'}
+                      </Text>
                     )}
                   </TouchableOpacity>
                 </View>
@@ -556,6 +582,14 @@ export default function CommunityScreen() {
                   </View>
 
                   <Text style={styles.detailTitle}>{selectedPost.title}</Text>
+                  {selectedPost.location ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, backgroundColor: 'transparent' }}>
+                      <FontAwesome name="map-marker" size={14} color="#dc2626" style={{ marginRight: 6 }} />
+                      <Text style={{ fontSize: 13, fontWeight: '600', color: '#dc2626' }}>
+                        {selectedPost.location}
+                      </Text>
+                    </View>
+                  ) : null}
                   <Text style={styles.detailBody}>{selectedPost.body}</Text>
 
                   {/* Resolve Button for SOS Owner */}

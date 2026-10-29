@@ -1,5 +1,10 @@
 # Changelog
 
+## [v1.17.2] — 2026-10-29
+### Added
+- **Added `Current Location (Optional)` Field to iOS & Android Community S.O.S. Post Form (`mobile/app/(tabs)/community.tsx`)**:
+  - Added the `Current Location (Optional)` text input (`E.g. SM Lanang Premier parking, Davao City`) and `"Broadcast S.O.S."` button label to the native iOS and Android Create Post modal when `MASKPRO S.O.S.` is selected, matching the Web App, and rendered the location badge on S.O.S. post cards and the detail modal.
+
 ## [v1.17.1] — 2026-10-29
 ### Changed
 - **Repositioned MaskPro Icon Logo Below CTA Button on Magic Link Gate (`frontend/src/pages/MagicLinkGate.jsx`)**:
