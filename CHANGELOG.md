@@ -1,5 +1,13 @@
 # Changelog
 
+## [v1.17.12] — 2026-10-30
+### Added & Fixed
+- **Added Izumi AI Login Helper Modal & Trigger Buttons to Native iOS & Android Login Screen (`mobile/app/login.tsx`, `mobile/components/ui/AiLoginModal.tsx`, `mobile/app/admin.tsx`)**:
+  - Created native `mobile/components/ui/AiLoginModal.tsx` for iOS & Android with full conversational identity verification (`/auth/ai-login/session` and `/auth/ai-login/message`), live typing state, score badge, working **Try Again** reset, and keyboard-avoiding layout.
+  - Added **"SMS Delayed or Unavailable? Verify with AI Helper"** on Step 1 (`mobile`) and **"SMS Delayed? Login with AI Assistant"** on Step 2 (`otp`) in `mobile/app/login.tsx`.
+  - Replaced legacy purple/indigo hex codes (`#4f46e5`, `#6366f1`, `#4338ca`) in `mobile/app/login.tsx` with MaskPro royal/sky blue (`#2563eb`, `#0284c7`, `#1d4ed8`).
+  - Replaced `Ionicons` with `FontAwesome` in `mobile/app/admin.tsx` search input so `npx tsc --noEmit` compiles with zero errors.
+
 ## [v1.17.11] — 2026-10-29
 ### Added
 - **Multi-Field Search & Sort Bar in Magic Link Security & Intrusion Audit Log Across Web, iOS & Android (`server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`, `mobile/app/admin.tsx`)**:

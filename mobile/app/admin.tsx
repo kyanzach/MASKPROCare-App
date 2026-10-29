@@ -696,7 +696,7 @@ export default function AdminPanelScreen() {
               backgroundColor: '#0f172a', borderWidth: 1, borderColor: '#334155',
               borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 8,
             }}>
-              <Ionicons name="search-outline" size={14} color="#94a3b8" />
+              <FontAwesome name="search" size={13} color="#94a3b8" />
               <TextInput
                 value={secSearch}
                 onChangeText={handleSecSearchChange}
@@ -706,7 +706,7 @@ export default function AdminPanelScreen() {
               />
               {secSearch.length > 0 && (
                 <TouchableOpacity onPress={() => handleSecSearchChange('')}>
-                  <Ionicons name="close-circle" size={16} color="#94a3b8" />
+                  <FontAwesome name="times-circle" size={16} color="#94a3b8" />
                 </TouchableOpacity>
               )}
             </View>

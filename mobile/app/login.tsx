@@ -14,12 +14,14 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import * as WebBrowser from 'expo-web-browser';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import client from '@/api/client';
 import AlertPromptModal, { AlertType } from '@/components/ui/AlertPromptModal';
 import AlertBanner from '@/components/ui/AlertBanner';
+import AiLoginModal from '@/components/ui/AiLoginModal';
 
 const RESEND_COOLDOWN_SECONDS = 30;
 
@@ -34,6 +36,7 @@ export default function LoginScreen() {
   const [success, setSuccess] = useState('');
   const [devOtp, setDevOtp] = useState('');
   const [resendTimer, setResendTimer] = useState(0);
+  const [showAiModal, setShowAiModal] = useState(false);
 
   // Modal Alert Prompt (Modern Mobile UX)
   const [alertModal, setAlertModal] = useState<{
@@ -219,7 +222,7 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <LinearGradient
-        colors={['#1e1b4b', '#312e81', '#1e3a5f', '#0f172a']}
+        colors={['#0a1628', '#1e3a8a', '#1e3a5f', '#0f172a']}
         locations={[0, 0.4, 0.7, 1]}
         style={styles.background}
       />
@@ -231,7 +234,7 @@ export default function LoginScreen() {
         <View style={styles.card}>
           {/* Top Gradient Accent Bar */}
           <LinearGradient
-            colors={['#4f46e5', '#06b6d4']}
+            colors={['#2563eb', '#06b6d4']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.cardTopAccent}
@@ -262,7 +265,7 @@ export default function LoginScreen() {
           ) : null}
           {devOtp && step === 'otp' ? (
             <View style={styles.devOtpBanner}>
-              <FontAwesome name="code" size={14} color="#6366f1" style={{ marginRight: 6 }} />
+              <FontAwesome name="code" size={14} color="#2563eb" style={{ marginRight: 6 }} />
               <Text style={styles.devOtpText}>
                 Dev OTP: <Text style={{ fontWeight: '800' }}>{devOtp}</Text>
               </Text>
@@ -297,8 +300,21 @@ export default function LoginScreen() {
                 {loading ? (
                   <ActivityIndicator color="#ffffff" size="small" />
                 ) : (
-                  <Text style={styles.primaryButtonText}>Continue with Mobile</Text>
+                  <Text numberOfLines={1} adjustsFontSizeToFit style={styles.primaryButtonText}>
+                    Continue with Mobile
+                  </Text>
                 )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.aiHelperLinkBtn}
+                onPress={() => setShowAiModal(true)}
+                activeOpacity={0.75}
+              >
+                <Ionicons name="hardware-chip-outline" size={15} color="#0284c7" />
+                <Text numberOfLines={1} adjustsFontSizeToFit style={styles.aiHelperLinkText}>
+                  SMS Delayed or Unavailable? Verify with AI Helper
+                </Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -341,8 +357,21 @@ export default function LoginScreen() {
                 {loading ? (
                   <ActivityIndicator color="#ffffff" size="small" />
                 ) : (
-                  <Text style={styles.primaryButtonText}>Verify & Continue</Text>
+                  <Text numberOfLines={1} adjustsFontSizeToFit style={styles.primaryButtonText}>
+                    Verify & Continue
+                  </Text>
                 )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.aiHelperBoxBtn}
+                onPress={() => setShowAiModal(true)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="hardware-chip-outline" size={15} color="#0284c7" />
+                <Text numberOfLines={1} adjustsFontSizeToFit style={styles.aiHelperBoxBtnText}>
+                  SMS Delayed? Login with AI Assistant
+                </Text>
               </TouchableOpacity>
 
               <View style={styles.secondaryButtonRow}>
@@ -414,11 +443,11 @@ export default function LoginScreen() {
               onPress={handleSecurityBadgeTap}
               activeOpacity={0.7}
             >
-              <FontAwesome name="shield" size={13} color="#6366f1" style={{ marginRight: 6 }} />
+              <FontAwesome name="shield" size={13} color="#2563eb" style={{ marginRight: 6 }} />
               <Text style={styles.securityText}>
                 {step === 'mobile' ? 'Secured by MASKPRO' : 'Secured with 256-bit SSL encryption'}
               </Text>
-              <FontAwesome name="lock" size={12} color="#6366f1" style={{ marginLeft: 6 }} />
+              <FontAwesome name="lock" size={12} color="#2563eb" style={{ marginLeft: 6 }} />
             </TouchableOpacity>
           </View>
         </View>
@@ -437,6 +466,13 @@ export default function LoginScreen() {
           </Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Izumi AI Identity Verification Helper Modal */}
+      <AiLoginModal
+        visible={showAiModal}
+        onClose={() => setShowAiModal(false)}
+        initialMobile={mobile}
+      />
 
       {/* Modern Modal Alert Prompt */}
       <AlertPromptModal
@@ -500,7 +536,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#1e1b4b',
+    color: '#0f172a',
     textAlign: 'center',
     marginBottom: 8,
   },
@@ -515,8 +551,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#eef2ff',
-    borderColor: '#c7d2fe',
+    backgroundColor: '#eff6ff',
+    borderColor: '#bfdbfe',
     borderWidth: 1,
     borderRadius: 10,
     paddingVertical: 8,
@@ -524,7 +560,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   devOtpText: {
-    color: '#4338ca',
+    color: '#1d4ed8',
     fontSize: 13,
   },
   formSection: {
@@ -534,7 +570,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#4338ca',
+    color: '#1d4ed8',
     marginBottom: 10,
   },
   mobileInput: {
@@ -573,24 +609,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
     fontSize: 22,
     fontWeight: '800',
-    color: '#1e1b4b',
+    color: '#0f172a',
     textAlign: 'center',
   },
   otpBoxFilled: {
-    borderColor: '#4f46e5',
+    borderColor: '#2563eb',
     backgroundColor: '#ffffff',
   },
   primaryButton: {
-    backgroundColor: '#4f46e5',
+    backgroundColor: '#2563eb',
     height: 52,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#4f46e5',
+    shadowColor: '#2563eb',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
+    shadowOpacity: 0.3,
     shadowRadius: 10,
     elevation: 4,
+    paddingHorizontal: 14,
   },
   primaryButtonText: {
     color: '#ffffff',
@@ -599,6 +636,39 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.55,
+  },
+  aiHelperLinkBtn: {
+    marginTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+  },
+  aiHelperLinkText: {
+    color: '#0284c7',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  aiHelperBoxBtn: {
+    marginTop: 12,
+    width: '100%',
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+    backgroundColor: '#f0f9ff',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+  },
+  aiHelperBoxBtnText: {
+    color: '#0284c7',
+    fontSize: 13,
+    fontWeight: '700',
   },
   secondaryButtonRow: {
     flexDirection: 'row',
@@ -641,7 +711,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   termsLink: {
-    color: '#6366f1',
+    color: '#2563eb',
     fontWeight: '600',
   },
   securityBadge: {
