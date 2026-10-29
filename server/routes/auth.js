@@ -234,6 +234,56 @@ function isLinkPreviewBot(ua = '') {
   return /WhatsApp|Facebot|facebookexternalhit|Twitterbot|TelegramBot|Slackbot|Discordbot|Viber|SkypeUriPreview|Google-Safety|Google-PageRenderer|Applebot|bot|crawler|spider|Preview/i.test(String(ua || ''));
 }
 
+function parseDetailedUserAgent(ua = '') {
+  const u = String(ua || '');
+  let browserDetail = 'Unknown Browser';
+  if (/facebookexternalhit|Facebot|Twitterbot/i.test(u)) {
+    browserDetail = 'Facebot / Twitterbot Link Preview Crawler';
+  } else if (/WhatsApp/i.test(u)) {
+    browserDetail = 'WhatsApp Link Preview Crawler';
+  } else if (/CriOS\/([\d.]+)/i.test(u)) {
+    const ver = u.match(/CriOS\/([\d.]+)/i)?.[1] || '';
+    browserDetail = `Chrome iOS (CriOS ${ver})`;
+  } else if (/SamsungBrowser\/([\d.]+)/i.test(u)) {
+    const ver = u.match(/SamsungBrowser\/([\d.]+)/i)?.[1] || '';
+    browserDetail = `Samsung Internet ${ver}`;
+  } else if (/Edg\/([\d.]+)/i.test(u)) {
+    const ver = u.match(/Edg\/([\d.]+)/i)?.[1] || '';
+    browserDetail = `Microsoft Edge ${ver}`;
+  } else if (/Chrome\/([\d.]+)/i.test(u)) {
+    const ver = u.match(/Chrome\/([\d.]+)/i)?.[1] || '';
+    const isMob = /Mobile/i.test(u);
+    browserDetail = `Google Chrome ${ isMob ? 'Mobile ' : '' }${ver}`;
+  } else if (/Version\/([\d.]+).*Safari/i.test(u)) {
+    const ver = u.match(/Version\/([\d.]+)/i)?.[1] || '';
+    browserDetail = `Apple Safari ${ver}`;
+  } else if (/FBAN|FBAV/i.test(u)) {
+    browserDetail = 'Facebook / Messenger In-App Browser';
+  }
+
+  let osDetail = 'Unknown OS';
+  if (/iPhone OS ([\d_]+)/i.test(u)) {
+    const ver = (u.match(/iPhone OS ([\d_]+)/i)?.[1] || '').replace(/_/g, '.');
+    const build = u.match(/Mobile\/([A-Za-z0-9]+)/i)?.[1] || '';
+    osDetail = `iOS ${ver} (iPhone${build ? ` • Build ${build}` : ''})`;
+  } else if (/iPad.*OS ([\d_]+)/i.test(u)) {
+    const ver = (u.match(/OS ([\d_]+)/i)?.[1] || '').replace(/_/g, '.');
+    osDetail = `iPadOS ${ver} (iPad)`;
+  } else if (/Android ([\d.]+)/i.test(u)) {
+    const ver = u.match(/Android ([\d.]+)/i)?.[1] || '';
+    const model = u.match(/Android [\d.]+;\s*([^)]+)\)/i)?.[1]?.trim() || '';
+    osDetail = `Android ${ver}${model ? ` (${model})` : ''}`;
+  } else if (/Mac OS X ([\d_]+)/i.test(u)) {
+    const ver = (u.match(/Mac OS X ([\d_]+)/i)?.[1] || '').replace(/_/g, '.');
+    osDetail = `macOS ${ver} (Macintosh)`;
+  } else if (/Windows NT ([\d.]+)/i.test(u)) {
+    const ver = u.match(/Windows NT ([\d.]+)/i)?.[1] || '';
+    osDetail = `Windows NT ${ver} (PC)`;
+  }
+
+  return { browserDetail, osDetail };
+}
+
 // ─── Helper: Fast cached Geo-IP + ISP resolver ────────────────────
 const geoCache = new Map();
 async function resolveGeoLocation(ip = '') {
@@ -266,20 +316,25 @@ async function logMagicSecurityEvent({
   magicLinkId = null,
   customerId = null,
   slug = '',
+  requestUrl = '',
   eventType = 'device_locked_elsewhere',
+  httpStatus = 403,
+  serverCode = 'DEVICE_LOCKED_ELSEWHERE',
   attemptedPlatform = '',
   boundPlatform = null,
   deviceTokenHash = null,
   deviceFingerprint = '',
   ip = '',
   ua = '',
+  requestHeaders = '',
   isFailure = true,
 }) {
   try {
     const location = await resolveGeoLocation(ip);
+    const { browserDetail, osDetail } = parseDetailedUserAgent(ua);
     let deviceAttempts = 0;
     let ipAttempts = 0;
-    let actionTaken = isFailure ? 'blocked_403' : 'allowed';
+    let actionTaken = isFailure ? 'blocked_403' : (eventType === 'preview_bot_ignored' ? 'bot_ignored' : 'allowed');
 
     if (isFailure) {
       const [[devCnt]] = await pool.query(
@@ -344,25 +399,31 @@ async function logMagicSecurityEvent({
 
     await pool.query(
       `INSERT INTO care_magic_link_security_logs
-         (magic_link_id, customer_id, slug, event_type, attempted_platform, bound_platform, device_token_hash, device_fingerprint, ip_address, location, user_agent, device_attempt_count, ip_attempt_count, action_taken, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+         (magic_link_id, customer_id, slug, request_url, event_type, http_status, server_code, attempted_platform, bound_platform, browser_detail, os_detail, device_token_hash, device_fingerprint, ip_address, location, user_agent, request_headers, device_attempt_count, ip_attempt_count, action_taken, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         magicLinkId,
         customerId,
         String(slug || '').slice(0, 120),
+        String(requestUrl || '').slice(0, 490),
         eventType,
+        Number(httpStatus || 403),
+        String(serverCode || '').slice(0, 60),
         String(attemptedPlatform || '').slice(0, 100),
         boundPlatform ? String(boundPlatform).slice(0, 100) : null,
+        String(browserDetail || '').slice(0, 155),
+        String(osDetail || '').slice(0, 155),
         deviceTokenHash,
         deviceFingerprint,
         String(ip || '').slice(0, 60),
         String(location || '').slice(0, 155),
         String(ua || '').slice(0, 490),
+        String(requestHeaders || '').slice(0, 490),
         deviceAttempts,
         ipAttempts,
         actionTaken,
       ]
-    ).catch(() => {});
+    ).catch((e) => console.error('[MagicSecLog] insert error:', e.message));
 
     return { deviceAttempts, ipAttempts, actionTaken };
   } catch {
@@ -373,7 +434,7 @@ async function logMagicSecurityEvent({
 // ─── POST /api/auth/magic-verify (TOFU Device-Bound Smart Link) ───
 router.post('/magic-verify', async (req, res) => {
   try {
-    const { slug, k, device_token, platform_label } = req.body || {};
+    const { slug, k, device_token, platform_label, request_url, client_meta } = req.body || {};
     const ua = req.headers['user-agent'] || '';
 
     if (!slug || !String(slug).trim()) {
@@ -384,8 +445,34 @@ router.post('/magic-verify', async (req, res) => {
       });
     }
 
+    const cleanSlug = String(slug).trim().toLowerCase();
+    const clientIp = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim();
+    const resolvedUrl = String(
+      request_url ||
+      req.headers.referer ||
+      `https://care.maskpro.ph/m/${cleanSlug}${k ? `?k=${encodeURIComponent(String(k).trim())}` : ''}`
+    ).trim();
+    const buildHeadersSummary = (statusLabel) => [
+      `POST /api/auth/magic-verify HTTP/1.1 • ${statusLabel}`,
+      client_meta ? String(client_meta) : '',
+      !client_meta && req.headers['accept-language'] ? `Lang: ${String(req.headers['accept-language']).split(',')[0]}` : '',
+    ].filter(Boolean).join(' • ');
+
     // Never allow link preview crawlers to consume the first-open device lock
     if (isLinkPreviewBot(ua)) {
+      await logMagicSecurityEvent({
+        slug: cleanSlug,
+        requestUrl: resolvedUrl,
+        eventType: 'preview_bot_ignored',
+        httpStatus: 202,
+        serverCode: 'PREVIEW_BOT_IGNORED',
+        attemptedPlatform: 'Link Preview Crawler',
+        deviceFingerprint: 'bot_preview_crawler',
+        ip: clientIp,
+        ua,
+        requestHeaders: buildHeadersSummary('202 Bot Ignored • Lock Preserved'),
+        isFailure: false,
+      });
       return res.status(202).json({
         success: false,
         code: 'PREVIEW_BOT_IGNORED',
@@ -393,7 +480,6 @@ router.post('/magic-verify', async (req, res) => {
       });
     }
 
-    const cleanSlug = String(slug).trim().toLowerCase();
     const cookies = parseCookies(req.headers.cookie);
     const cookieDeviceToken = cookies.mp_care_device_token || '';
     const bodyDeviceToken = device_token && String(device_token).trim().length >= 16 ? String(device_token).trim() : '';
@@ -404,7 +490,6 @@ router.post('/magic-verify', async (req, res) => {
     );
     const primaryDeviceHash = candidateHashes[0] || null;
 
-    const clientIp = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim();
     const resolvedPlatform = detectPlatformLabel(ua, platform_label);
     const deviceFingerprint = primaryDeviceHash || crypto.createHash('sha256').update(`${clientIp}|${resolvedPlatform}`).digest('hex');
 
@@ -416,12 +501,16 @@ router.post('/magic-verify', async (req, res) => {
     if (ipBlockRows.length > 0) {
       await logMagicSecurityEvent({
         slug: cleanSlug,
+        requestUrl: resolvedUrl,
         eventType: 'ip_blocked',
+        httpStatus: 403,
+        serverCode: 'IP_BLOCKED',
         attemptedPlatform: resolvedPlatform,
         deviceTokenHash: primaryDeviceHash,
         deviceFingerprint,
         ip: clientIp,
         ua,
+        requestHeaders: buildHeadersSummary('403 Forbidden (IP Blocked)'),
         isFailure: true,
       });
       return res.status(403).json({
@@ -443,12 +532,16 @@ router.post('/magic-verify', async (req, res) => {
     if (devBlockRows.length > 0) {
       await logMagicSecurityEvent({
         slug: cleanSlug,
+        requestUrl: resolvedUrl,
         eventType: 'device_blocked',
+        httpStatus: 403,
+        serverCode: 'DEVICE_BLOCKED',
         attemptedPlatform: resolvedPlatform,
         deviceTokenHash: primaryDeviceHash,
         deviceFingerprint,
         ip: clientIp,
         ua,
+        requestHeaders: buildHeadersSummary('403 Forbidden (Device Blocked)'),
         isFailure: true,
       });
       return res.status(403).json({
@@ -472,12 +565,16 @@ router.post('/magic-verify', async (req, res) => {
     if (links.length === 0) {
       await logMagicSecurityEvent({
         slug: cleanSlug,
+        requestUrl: resolvedUrl,
         eventType: 'invalid_slug',
+        httpStatus: 404,
+        serverCode: 'LINK_NOT_FOUND',
         attemptedPlatform: resolvedPlatform,
         deviceTokenHash: primaryDeviceHash,
         deviceFingerprint,
         ip: clientIp,
         ua,
+        requestHeaders: buildHeadersSummary('404 Not Found (Unknown Slug)'),
         isFailure: true,
       });
       return res.status(404).json({
@@ -494,13 +591,17 @@ router.post('/magic-verify', async (req, res) => {
         magicLinkId: link.id,
         customerId: link.customer_id,
         slug: link.slug,
+        requestUrl: resolvedUrl,
         eventType: 'revoked_link',
+        httpStatus: 403,
+        serverCode: 'LINK_REVOKED',
         attemptedPlatform: resolvedPlatform,
         boundPlatform: link.bound_platform,
         deviceTokenHash: primaryDeviceHash,
         deviceFingerprint,
         ip: clientIp,
         ua,
+        requestHeaders: buildHeadersSummary('403 Forbidden (Revoked Link)'),
         isFailure: true,
       });
       return res.status(403).json({
@@ -519,13 +620,17 @@ router.post('/magic-verify', async (req, res) => {
           magicLinkId: link.id,
           customerId: link.customer_id,
           slug: link.slug,
+          requestUrl: resolvedUrl,
           eventType: 'invalid_token',
+          httpStatus: 403,
+          serverCode: 'INVALID_TOKEN',
           attemptedPlatform: resolvedPlatform,
           boundPlatform: link.bound_platform,
           deviceTokenHash: primaryDeviceHash,
           deviceFingerprint,
           ip: clientIp,
           ua,
+          requestHeaders: buildHeadersSummary('403 Forbidden (Tampered Security Key)'),
           isFailure: true,
         });
         return res.status(403).json({
@@ -563,13 +668,17 @@ router.post('/magic-verify', async (req, res) => {
         magicLinkId: link.id,
         customerId: link.customer_id,
         slug: link.slug,
+        requestUrl: resolvedUrl,
         eventType: 'first_bind',
+        httpStatus: 200,
+        serverCode: 'TOFU_FIRST_BIND',
         attemptedPlatform: resolvedPlatform,
         boundPlatform: resolvedPlatform,
         deviceTokenHash: newDeviceHash,
         deviceFingerprint: newDeviceHash,
         ip: clientIp,
         ua,
+        requestHeaders: buildHeadersSummary('200 OK (First Open • Device Locked)'),
         isFailure: false,
       });
     } else if (candidateHashes.includes(link.bound_device_token_hash)) {
@@ -582,6 +691,25 @@ router.post('/magic-verify', async (req, res) => {
          WHERE id = ?`,
         [isDuplicateBurst ? 0 : 1, link.id]
       );
+      if (!isDuplicateBurst) {
+        await logMagicSecurityEvent({
+          magicLinkId: link.id,
+          customerId: link.customer_id,
+          slug: link.slug,
+          requestUrl: resolvedUrl,
+          eventType: 'authorized_access',
+          httpStatus: 200,
+          serverCode: 'AUTHORIZED_SAME_DEVICE',
+          attemptedPlatform: resolvedPlatform,
+          boundPlatform: link.bound_platform || resolvedPlatform,
+          deviceTokenHash: link.bound_device_token_hash,
+          deviceFingerprint: link.bound_device_token_hash,
+          ip: clientIp,
+          ua,
+          requestHeaders: buildHeadersSummary('200 OK (Verified Bound Device)'),
+          isFailure: false,
+        });
+      }
     } else {
       // ── CASE 3: OPENED ON ANOTHER DEVICE AFTER ALREADY LOCKED ──
       await pool.query(
@@ -595,13 +723,17 @@ router.post('/magic-verify', async (req, res) => {
         magicLinkId: link.id,
         customerId: link.customer_id,
         slug: link.slug,
+        requestUrl: resolvedUrl,
         eventType: 'device_locked_elsewhere',
+        httpStatus: 403,
+        serverCode: 'DEVICE_LOCKED_ELSEWHERE',
         attemptedPlatform: resolvedPlatform,
         boundPlatform: link.bound_platform,
         deviceTokenHash: primaryDeviceHash,
         deviceFingerprint,
         ip: clientIp,
         ua,
+        requestHeaders: buildHeadersSummary('403 Forbidden (2nd Device Rejected)'),
         isFailure: true,
       });
 

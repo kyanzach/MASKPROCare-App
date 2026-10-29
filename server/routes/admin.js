@@ -348,7 +348,7 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
     // 4. Magic Link Security & Intrusion Audit Logs
     const [[secCounts]] = await pool.query(`
       SELECT
-        (SELECT COUNT(*) FROM care_magic_link_security_logs WHERE event_type != 'first_bind') AS total_intrusion_events,
+        (SELECT COUNT(*) FROM care_magic_link_security_logs WHERE event_type NOT IN ('first_bind', 'authorized_access', 'preview_bot_ignored')) AS total_intrusion_events,
         (SELECT COUNT(*) FROM care_blocked_devices WHERE is_active = 1 AND (blocked_until IS NULL OR blocked_until > NOW())) AS blocked_devices_count,
         (SELECT COUNT(*) FROM care_blocked_ips WHERE blocked_until IS NULL OR blocked_until > NOW()) AS blocked_ips_count
     `).catch(() => [[{ total_intrusion_events: 0, blocked_devices_count: 0, blocked_ips_count: 0 }]]);
@@ -359,14 +359,20 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
         s.magic_link_id,
         s.customer_id,
         s.slug,
+        s.request_url,
         s.event_type,
+        s.http_status,
+        s.server_code,
         s.attempted_platform,
         s.bound_platform,
+        s.browser_detail,
+        s.os_detail,
         s.device_token_hash,
         s.device_fingerprint,
         s.ip_address,
         s.location,
         s.user_agent,
+        s.request_headers,
         s.device_attempt_count,
         s.ip_attempt_count,
         s.action_taken,
@@ -377,6 +383,7 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
         ml.short_url,
         ml.bound_ip,
         ml.bound_at,
+        ml.bound_user_agent,
         ml.access_count,
         ml.blocked_attempts,
         v.make AS vehicle_make,
@@ -385,10 +392,13 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
         (SELECT COUNT(*) FROM care_blocked_devices bd
          WHERE bd.is_active = 1
            AND (bd.blocked_until IS NULL OR bd.blocked_until > NOW())
-           AND (bd.device_fingerprint = s.device_fingerprint OR (s.device_token_hash IS NOT NULL AND bd.device_token_hash = s.device_token_hash))
+           AND (
+             bd.device_fingerprint COLLATE utf8mb4_general_ci = s.device_fingerprint COLLATE utf8mb4_general_ci
+             OR (s.device_token_hash IS NOT NULL AND bd.device_token_hash COLLATE utf8mb4_general_ci = s.device_token_hash COLLATE utf8mb4_general_ci)
+           )
         ) AS is_device_blocked,
         (SELECT COUNT(*) FROM care_blocked_ips bi
-         WHERE bi.ip_address = s.ip_address
+         WHERE bi.ip_address COLLATE utf8mb4_general_ci = s.ip_address COLLATE utf8mb4_general_ci
            AND (bi.blocked_until IS NULL OR bi.blocked_until > NOW())
         ) AS is_ip_blocked
       FROM care_magic_link_security_logs s
@@ -396,8 +406,11 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
       LEFT JOIN care_magic_links ml ON ml.id = s.magic_link_id
       LEFT JOIN vehicles v ON v.id = ml.vehicle_id
       ORDER BY s.created_at DESC, s.id DESC
-      LIMIT 50
-    `).catch(() => [[]]);
+      LIMIT 60
+    `).catch((err) => {
+      console.error('[Admin] magicSecurityLogs query error:', err.message);
+      return [[]];
+    });
 
     // 5. Who Uses the App (Live Active Users & Device Log)
     const [activeUsers] = await pool.query(`

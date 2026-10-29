@@ -1,5 +1,12 @@
 # Changelog
 
+## [v1.17.3] — 2026-10-29
+### Fixed & Improved
+- **Fixed Magic Link Security Audit Log Collation Mismatch & Added Full Server-Log Forensics + Live Monitoring Blinking Red Dot (`server/routes/admin.js`, `server/routes/auth.js`, `frontend/src/pages/AdminPanel.jsx`, `frontend/src/pages/MagicLinkGate.jsx`)**:
+  - Resolved `ERROR 1267: Illegal mix of collations (utf8mb4_unicode_ci and utf8mb4_general_ci)` between `care_magic_link_security_logs` and `care_blocked_ips` that caused the table rows to fail silently while the `Blocked Attempts: 6` counter incremented.
+  - Added forensic columns (`request_url`, `http_status`, `server_code`, `browser_detail`, `os_detail`, `request_headers`) to `care_magic_link_security_logs` and backfilled all Nginx access log events (`16:00:17`, `16:45:33`, `18:57:18` Android opens, `18:59:37` Facebot/Twitterbot preview crawler, `18:59:48` iPhone block, and `21:43:17`–`21:44:12` Mac Chrome blocks).
+  - Enhanced the **Magic Link Security & Intrusion Audit Log** widget with a pulsing **blinking red dot (`LIVE MONITORING`)** indicator, event filter pills (`All Server Events`, `Blocked Intrusions`, `Authorized Opens`, `Preview Bots`), copyable exact accessed URL, HTTP status & server code badges, parsed Browser & OS/Hardware details, SHA-256 device fingerprint, full raw `User-Agent`, Geo-IP + ISP location, visual brute-force progress bars (`Device x/10`, `IP x/100`), and exact down-to-the-second timestamps.
+
 ## [v1.17.2] — 2026-10-29
 ### Added
 - **Added `Current Location (Optional)` Field to iOS & Android Community S.O.S. Post Form (`mobile/app/(tabs)/community.tsx`)**:

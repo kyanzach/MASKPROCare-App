@@ -42,6 +42,8 @@ export default function AdminPanel() {
   const [confirmModal, setConfirmModal] = useState(null);
   const [impersonating, setImpersonating] = useState(false);
   const [secActionLoading, setSecActionLoading] = useState(null);
+  const [secLogFilter, setSecLogFilter] = useState('all');
+  const [lastSyncedAt, setLastSyncedAt] = useState(new Date());
   const modFilterRef = useRef('pending');
 
   useEffect(() => {
@@ -101,6 +103,7 @@ export default function AdminPanel() {
       const res = await api.get('/admin/dashboard');
       if (res.data.success) {
         setDashData(res.data.data);
+        setLastSyncedAt(new Date());
       }
     } catch {
       // silent background handling
@@ -661,6 +664,17 @@ export default function AdminPanel() {
           </div>
 
           {/* ─── Magic Link Security & Intrusion Audit Log ───────────────── */}
+          <style>{`
+            @keyframes mpLiveDotBlink {
+              0%, 100% { opacity: 1; transform: scale(1); }
+              50% { opacity: 0.35; transform: scale(0.88); }
+            }
+            @keyframes mpLiveRingExpand {
+              0% { transform: scale(0.95); opacity: 0.75; }
+              70% { transform: scale(2.15); opacity: 0; }
+              100% { transform: scale(2.15); opacity: 0; }
+            }
+          `}</style>
           <div style={{
             background: 'white', borderRadius: '18px', overflow: 'hidden',
             border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.03)',
@@ -668,17 +682,66 @@ export default function AdminPanel() {
           }}>
             <div style={{
               padding: '18px 22px', borderBottom: '1px solid #e2e8f0',
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '14px',
               background: 'linear-gradient(135deg, #fffbeb 0%, #ffffff 100%)',
             }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <i className="bi bi-shield-exclamation" style={{ color: '#dc2626', fontSize: '18px' }}></i>
-                  Magic Link Security & Intrusion Audit Log
-                </h3>
-                <p style={{ margin: '3px 0 0', fontSize: '12.5px', color: '#64748b' }}>
-                  Tracks 2nd-device link sharing, tampered tokens, IP/Geo-ISP origins, and tiered brute-force lockouts (10th attempt = Device Block • 100th = IP Block)
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <i className="bi bi-shield-exclamation" style={{ color: '#dc2626', fontSize: '18px' }}></i>
+                    Magic Link Security & Intrusion Audit Log
+                  </h3>
+
+                  {/* Live Monitoring Blinking Red Dot Badge */}
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '7px',
+                    background: '#fef2f2', border: '1px solid #fecaca',
+                    color: '#dc2626', fontSize: '11px', fontWeight: 800,
+                    padding: '4px 10px', borderRadius: '20px', letterSpacing: '0.02em',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    <span style={{ position: 'relative', display: 'inline-flex', width: '8px', height: '8px' }}>
+                      <span style={{
+                        position: 'absolute', inset: 0, borderRadius: '50%',
+                        background: '#ef4444', animation: 'mpLiveRingExpand 1.5s cubic-bezier(0, 0, 0.2, 1) infinite',
+                      }} />
+                      <span style={{
+                        position: 'relative', display: 'inline-block', width: '8px', height: '8px',
+                        borderRadius: '50%', background: '#dc2626',
+                        animation: 'mpLiveDotBlink 1.5s ease-in-out infinite',
+                      }} />
+                    </span>
+                    LIVE MONITORING • {lastSyncedAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' })}
+                  </span>
+                </div>
+
+                <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#64748b' }}>
+                  Tracks 2nd-device link sharing, exact accessed URL, browser/OS fingerprint, IP/Geo-ISP, server HTTP logs & tiered lockouts (10th = Device • 100th = IP)
                 </p>
+
+                {/* Filter Pills */}
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '12px' }}>
+                  {[
+                    { key: 'all', label: `All Server Events (${magicSecurityLogs.length})` },
+                    { key: 'blocked', label: `Blocked Intrusions (${magicSecurityLogs.filter(l => l.event_type !== 'first_bind' && l.event_type !== 'authorized_access' && l.event_type !== 'preview_bot_ignored').length})` },
+                    { key: 'authorized', label: `Authorized Opens (${magicSecurityLogs.filter(l => l.event_type === 'first_bind' || l.event_type === 'authorized_access').length})` },
+                    { key: 'bot', label: `Preview Bots (${magicSecurityLogs.filter(l => l.event_type === 'preview_bot_ignored').length})` },
+                  ].map((f) => (
+                    <button
+                      key={f.key}
+                      onClick={() => setSecLogFilter(f.key)}
+                      style={{
+                        padding: '5px 11px', borderRadius: '16px', fontSize: '11.5px', fontWeight: 700,
+                        cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                        border: secLogFilter === f.key ? '1px solid #0f172a' : '1px solid #e2e8f0',
+                        background: secLogFilter === f.key ? '#0f172a' : 'white',
+                        color: secLogFilter === f.key ? 'white' : '#475569',
+                      }}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -703,234 +766,419 @@ export default function AdminPanel() {
               </div>
             </div>
 
-            {magicSecurityLogs.length === 0 ? (
-              <div style={{ padding: '40px 20px', textAlign: 'center', color: '#94a3b8', fontSize: '13.5px' }}>
-                No magic link security events recorded yet.
-              </div>
-            ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                      <th style={{ padding: '11px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Target Account & Vehicle</th>
-                      <th style={{ padding: '11px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Security Event</th>
-                      <th style={{ padding: '11px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Attempted vs Locked Device</th>
-                      <th style={{ padding: '11px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>IP Address & Geo / ISP</th>
-                      <th style={{ padding: '11px 14px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Attempts</th>
-                      <th style={{ padding: '11px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>When</th>
-                      <th style={{ padding: '11px 16px', textAlign: 'right', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Security Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {magicSecurityLogs.map((log) => {
-                      const isIntrusion = log.event_type !== 'first_bind' && log.event_type !== 'authorized_access';
-                      const isDeviceBlocked = Number(log.is_device_blocked) > 0;
-                      const isIpBlocked = Number(log.is_ip_blocked) > 0;
-                      const isLinkRevoked = log.link_status === 'revoked';
-                      const vehicleLabel = [log.vehicle_make, log.vehicle_model].filter(Boolean).join(' ') || 'Vehicle';
+            {(() => {
+              const filteredLogs = magicSecurityLogs.filter((log) => {
+                if (secLogFilter === 'blocked') {
+                  return log.event_type !== 'first_bind' && log.event_type !== 'authorized_access' && log.event_type !== 'preview_bot_ignored';
+                }
+                if (secLogFilter === 'authorized') {
+                  return log.event_type === 'first_bind' || log.event_type === 'authorized_access';
+                }
+                if (secLogFilter === 'bot') {
+                  return log.event_type === 'preview_bot_ignored';
+                }
+                return true;
+              });
 
-                      let eventBadge = { label: 'Initial Device Lock', bg: '#dcfce7', color: '#15803d', border: '#86efac', icon: 'bi-lock-fill' };
-                      if (log.event_type === 'device_locked_elsewhere') {
-                        eventBadge = { label: 'Blocked: 2nd Device', bg: '#fef2f2', color: '#dc2626', border: '#fecaca', icon: 'bi-phone-flip' };
-                      } else if (log.event_type === 'invalid_token') {
-                        eventBadge = { label: 'Blocked: Invalid Key', bg: '#fef2f2', color: '#dc2626', border: '#fecaca', icon: 'bi-key-fill' };
-                      } else if (log.event_type === 'invalid_slug') {
-                        eventBadge = { label: 'Brute-Force Slug (404)', bg: '#fff7ed', color: '#c2410c', border: '#fed7aa', icon: 'bi-bug-fill' };
-                      } else if (log.event_type === 'revoked_link') {
-                        eventBadge = { label: 'Blocked: Link Revoked', bg: '#f1f5f9', color: '#475569', border: '#cbd5e1', icon: 'bi-slash-circle-fill' };
-                      } else if (log.event_type === 'device_blocked' || log.action_taken === 'auto_device_blocked') {
-                        eventBadge = { label: 'Device Blocked (10+)', bg: '#fef2f2', color: '#991b1b', border: '#fca5a5', icon: 'bi-shield-slash-fill' };
-                      } else if (log.event_type === 'ip_blocked' || log.action_taken === 'auto_ip_blocked') {
-                        eventBadge = { label: 'IP Blocked (100+)', bg: '#450a0a', color: '#ffffff', border: '#7f1d1d', icon: 'bi-cone-striped' };
-                      }
+              if (filteredLogs.length === 0) {
+                return (
+                  <div style={{ padding: '40px 20px', textAlign: 'center', color: '#94a3b8', fontSize: '13.5px' }}>
+                    No magic link security events matching this filter.
+                  </div>
+                );
+              }
 
-                      return (
-                        <tr key={log.id} style={{ borderBottom: '1px solid #f1f5f9', background: isIntrusion ? 'rgba(254, 242, 242, 0.35)' : 'white' }}>
-                          <td style={{ padding: '13px 16px' }}>
-                            <div style={{ fontWeight: 700, fontSize: '13.5px', color: '#0f172a' }}>
-                              {log.customer_name || 'Unknown / Guessed Link'}
-                            </div>
-                            <div style={{ fontSize: '12px', color: '#64748b' }}>
-                              {log.customer_mobile ? `${log.customer_mobile} • ${vehicleLabel}` : 'Unmatched target'}
-                            </div>
-                            <div style={{ fontSize: '11px', color: '#2563eb', fontFamily: 'monospace', marginTop: '2px' }}>
-                              /m/{log.slug} {isLinkRevoked && <span style={{ color: '#dc2626', fontWeight: 700 }}>(REVOKED)</span>}
-                            </div>
-                          </td>
+              return (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                        <th style={{ padding: '11px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Target Account & Vehicle</th>
+                        <th style={{ padding: '11px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Exact Accessed URL & Server Log</th>
+                        <th style={{ padding: '11px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Security Event</th>
+                        <th style={{ padding: '11px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Device, Browser, OS & Fingerprint</th>
+                        <th style={{ padding: '11px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>IP Address & Geo / ISP</th>
+                        <th style={{ padding: '11px 14px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Attempts</th>
+                        <th style={{ padding: '11px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>When</th>
+                        <th style={{ padding: '11px 16px', textAlign: 'right', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Security Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredLogs.map((log) => {
+                        const isIntrusion = log.event_type !== 'first_bind' && log.event_type !== 'authorized_access' && log.event_type !== 'preview_bot_ignored';
+                        const isBot = log.event_type === 'preview_bot_ignored';
+                        const isDeviceBlocked = Number(log.is_device_blocked) > 0;
+                        const isIpBlocked = Number(log.is_ip_blocked) > 0;
+                        const isLinkRevoked = log.link_status === 'revoked';
+                        const vehicleLabel = [log.vehicle_make, log.vehicle_model].filter(Boolean).join(' ') || 'Vehicle';
+                        const fullUrl = log.request_url || `https://care.maskpro.ph/m/${log.slug}`;
+                        const shortFingerprint = log.device_fingerprint
+                          ? `${String(log.device_fingerprint).slice(0, 10)}...${String(log.device_fingerprint).slice(-6)}`
+                          : 'N/A';
 
-                          <td style={{ padding: '13px 14px' }}>
-                            <span style={{
-                              display: 'inline-flex', alignItems: 'center', gap: '5px',
-                              padding: '4px 10px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 700,
-                              background: eventBadge.bg, color: eventBadge.color, border: `1px solid ${eventBadge.border}`,
-                              whiteSpace: 'nowrap',
-                            }}>
-                              <i className={`bi ${eventBadge.icon}`}></i>
-                              {eventBadge.label}
-                            </span>
-                            <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
-                              {isIpBlocked ? 'IP Blocked' : isDeviceBlocked ? 'Device Blocked' : log.action_taken === 'allowed' ? 'Bound & Authorized' : 'Access Denied (403)'}
-                            </div>
-                          </td>
+                        let eventBadge = { label: 'Initial Device Lock', bg: '#dcfce7', color: '#15803d', border: '#86efac', icon: 'bi-lock-fill' };
+                        if (log.event_type === 'authorized_access') {
+                          eventBadge = { label: 'Authorized Open', bg: '#e0f2fe', color: '#0369a1', border: '#7dd3fc', icon: 'bi-check-circle-fill' };
+                        } else if (log.event_type === 'preview_bot_ignored') {
+                          eventBadge = { label: 'Preview Bot Ignored', bg: '#f1f5f9', color: '#475569', border: '#cbd5e1', icon: 'bi-robot' };
+                        } else if (log.event_type === 'device_locked_elsewhere') {
+                          eventBadge = { label: 'Blocked: 2nd Device', bg: '#fef2f2', color: '#dc2626', border: '#fecaca', icon: 'bi-phone-flip' };
+                        } else if (log.event_type === 'invalid_token') {
+                          eventBadge = { label: 'Blocked: Invalid Key', bg: '#fef2f2', color: '#dc2626', border: '#fecaca', icon: 'bi-key-fill' };
+                        } else if (log.event_type === 'invalid_slug') {
+                          eventBadge = { label: 'Brute-Force Slug (404)', bg: '#fff7ed', color: '#c2410c', border: '#fed7aa', icon: 'bi-bug-fill' };
+                        } else if (log.event_type === 'revoked_link') {
+                          eventBadge = { label: 'Blocked: Link Revoked', bg: '#f1f5f9', color: '#475569', border: '#cbd5e1', icon: 'bi-slash-circle-fill' };
+                        } else if (log.event_type === 'device_blocked' || log.action_taken === 'auto_device_blocked') {
+                          eventBadge = { label: 'Device Blocked (10+)', bg: '#fef2f2', color: '#991b1b', border: '#fca5a5', icon: 'bi-shield-slash-fill' };
+                        } else if (log.event_type === 'ip_blocked' || log.action_taken === 'auto_ip_blocked') {
+                          eventBadge = { label: 'IP Blocked (100+)', bg: '#450a0a', color: '#ffffff', border: '#7f1d1d', icon: 'bi-cone-striped' };
+                        }
 
-                          <td style={{ padding: '13px 14px' }}>
-                            <div style={{ fontSize: '12.5px', fontWeight: 700, color: isIntrusion ? '#dc2626' : '#0f172a' }}>
-                              Attempted: {log.attempted_platform || 'Unknown Device'}
-                            </div>
-                            {log.bound_platform && (
-                              <div style={{ fontSize: '11.5px', color: '#475569', marginTop: '2px' }}>
-                                Locked to: <strong>{log.bound_platform}</strong>
+                        return (
+                          <tr
+                            key={log.id}
+                            style={{
+                              borderBottom: '1px solid #f1f5f9',
+                              background: isIntrusion ? 'rgba(254, 242, 242, 0.38)' : isBot ? '#f8fafc' : 'white',
+                              verticalAlign: 'top',
+                            }}
+                          >
+                            {/* 1. Target Account & Vehicle */}
+                            <td style={{ padding: '14px 16px', minWidth: '175px' }}>
+                              <div style={{ fontWeight: 800, fontSize: '13.5px', color: '#0f172a' }}>
+                                {log.customer_name || 'Unknown / Guessed Link'}
                               </div>
-                            )}
-                            {log.user_agent && (
-                              <div
-                                title={log.user_agent}
-                                style={{
-                                  fontSize: '10.5px', color: '#94a3b8', marginTop: '2px',
-                                  maxWidth: '210px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                                }}
-                              >
-                                {log.user_agent}
+                              <div style={{ fontSize: '12px', color: '#475569', marginTop: '2px' }}>
+                                {log.customer_mobile ? (
+                                  <>
+                                    <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{log.customer_mobile}</span>
+                                    {log.customer_id ? ` • ID #${log.customer_id}` : ''}
+                                  </>
+                                ) : 'Unmatched target'}
                               </div>
-                            )}
-                          </td>
+                              <div style={{ fontSize: '11.5px', color: '#2563eb', fontWeight: 700, marginTop: '3px' }}>
+                                <i className="bi bi-car-front-fill" style={{ marginRight: '4px' }}></i>
+                                {vehicleLabel}
+                                {log.vehicle_plate ? ` (${log.vehicle_plate})` : ''}
+                              </div>
+                              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '3px' }}>
+                                Link Status:{' '}
+                                <strong style={{ color: isLinkRevoked ? '#dc2626' : '#15803d' }}>
+                                  {isLinkRevoked ? 'REVOKED' : 'Active'}
+                                </strong>
+                              </div>
+                            </td>
 
-                          <td style={{ padding: '13px 14px' }}>
-                            <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#0f172a', fontFamily: 'monospace' }}>
-                              {log.ip_address}
-                            </div>
-                            <div style={{ fontSize: '11.5px', color: '#475569', marginTop: '2px', maxWidth: '220px' }}>
-                              <i className="bi bi-geo-alt-fill" style={{ color: '#ef4444', marginRight: '4px' }}></i>
-                              {log.location || 'Philippines'}
-                            </div>
-                          </td>
-
-                          <td style={{ padding: '13px 14px', textAlign: 'center' }}>
-                            {isIntrusion ? (
-                              <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '3px', fontSize: '11.5px' }}>
-                                <span style={{
-                                  background: log.device_attempt_count >= 10 ? '#fef2f2' : '#f8fafc',
-                                  border: '1px solid #e2e8f0', borderRadius: '6px', padding: '2px 7px',
-                                  fontWeight: 700, color: log.device_attempt_count >= 10 ? '#dc2626' : '#334155',
-                                  whiteSpace: 'nowrap',
+                            {/* 2. Exact Accessed URL & Server Log */}
+                            <td style={{ padding: '14px 14px', minWidth: '250px', maxWidth: '300px' }}>
+                              <div style={{
+                                display: 'flex', alignItems: 'center', gap: '6px',
+                                background: '#f8fafc', border: '1px solid #e2e8f0',
+                                borderRadius: '8px', padding: '5px 8px',
+                              }}>
+                                <code style={{
+                                  fontSize: '11px', color: '#1d4ed8', fontWeight: 700,
+                                  wordBreak: 'break-all', lineHeight: 1.35, flex: 1,
                                 }}>
-                                  Device: {log.device_attempt_count}/10
-                                </span>
-                                <span style={{
-                                  background: log.ip_attempt_count >= 100 ? '#fef2f2' : '#f8fafc',
-                                  border: '1px solid #e2e8f0', borderRadius: '6px', padding: '2px 7px',
-                                  fontWeight: 600, color: log.ip_attempt_count >= 100 ? '#dc2626' : '#64748b',
-                                  whiteSpace: 'nowrap',
-                                }}>
-                                  IP: {log.ip_attempt_count}/100
-                                </span>
+                                  {fullUrl}
+                                </code>
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard?.writeText(fullUrl);
+                                    showToast('Exact accessed URL copied to clipboard');
+                                  }}
+                                  title="Copy exact accessed URL"
+                                  style={{
+                                    border: 'none', background: '#e2e8f0', color: '#334155',
+                                    borderRadius: '6px', padding: '3px 6px', fontSize: '11px',
+                                    cursor: 'pointer', flexShrink: 0,
+                                  }}
+                                >
+                                  <i className="bi bi-clipboard"></i>
+                                </button>
                               </div>
-                            ) : (
-                              <span style={{ fontSize: '12px', color: '#10b981', fontWeight: 700 }}>1st Open</span>
-                            )}
-                          </td>
 
-                          <td style={{ padding: '13px 14px', fontSize: '12px', color: '#475569', whiteSpace: 'nowrap' }}>
-                            <div style={{ fontWeight: 600, color: '#0f172a' }}>{formatTimeAgo(log.created_at)}</div>
-                            <div style={{ fontSize: '11px', color: '#94a3b8' }}>
-                              {log.created_at ? new Date(log.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''}
-                            </div>
-                          </td>
+                              <div style={{
+                                display: 'inline-flex', alignItems: 'center', gap: '5px',
+                                marginTop: '6px', fontSize: '11px', fontWeight: 700,
+                                fontFamily: 'monospace',
+                                color: Number(log.http_status) >= 400 ? '#dc2626' : '#0f172a',
+                              }}>
+                                <span style={{
+                                  background: Number(log.http_status) >= 400 ? '#fee2e2' : '#dcfce7',
+                                  color: Number(log.http_status) >= 400 ? '#991b1b' : '#166534',
+                                  padding: '1px 6px', borderRadius: '4px',
+                                }}>
+                                  HTTP {log.http_status || (isIntrusion ? 403 : 200)}
+                                </span>
+                                <span>{log.server_code || (isIntrusion ? 'DEVICE_LOCKED_ELSEWHERE' : 'OK')}</span>
+                              </div>
 
-                          <td style={{ padding: '13px 16px', textAlign: 'right' }}>
-                            <div style={{ display: 'inline-flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                              {isIntrusion && log.device_fingerprint && (
-                                <button
-                                  disabled={secActionLoading === `dev:${log.id}`}
-                                  onClick={() => handleSecurityAction({
-                                    action: isDeviceBlocked ? 'unblock_device' : 'block_device',
-                                    log_id: log.id,
-                                    device_fingerprint: log.device_fingerprint,
-                                    device_token_hash: log.device_token_hash,
-                                    device_label: log.attempted_platform,
-                                    ip_address: log.ip_address,
-                                    user_agent: log.user_agent,
-                                  }, `dev:${log.id}`)}
-                                  style={{
-                                    padding: '5px 10px', borderRadius: '8px', fontSize: '11.5px', fontWeight: 700,
-                                    cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-                                    background: isDeviceBlocked ? '#f0fdf4' : '#fff7ed',
-                                    border: `1px solid ${isDeviceBlocked ? '#86efac' : '#fdba74'}`,
-                                    color: isDeviceBlocked ? '#15803d' : '#c2410c',
-                                  }}
-                                >
-                                  <i className={`bi ${isDeviceBlocked ? 'bi-unlock-fill' : 'bi-phone-vibrate-fill'}`} style={{ marginRight: '4px' }}></i>
-                                  {isDeviceBlocked ? 'Unblock Device' : 'Block Device'}
-                                </button>
+                              {log.request_headers && (
+                                <div style={{
+                                  fontSize: '10.5px', color: '#64748b', marginTop: '4px',
+                                  fontFamily: 'monospace', lineHeight: 1.35,
+                                }}>
+                                  {log.request_headers}
+                                </div>
+                              )}
+                            </td>
+
+                            {/* 3. Security Event */}
+                            <td style={{ padding: '14px 14px', minWidth: '155px' }}>
+                              <span style={{
+                                display: 'inline-flex', alignItems: 'center', gap: '5px',
+                                padding: '4px 10px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 700,
+                                background: eventBadge.bg, color: eventBadge.color, border: `1px solid ${eventBadge.border}`,
+                                whiteSpace: 'nowrap',
+                              }}>
+                                <i className={`bi ${eventBadge.icon}`}></i>
+                                {eventBadge.label}
+                              </span>
+                              <div style={{ fontSize: '11px', color: '#475569', fontWeight: 600, marginTop: '5px' }}>
+                                {isIpBlocked
+                                  ? 'Firewall: IP Blocked'
+                                  : isDeviceBlocked
+                                  ? 'Firewall: Device Blocked'
+                                  : log.action_taken === 'bot_ignored'
+                                  ? 'Lock Preserved (202)'
+                                  : log.action_taken === 'allowed'
+                                  ? 'Authorized & Bound (200)'
+                                  : 'Rejected at Gate (403)'}
+                              </div>
+                              <div style={{ fontSize: '10.5px', color: '#94a3b8', marginTop: '2px', fontFamily: 'monospace' }}>
+                                Event #{log.id}
+                              </div>
+                            </td>
+
+                            {/* 4. Device, Browser, OS & Fingerprint */}
+                            <td style={{ padding: '14px 14px', minWidth: '250px', maxWidth: '310px' }}>
+                              <div style={{ fontSize: '12.5px', fontWeight: 800, color: isIntrusion ? '#dc2626' : '#0f172a' }}>
+                                <i className={`bi ${/iPhone|Android|Mobile/i.test(log.attempted_platform || '') ? 'bi-phone-fill' : 'bi-laptop'}`} style={{ marginRight: '5px' }}></i>
+                                Attempted: {log.attempted_platform || 'Unknown Device'}
+                              </div>
+
+                              {log.browser_detail && (
+                                <div style={{ fontSize: '11.5px', color: '#334155', marginTop: '3px' }}>
+                                  <strong>Browser:</strong> {log.browser_detail}
+                                </div>
                               )}
 
-                              {isIntrusion && log.ip_address && (
-                                <button
-                                  disabled={secActionLoading === `ip:${log.id}`}
-                                  onClick={() => handleSecurityAction({
-                                    action: isIpBlocked ? 'unblock_ip' : 'block_ip',
-                                    log_id: log.id,
-                                    ip_address: log.ip_address,
-                                  }, `ip:${log.id}`)}
-                                  style={{
-                                    padding: '5px 10px', borderRadius: '8px', fontSize: '11.5px', fontWeight: 700,
-                                    cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-                                    background: isIpBlocked ? '#f0fdf4' : '#fef2f2',
-                                    border: `1px solid ${isIpBlocked ? '#86efac' : '#fecaca'}`,
-                                    color: isIpBlocked ? '#15803d' : '#dc2626',
-                                  }}
-                                >
-                                  <i className={`bi ${isIpBlocked ? 'bi-shield-check' : 'bi-shield-fill-x'}`} style={{ marginRight: '4px' }}></i>
-                                  {isIpBlocked ? 'Unblock IP' : 'Block IP'}
-                                </button>
+                              {log.os_detail && (
+                                <div style={{ fontSize: '11.5px', color: '#334155', marginTop: '2px' }}>
+                                  <strong>OS / HW:</strong> {log.os_detail}
+                                </div>
                               )}
 
-                              {log.magic_link_id && (
-                                <button
-                                  disabled={secActionLoading === `reset:${log.id}`}
-                                  onClick={() => handleSecurityAction({
-                                    action: 'reset_device_lock',
-                                    magic_link_id: log.magic_link_id,
-                                  }, `reset:${log.id}`)}
-                                  title="Clear the bound device so the customer can open this link on their new phone"
-                                  style={{
-                                    padding: '5px 10px', borderRadius: '8px', fontSize: '11.5px', fontWeight: 700,
-                                    cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-                                    background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb',
-                                  }}
-                                >
-                                  <i className="bi bi-arrow-counterclockwise" style={{ marginRight: '4px' }}></i>
-                                  Reset Lock
-                                </button>
+                              {log.bound_platform && (
+                                <div style={{
+                                  fontSize: '11px', color: '#15803d', background: '#f0fdf4',
+                                  border: '1px solid #bbf7d0', borderRadius: '6px',
+                                  padding: '3px 7px', marginTop: '5px', display: 'inline-block',
+                                }}>
+                                  <i className="bi bi-lock-fill" style={{ marginRight: '4px' }}></i>
+                                  Locked Owner: <strong>{log.bound_platform}</strong>
+                                </div>
                               )}
 
-                              {log.magic_link_id && (
-                                <button
-                                  disabled={secActionLoading === `rev:${log.id}`}
-                                  onClick={() => handleSecurityAction({
-                                    action: isLinkRevoked ? 'reactivate_link' : 'revoke_link',
-                                    magic_link_id: log.magic_link_id,
-                                  }, `rev:${log.id}`)}
+                              <div style={{ fontSize: '10.5px', color: '#64748b', fontFamily: 'monospace', marginTop: '4px' }}>
+                                Device Hash: {shortFingerprint}
+                              </div>
+
+                              {log.user_agent && (
+                                <div
                                   style={{
-                                    padding: '5px 10px', borderRadius: '8px', fontSize: '11.5px', fontWeight: 700,
-                                    cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-                                    background: isLinkRevoked ? '#f0fdf4' : '#f8fafc',
-                                    border: `1px solid ${isLinkRevoked ? '#86efac' : '#cbd5e1'}`,
-                                    color: isLinkRevoked ? '#15803d' : '#475569',
+                                    fontSize: '10px', color: '#64748b', marginTop: '4px',
+                                    background: '#f8fafc', border: '1px solid #e2e8f0',
+                                    borderRadius: '6px', padding: '4px 6px', fontFamily: 'monospace',
+                                    wordBreak: 'break-all', lineHeight: 1.3,
                                   }}
                                 >
-                                  {isLinkRevoked ? 'Restore Link' : 'Revoke Link'}
-                                </button>
+                                  UA: {log.user_agent}
+                                </div>
                               )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                            </td>
+
+                            {/* 5. IP Address & Geo / ISP */}
+                            <td style={{ padding: '14px 14px', minWidth: '185px' }}>
+                              <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', fontFamily: 'monospace' }}>
+                                {log.ip_address}
+                              </div>
+                              <div style={{ fontSize: '11.5px', color: '#334155', marginTop: '3px', lineHeight: 1.35 }}>
+                                <i className="bi bi-geo-alt-fill" style={{ color: '#ef4444', marginRight: '4px' }}></i>
+                                {log.location || 'Philippines'}
+                              </div>
+                              {log.bound_ip && (
+                                <div style={{ fontSize: '10.5px', color: '#64748b', marginTop: '4px', fontFamily: 'monospace' }}>
+                                  Owner Bound IP: {log.bound_ip}
+                                </div>
+                              )}
+                            </td>
+
+                            {/* 6. Attempts & Brute-Force Thresholds */}
+                            <td style={{ padding: '14px 14px', textAlign: 'center', minWidth: '130px' }}>
+                              {isIntrusion ? (
+                                <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '5px', fontSize: '11.5px', width: '100%' }}>
+                                  <div style={{
+                                    background: log.device_attempt_count >= 10 ? '#fef2f2' : '#f8fafc',
+                                    border: '1px solid #e2e8f0', borderRadius: '6px', padding: '4px 8px',
+                                  }}>
+                                    <div style={{ fontWeight: 800, color: log.device_attempt_count >= 10 ? '#dc2626' : '#0f172a', whiteSpace: 'nowrap' }}>
+                                      Device: {log.device_attempt_count} / 10
+                                    </div>
+                                    <div style={{ height: '4px', background: '#e2e8f0', borderRadius: '3px', marginTop: '3px', overflow: 'hidden' }}>
+                                      <div style={{
+                                        width: `${Math.min(100, (Number(log.device_attempt_count || 1) / 10) * 100)}%`,
+                                        height: '100%',
+                                        background: log.device_attempt_count >= 8 ? '#dc2626' : '#f59e0b',
+                                      }} />
+                                    </div>
+                                  </div>
+
+                                  <div style={{
+                                    background: log.ip_attempt_count >= 100 ? '#fef2f2' : '#f8fafc',
+                                    border: '1px solid #e2e8f0', borderRadius: '6px', padding: '4px 8px',
+                                  }}>
+                                    <div style={{ fontWeight: 700, color: log.ip_attempt_count >= 100 ? '#dc2626' : '#475569', whiteSpace: 'nowrap' }}>
+                                      IP: {log.ip_attempt_count} / 100
+                                    </div>
+                                    <div style={{ height: '4px', background: '#e2e8f0', borderRadius: '3px', marginTop: '3px', overflow: 'hidden' }}>
+                                      <div style={{
+                                        width: `${Math.min(100, Math.max(6, (Number(log.ip_attempt_count || 1) / 100) * 100))}%`,
+                                        height: '100%',
+                                        background: '#dc2626',
+                                      }} />
+                                    </div>
+                                  </div>
+
+                                  <div style={{ fontSize: '10.5px', color: '#64748b' }}>
+                                    Link Total: <strong>{log.blocked_attempts || 0}</strong> blocked
+                                  </div>
+                                </div>
+                              ) : isBot ? (
+                                <span style={{ fontSize: '11.5px', color: '#64748b', fontWeight: 700 }}>
+                                  0 (Crawler)
+                                </span>
+                              ) : (
+                                <div style={{ fontSize: '11.5px' }}>
+                                  <span style={{ color: '#15803d', fontWeight: 800 }}>
+                                    {log.event_type === 'first_bind' ? '1st Open (Bound)' : 'Verified Device'}
+                                  </span>
+                                  <div style={{ fontSize: '10.5px', color: '#64748b', marginTop: '3px' }}>
+                                    Total Opens: <strong>{log.access_count || 1}</strong>
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+
+                            {/* 7. When */}
+                            <td style={{ padding: '14px 14px', fontSize: '12px', color: '#475569', whiteSpace: 'nowrap' }}>
+                              <div style={{ fontWeight: 800, color: '#0f172a' }}>{formatTimeAgo(log.created_at)}</div>
+                              <div style={{ fontSize: '11px', color: '#475569', marginTop: '2px' }}>
+                                {log.created_at ? new Date(log.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
+                              </div>
+                              <div style={{ fontSize: '11px', color: '#64748b', fontFamily: 'monospace' }}>
+                                {log.created_at ? new Date(log.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' }) : ''}
+                              </div>
+                            </td>
+
+                            {/* 8. Security Actions */}
+                            <td style={{ padding: '14px 16px', textAlign: 'right', minWidth: '150px' }}>
+                              <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
+                                {isIntrusion && log.device_fingerprint && (
+                                  <button
+                                    disabled={secActionLoading === `dev:${log.id}`}
+                                    onClick={() => handleSecurityAction({
+                                      action: isDeviceBlocked ? 'unblock_device' : 'block_device',
+                                      log_id: log.id,
+                                      device_fingerprint: log.device_fingerprint,
+                                      device_token_hash: log.device_token_hash,
+                                      device_label: log.attempted_platform,
+                                      ip_address: log.ip_address,
+                                      user_agent: log.user_agent,
+                                    }, `dev:${log.id}`)}
+                                    style={{
+                                      padding: '5px 10px', borderRadius: '8px', fontSize: '11.5px', fontWeight: 700,
+                                      cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                                      background: isDeviceBlocked ? '#f0fdf4' : '#fff7ed',
+                                      border: `1px solid ${isDeviceBlocked ? '#86efac' : '#fdba74'}`,
+                                      color: isDeviceBlocked ? '#15803d' : '#c2410c',
+                                    }}
+                                  >
+                                    <i className={`bi ${isDeviceBlocked ? 'bi-unlock-fill' : 'bi-phone-vibrate-fill'}`} style={{ marginRight: '4px' }}></i>
+                                    {isDeviceBlocked ? 'Unblock Device' : 'Block Device'}
+                                  </button>
+                                )}
+
+                                {isIntrusion && log.ip_address && (
+                                  <button
+                                    disabled={secActionLoading === `ip:${log.id}`}
+                                    onClick={() => handleSecurityAction({
+                                      action: isIpBlocked ? 'unblock_ip' : 'block_ip',
+                                      log_id: log.id,
+                                      ip_address: log.ip_address,
+                                    }, `ip:${log.id}`)}
+                                    style={{
+                                      padding: '5px 10px', borderRadius: '8px', fontSize: '11.5px', fontWeight: 700,
+                                      cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                                      background: isIpBlocked ? '#f0fdf4' : '#fef2f2',
+                                      border: `1px solid ${isIpBlocked ? '#86efac' : '#fecaca'}`,
+                                      color: isIpBlocked ? '#15803d' : '#dc2626',
+                                    }}
+                                  >
+                                    <i className={`bi ${isIpBlocked ? 'bi-shield-check' : 'bi-shield-fill-x'}`} style={{ marginRight: '4px' }}></i>
+                                    {isIpBlocked ? 'Unblock IP' : 'Block IP'}
+                                  </button>
+                                )}
+
+                                {log.magic_link_id && (
+                                  <button
+                                    disabled={secActionLoading === `reset:${log.id}`}
+                                    onClick={() => handleSecurityAction({
+                                      action: 'reset_device_lock',
+                                      magic_link_id: log.magic_link_id,
+                                    }, `reset:${log.id}`)}
+                                    title="Clear the bound device so the customer can open this link on their new phone"
+                                    style={{
+                                      padding: '5px 10px', borderRadius: '8px', fontSize: '11.5px', fontWeight: 700,
+                                      cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                                      background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb',
+                                    }}
+                                  >
+                                    <i className="bi bi-arrow-counterclockwise" style={{ marginRight: '4px' }}></i>
+                                    Reset Lock
+                                  </button>
+                                )}
+
+                                {log.magic_link_id && (
+                                  <button
+                                    disabled={secActionLoading === `rev:${log.id}`}
+                                    onClick={() => handleSecurityAction({
+                                      action: isLinkRevoked ? 'reactivate_link' : 'revoke_link',
+                                      magic_link_id: log.magic_link_id,
+                                    }, `rev:${log.id}`)}
+                                    style={{
+                                      padding: '5px 10px', borderRadius: '8px', fontSize: '11.5px', fontWeight: 700,
+                                      cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                                      background: isLinkRevoked ? '#f0fdf4' : '#f8fafc',
+                                      border: `1px solid ${isLinkRevoked ? '#86efac' : '#cbd5e1'}`,
+                                      color: isLinkRevoked ? '#15803d' : '#475569',
+                                    }}
+                                  >
+                                    {isLinkRevoked ? 'Restore Link' : 'Revoke Link'}
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Who Uses the App (Live Active Users & Device Log) */}

@@ -67,11 +67,20 @@ export default function MagicLinkGate() {
       const platformLabel = getBrowserPlatformLabel();
 
       try {
+        const screenRes = window.screen ? `${window.screen.width}x${window.screen.height} (@${window.devicePixelRatio || 1}x)` : '';
+        const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; } })();
         const res = await api.post('/auth/magic-verify', {
           slug,
           k,
           device_token: deviceToken,
           platform_label: platformLabel,
+          request_url: window.location.href,
+          client_meta: [
+            screenRes ? `Screen: ${screenRes}` : '',
+            tz ? `TZ: ${tz}` : '',
+            navigator.language ? `Lang: ${navigator.language}` : '',
+            document.referrer ? `Ref: ${document.referrer}` : 'Source: Direct / SMS / Paste',
+          ].filter(Boolean).join(' • '),
         });
 
         if (cancelled) return;
