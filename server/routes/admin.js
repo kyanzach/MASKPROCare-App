@@ -15,7 +15,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 
 const pool = require('../db/connection');
-const { authenticateToken, JWT_SECRET } = require('../middleware/auth');
+const { authenticateToken, recordAppTelemetry, JWT_SECRET } = require('../middleware/auth');
 
 // ─── Helper: check if customer is admin ─────────────────────
 async function isAdminUser(customerId, mobile) {
@@ -234,6 +234,9 @@ router.post('/login', async (req, res) => {
 
     const adminFullName = String(adminUser.full_name);
     console.log(`[Admin] Admin login: ${adminFullName} (user ID: ${adminUser.id}, customer_id: ${customerId})`);
+    if (customerId) {
+      recordAppTelemetry(req, { sub: customerId, is_admin: true }, true);
+    }
 
     return res.json({
       success: true,
@@ -315,23 +318,29 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
 
     // 3. Login & Authentication Funnel Stats
     const [[otpStats]] = await pool.query(`
-      SELECT COUNT(*) AS total_otp_requests, COUNT(DISTINCT mobile) AS unique_mobiles,
-             COALESCE(SUM(CASE WHEN used = 1 THEN 1 ELSE 0 END), 0) AS verified_otps
+      SELECT COALESCE(SUM(request_count), COUNT(*)) AS total_otp_requests,
+             COUNT(DISTINCT CASE WHEN last_login IS NOT NULL OR verified_count > 0 THEN COALESCE(customer_id, mobile_number) END) AS unique_mobiles,
+             COALESCE(SUM(verified_count), SUM(CASE WHEN last_login IS NOT NULL THEN 1 ELSE 0 END), 0) AS verified_otps
       FROM login_otp
     `).catch(() => [[{ total_otp_requests: 0, unique_mobiles: 0, verified_otps: 0 }]]);
 
     const [[magicStats]] = await pool.query(`
       SELECT COUNT(*) AS total_links,
-             COALESCE(SUM(CASE WHEN used_count > 0 THEN 1 ELSE 0 END), 0) AS clicked_links,
-             COALESCE(SUM(used_count), 0) AS total_clicks,
-             COUNT(DISTINCT CASE WHEN used_count > 0 THEN customer_id END) AS unique_magic_users
+             COALESCE(SUM(CASE WHEN access_count > 0 THEN 1 ELSE 0 END), 0) AS clicked_links,
+             COALESCE(SUM(access_count), 0) AS total_clicks,
+             COUNT(DISTINCT CASE WHEN access_count > 0 THEN customer_id END) AS unique_magic_users
       FROM care_magic_links
     `).catch(() => [[{ total_links: 0, clicked_links: 0, total_clicks: 0, unique_magic_users: 0 }]]);
 
     const [[aiLoginStats]] = await pool.query(`
-      SELECT COUNT(*) AS total_attempts,
-             COALESCE(SUM(CASE WHEN verified = 1 THEN 1 ELSE 0 END), 0) AS verified_logins
-      FROM care_ai_login_logs
+      SELECT GREATEST(
+               (SELECT COUNT(*) FROM care_ai_login_sessions),
+               (SELECT COUNT(*) FROM care_ai_login_logs)
+             ) AS total_attempts,
+             GREATEST(
+               (SELECT COALESCE(SUM(CASE WHEN status = 'verified' THEN 1 ELSE 0 END), 0) FROM care_ai_login_sessions),
+               (SELECT COALESCE(SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END), 0) FROM care_ai_login_logs)
+             ) AS verified_logins
     `).catch(() => [[{ total_attempts: 0, verified_logins: 0 }]]);
 
     // 4. Who Uses the App (Live Active Users & Device Log)

@@ -12,7 +12,7 @@ const jwt = require('jsonwebtoken');
 const router = express.Router();
 
 const pool = require('../db/connection');
-const { authenticateToken, JWT_SECRET } = require('../middleware/auth');
+const { authenticateToken, recordAppTelemetry, JWT_SECRET } = require('../middleware/auth');
 const { sendOtpSms } = require('../services/sms');
 const { standardizeMobile, getLast10, isValidPhMobile } = require('../utils/mobile');
 
@@ -71,12 +71,12 @@ router.post('/login', async (req, res) => {
 
     if (existing.length > 0) {
       await pool.query(
-        "UPDATE login_otp SET otp_code = ?, otp_expires = DATE_ADD(NOW(), INTERVAL ? SECOND), updated_at = NOW() WHERE mobile_number = ?",
+        "UPDATE login_otp SET otp_code = ?, otp_expires = DATE_ADD(NOW(), INTERVAL ? SECOND), request_count = COALESCE(request_count, 0) + 1, updated_at = NOW() WHERE mobile_number = ?",
         [otp, isReviewAccount ? 86400 : OTP_EXPIRY_SECONDS, formattedMobile]
       );
     } else {
       await pool.query(
-        "INSERT INTO login_otp (mobile_number, customer_id, otp_code, otp_expires, created_at) VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND), NOW())",
+        "INSERT INTO login_otp (mobile_number, customer_id, otp_code, otp_expires, request_count, verified_count, created_at) VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND), 1, 0, NOW())",
         [formattedMobile, customerId, otp, isReviewAccount ? 86400 : OTP_EXPIRY_SECONDS]
       );
     }
@@ -158,17 +158,20 @@ router.post('/verify', async (req, res) => {
         iss: 'maskpro-care-api',
         sub: customerId,
         mobile: formattedMobile,
-        branch_id: branchId
+        branch_id: branchId,
+        auth_method: 'otp',
       },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRY }
     );
 
-    // Clear OTP
+    // Clear OTP & increment verified_count
     await pool.query(
-      "UPDATE login_otp SET otp_code = '', otp_expires = '2000-01-01 00:00:00', last_login = NOW(), updated_at = NOW() WHERE mobile_number = ?",
+      "UPDATE login_otp SET otp_code = '', otp_expires = '2000-01-01 00:00:00', verified_count = COALESCE(verified_count, 0) + 1, last_login = NOW(), updated_at = NOW() WHERE mobile_number = ?",
       [formattedMobile]
     );
+
+    recordAppTelemetry(req, { sub: customerId, auth_method: 'otp' }, true);
 
     // Get full customer profile
     const [customerData] = await pool.query("SELECT * FROM customers WHERE id = ?", [customerId]);
@@ -386,10 +389,13 @@ router.post('/magic-verify', async (req, res) => {
         mobile: formattedMobile,
         branch_id: branchId,
         magic_slug: link.slug,
+        auth_method: 'magic_link',
       },
       JWT_SECRET,
       { expiresIn: magicJwtExpiry }
     );
+
+    recordAppTelemetry(req, { sub: customerId, magic_slug: link.slug, auth_method: 'magic_link' }, true);
 
     const [customerData] = await pool.query('SELECT * FROM customers WHERE id = ?', [customerId]);
     const redirectUrl = link.vehicle_id

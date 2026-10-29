@@ -53,35 +53,58 @@ function detectPlatformInfo(req) {
   return { platform, appType, deviceLabel, ua: ua.slice(0, 500) };
 }
 
-function recordAppTelemetry(req, payload) {
+function recordAppTelemetry(req, payload, forceNewSession = false) {
   try {
-    const customerId = parseInt(payload.sub, 10);
+    const customerId = parseInt(payload.sub || payload.customer_id, 10);
     if (!customerId || customerId <= 0) return;
-    // Skip recording impersonated sessions as customer platform logins unless flagged
-    const isImpersonated = !!payload.impersonated_by;
+    // Skip recording impersonated sessions as customer platform logins
+    if (payload.impersonated_by) return;
+
     const { platform, appType, deviceLabel, ua } = detectPlatformInfo(req);
     const key = `${customerId}:${platform}:${appType}`;
     const now = Date.now();
     const lastRecorded = telemetryThrottle.get(key) || 0;
-    if (now - lastRecorded < 120000) return; // 2 min throttle
+    if (!forceNewSession && now - lastRecorded < 120000) return; // 2 min throttle for passive API hits
     telemetryThrottle.set(key, now);
 
-    const authMethod = isImpersonated ? 'impersonated' : (payload.is_admin ? 'admin_login' : 'app_session');
+    let authMethod = 'otp';
+    if (payload.is_admin) authMethod = 'admin_login';
+    else if (payload.magic_slug) authMethod = 'magic_link';
+    else if (payload.auth_method) authMethod = String(payload.auth_method);
+
     const ip = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim().slice(0, 64);
 
-    pool.query(
-      `INSERT INTO care_app_telemetry
-        (customer_id, platform, app_type, device_label, auth_method, user_agent, ip_address, session_count, api_hits, first_seen_at, last_seen_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, NOW(), NOW())
-       ON DUPLICATE KEY UPDATE
-         device_label = VALUES(device_label),
-         user_agent = VALUES(user_agent),
-         ip_address = VALUES(ip_address),
-         api_hits = api_hits + 1,
-         session_count = IF(TIMESTAMPDIFF(MINUTE, last_seen_at, NOW()) > 30, session_count + 1, session_count),
-         last_seen_at = NOW()`,
-      [customerId, platform, appType, deviceLabel, authMethod, ua, ip]
-    ).catch(() => {});
+    if (forceNewSession) {
+      pool.query(
+        `INSERT INTO care_app_telemetry
+          (customer_id, platform, app_type, device_label, auth_method, user_agent, ip_address, session_count, api_hits, first_seen_at, last_seen_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, NOW(), NOW())
+         ON DUPLICATE KEY UPDATE
+           device_label = VALUES(device_label),
+           auth_method = VALUES(auth_method),
+           user_agent = VALUES(user_agent),
+           ip_address = VALUES(ip_address),
+           api_hits = api_hits + 1,
+           session_count = session_count + 1,
+           last_seen_at = NOW()`,
+        [customerId, platform, appType, deviceLabel, authMethod, ua, ip]
+      ).catch(() => {});
+    } else {
+      pool.query(
+        `INSERT INTO care_app_telemetry
+          (customer_id, platform, app_type, device_label, auth_method, user_agent, ip_address, session_count, api_hits, first_seen_at, last_seen_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, NOW(), NOW())
+         ON DUPLICATE KEY UPDATE
+           device_label = VALUES(device_label),
+           auth_method = IF(VALUES(auth_method) IN ('magic_link', 'ai_helper', 'admin_login', 'otp'), VALUES(auth_method), auth_method),
+           user_agent = VALUES(user_agent),
+           ip_address = VALUES(ip_address),
+           api_hits = api_hits + 1,
+           session_count = IF(TIMESTAMPDIFF(MINUTE, last_seen_at, NOW()) > 30, session_count + 1, session_count),
+           last_seen_at = NOW()`,
+        [customerId, platform, appType, deviceLabel, authMethod, ua, ip]
+      ).catch(() => {});
+    }
   } catch (e) {
     // Non-blocking
   }
@@ -105,11 +128,11 @@ function authenticateToken(req, res, next) {
   try {
     const payload = jwt.verify(token, JWT_SECRET);
     req.user = {
-      customer_id: parseInt(payload.sub, 10),
+      customer_id: parseInt(payload.sub || payload.customer_id, 10),
       mobile: payload.mobile || '',
       branch_id: parseInt(payload.branch_id, 10) || 1
     };
-    recordAppTelemetry(req, payload);
+    recordAppTelemetry(req, payload, false);
     next();
   } catch (err) {
     return res.status(401).json({
@@ -121,4 +144,4 @@ function authenticateToken(req, res, next) {
   }
 }
 
-module.exports = { authenticateToken, JWT_SECRET };
+module.exports = { authenticateToken, recordAppTelemetry, JWT_SECRET };

@@ -18,7 +18,7 @@ const jwt = require('jsonwebtoken');
 const router = express.Router();
 
 const pool = require('../db/connection');
-const { JWT_SECRET } = require('../middleware/auth');
+const { recordAppTelemetry, JWT_SECRET } = require('../middleware/auth');
 const { getLast10, standardizeMobile } = require('../utils/mobile');
 
 const JWT_EXPIRY = parseInt(process.env.JWT_EXPIRY, 10) || 86400;
@@ -582,6 +582,8 @@ router.post('/message', async (req, res) => {
         // Issue JWT token
         const token = jwt.sign(
           {
+            iss: 'maskpro-care-api',
+            sub: customer.id,
             customer_id: customer.id,
             mobile: customer.mobile_number,
             branch_id: customer.branch_id || 1,
@@ -590,6 +592,8 @@ router.post('/message', async (req, res) => {
           JWT_SECRET,
           { expiresIn: JWT_EXPIRY }
         );
+
+        recordAppTelemetry(req, { sub: customer.id, auth_method: 'ai_helper' }, true);
 
         await pool.query(
           "UPDATE care_ai_login_sessions SET step = 'completed', status = 'verified', customer_id = ?, total_score = ?, match_scores = ?, answers = ?, updated_at = NOW() WHERE id = ?",

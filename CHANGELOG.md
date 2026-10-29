@@ -1,5 +1,14 @@
 # Changelog
 
+## [v1.16.5] — 2026-10-29
+### Fixed & Improved
+- **Fixed Admin Dashboard Auth Funnel Widget Counts (`server/routes/admin.js`, `server/routes/auth.js`, `server/routes/aiAuth.js`, `server/middleware/auth.js`)**:
+  - Fixed column names in `GET /api/admin/dashboard` so all 3 authentication funnel cards query the exact database columns instead of falling back to `0`:
+    - **1-Click Magic Link Logins (`care_magic_links`)**: Queries `access_count` (`Links Sent`, `Opened`, `Clicks`, and `Unique Users`) instead of the non-existent `used_count`.
+    - **SMS OTP Logins (`login_otp`)**: Added `request_count` and `verified_count` counters to `login_otp` (incremented on `POST /api/auth/login` and `POST /api/auth/verify`) and queried `mobile_number` / `last_login` instead of `mobile` / `used`.
+    - **AI Smart Verification (`care_ai_login_sessions` & `care_ai_login_logs`)**: Queries `status = 'verified'` and `status = 'success'` instead of `verified = 1`.
+  - Updated `recordAppTelemetry()` in `server/middleware/auth.js` so login endpoints (`OTP`, `Magic Link`, `AI Helper`, `Admin Login`) immediately record new sessions with their exact `auth_method`.
+
 ## [v1.16.4] — 2026-10-29
 ### Changed
 - **Reordered Sidebar Navigation Menu (`frontend/src/components/Layout.jsx`)**:
