@@ -299,6 +299,7 @@ export default function Dashboard() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          flexWrap: 'wrap',
           gap: '16px',
           boxShadow: '0 2px 8px rgba(217, 119, 6, 0.08)'
         }}>
@@ -447,7 +448,7 @@ export default function Dashboard() {
                       backgroundColor: isNegotiating ? '#fdfaff' : isRejected ? '#fff8f8' : '#fffdf5',
                     }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
                       <div>
                         <div style={{ fontWeight: 700, fontSize: '15px', color: isNegotiating ? '#5b21b6' : isRejected ? '#991b1b' : '#1f2937' }}>
                           {new Date(req.booking_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at {new Date(req.booking_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
@@ -499,7 +500,7 @@ export default function Dashboard() {
                     {/* Alternative / Agreed Date Offered */}
                     {hasOffer && (
                       <div style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '12px', marginTop: '10px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap', gap: '4px' }}>
                           <span style={{ fontSize: '12px', color: '#1e40af', fontWeight: 700 }}>
                             <i className="fas fa-calendar-check"></i> {isNegotiating ? 'Agreed / Alternative Schedule:' : 'Alternative Date Proposed by Agent:'}
                           </span>

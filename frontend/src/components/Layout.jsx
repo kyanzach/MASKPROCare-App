@@ -201,7 +201,7 @@ export default function Layout() {
       {/* Notification Dropdown */}
       {notifOpen && (
         <div style={{
-          position: 'absolute', top: '100%', right: 0, width: '360px',
+          position: 'absolute', top: '100%', right: 0, width: 'min(360px, calc(100vw - 24px))',
           background: 'white', borderRadius: '16px',
           boxShadow: '0 20px 60px rgba(0,0,0,0.15), 0 4px 16px rgba(0,0,0,0.08)',
           border: '1px solid rgba(59,130,246,0.1)',

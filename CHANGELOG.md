@@ -1,5 +1,18 @@
 # Changelog
 
+## [v1.15.8] — 2026-10-29
+### Fixed & Improved
+- **Mobile Web Screen Optimization Across `care.maskpro.ph` (`frontend/src/index.css`, `frontend/src/pages/Bookings.jsx`, `frontend/src/components/Layout.jsx`, `frontend/src/components/CounterDateModal.jsx`, `frontend/src/pages/Dashboard.jsx`, `frontend/src/pages/Profile.jsx`, `frontend/src/pages/Shop.jsx`, `frontend/src/pages/Community.jsx`)**:
+  - **Fixed New Booking Modal & 7-Column Calendar Horizontal Overflow on Mobile (`index.css`, `Bookings.jsx`)**:
+    - Added `max-width: 100vw; overflow-x: hidden;` on `html, body, #root, .app-layout` and `min-width: 0; max-width: 100%; overflow-x: hidden;` on `.main-content`, `.modal-content`, `.form-group`, `.form-input`, and `.form-select` (`text-overflow: ellipsis`) so long `<select>` option strings (e.g., `"Byd Tang — No plate (Update in My Vehicle)"`) never stretch `.modal-content` wider than the mobile viewport.
+    - Updated `.modal-overlay` (`padding: 10px`), `.modal-content` (`max-width: calc(100vw - 20px)`), `.modal-header` / `.modal-body` / `.modal-footer` (`padding: 14px 16px`), and `.booking-calendar-box` (`padding: 10px 8px`) on mobile screens.
+    - Refactored `renderCalendar` to use `gridTemplateColumns: 'repeat(7, minmax(0, 1fr))'` with `gap: '3px'` and `minWidth: 0; padding: 0` on all 7 day headers and date buttons so `Sun`–`Sat` and the availability legend fit cleanly on `320px–430px` phone screens without clipping `Fri`/`Sat` or the modal `×` close button.
+  - **Added Native-Style Mobile Booking Cards (`Bookings.jsx`, `index.css`)**:
+    - Added `.bookings-mobile-cards` on mobile viewports (`<= 768px`) to render each booking/request as a full-width card with status badge, vehicle/service info, offer/counter-date actions, and `Change Date` / `Cancel` buttons instead of forcing horizontal table scrolling.
+  - **Optimized Mobile Bottom Nav, Notification Dropdown, Dashboard, Profile, Shop & Community (`Layout.jsx`, `CounterDateModal.jsx`, `Dashboard.jsx`, `Profile.jsx`, `Shop.jsx`, `Community.jsx`)**:
+    - Constrained the mobile header Notification Bell dropdown to `width: 'min(360px, calc(100vw - 24px))'` and made the 6-item `.mobile-nav` bar compact (`flex: 1 1 0; min-width: 0; font-size: 10px`) with safe-area bottom inset.
+    - Added `flexWrap: 'wrap'` and mobile-safe grid/modal sizing across `Dashboard.jsx`, `Profile.jsx` (`minmax(min(100%, 300px), 1fr)`), `CounterDateModal.jsx`, `Shop.jsx` (`.grid-4`), and `Community.jsx`.
+
 ## [v1.15.7] — 2026-10-29
 ### Changed
 - **Renamed `My VIP Cards` / `VIP Cards` to `My MASKPROCare Cards` / `MASKPROCare Cards` (`frontend/src/pages/Dashboard.jsx`, `frontend/src/pages/Profile.jsx`, `mobile/app/(tabs)/index.tsx`, `mobile/app/(tabs)/profile.tsx`)**:

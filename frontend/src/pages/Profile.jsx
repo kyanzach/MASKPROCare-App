@@ -393,7 +393,7 @@ export default function Profile() {
           onClick={e => e.stopPropagation()}
         >
           {/* Modal Header */}
-          <div style={{ background: catMeta.gradient, padding: '24px 28px 20px', borderRadius: '24px 24px 0 0', position: 'relative', overflow: 'hidden' }}>
+          <div style={{ background: catMeta.gradient, padding: 'clamp(18px, 4vw, 24px) clamp(18px, 4vw, 28px) 18px', borderRadius: '24px 24px 0 0', position: 'relative', overflow: 'hidden' }}>
             <div style={{ position: 'absolute', top: '-30px', right: '-30px', width: '140px', height: '140px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)' }} />
             <button
               onClick={() => setSelectedCard(null)}
@@ -401,9 +401,9 @@ export default function Profile() {
             >
               <i className="bi bi-x-lg"></i>
             </button>
-            <div style={{ position: 'relative', zIndex: 1 }}>
-              <div style={{ fontSize: '14px', fontWeight: 700, color: 'rgba(255,255,255,0.85)', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '4px' }}>Warranty, Maintenance & Rewards Card</div>
-              <div style={{ fontSize: '22px', fontWeight: 800, color: 'white' }}>{card.service} — {card.tier}</div>
+            <div style={{ position: 'relative', zIndex: 1, paddingRight: '32px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: 'rgba(255,255,255,0.85)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Warranty, Maintenance & Rewards Card</div>
+              <div style={{ fontSize: 'clamp(18px, 4.5vw, 22px)', fontWeight: 800, color: 'white' }}>{card.service} — {card.tier}</div>
               {card.branch && (
                 <div style={{ marginTop: '8px', fontSize: '13px', color: 'rgba(255,255,255,0.75)', fontWeight: 500 }}>
                   <i className="bi bi-geo-alt-fill" style={{ marginRight: '4px' }}></i>
@@ -414,12 +414,12 @@ export default function Profile() {
           </div>
 
           {/* Big Barcode */}
-          <div style={{ padding: '24px 28px 16px', borderBottom: '1px dashed #e2e8f0' }}>
+          <div style={{ padding: '20px clamp(16px, 4vw, 28px) 14px', borderBottom: '1px dashed #e2e8f0' }}>
             <PDF417Barcode text={String(card.id)} fullWidth />
           </div>
 
           {/* Card Details */}
-          <div style={{ padding: '20px 28px' }}>
+          <div style={{ padding: '18px clamp(16px, 4vw, 28px)' }}>
             {/* Info Grid */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
               {card.customerName && (
@@ -870,7 +870,7 @@ export default function Profile() {
                       <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#1e293b' }}>{meta.label}</h2>
                       <span style={{ background: '#f1f5f9', color: '#64748b', fontSize: '12px', fontWeight: 600, padding: '2px 10px', borderRadius: '20px' }}>{catCards.length}</span>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '20px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: '20px' }}>
                       {catCards.map(renderLoyaltyCard)}
                     </div>
                   </div>

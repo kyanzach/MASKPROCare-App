@@ -8,7 +8,7 @@ export default function Shop() {
   const navigate = useNavigate();
 
   return (
-    <div style={{ padding: '24px', maxWidth: '800px', margin: '0 auto' }}>
+    <div style={{ padding: 'clamp(4px, 2vw, 24px)', maxWidth: '800px', margin: '0 auto' }}>
       {/* Breadcrumb */}
       <div style={{ fontSize: '13px', color: '#64748b', marginBottom: '8px' }}>
         <span style={{ cursor: 'pointer', color: '#3b82f6' }} onClick={() => navigate('/')}>Home</span>
@@ -17,20 +17,20 @@ export default function Shop() {
       </div>
 
       <h2 style={{ fontSize: '24px', fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '24px' }}>
-        <i className="bi bi-bag" style={{ color: '#6366f1' }}></i>
+        <i className="bi bi-bag" style={{ color: '#2563eb' }}></i>
         MaskPro Shop
       </h2>
 
       {/* Hero Card */}
       <div style={{
-        background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a78bfa 100%)',
+        background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 50%, #0ea5e9 100%)',
         borderRadius: '24px',
-        padding: '48px 40px',
+        padding: 'clamp(28px, 6vw, 48px) clamp(18px, 5vw, 40px)',
         textAlign: 'center',
         color: 'white',
         position: 'relative',
         overflow: 'hidden',
-        boxShadow: '0 20px 60px rgba(99, 102, 241, 0.3)',
+        boxShadow: '0 20px 60px rgba(37, 99, 235, 0.3)',
       }}>
         {/* Decorative circles */}
         <div style={{
@@ -116,10 +116,7 @@ export default function Shop() {
       </div>
 
       {/* Teaser grid */}
-      <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
-        gap: '12px', marginTop: '24px',
-      }}>
+      <div className="grid-4" style={{ marginTop: '24px' }}>
         {[
           { icon: '🚗', title: 'Car Accessories', desc: 'Premium accessories to elevate your vehicle\'s style and functionality' },
           { icon: '🔧', title: 'Premium Gadgets', desc: 'High-grade tools and gadgets handpicked for car enthusiasts' },

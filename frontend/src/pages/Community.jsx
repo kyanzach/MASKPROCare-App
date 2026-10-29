@@ -67,7 +67,7 @@ export default function Community() {
 
   if (isPosting) {
     return (
-      <div style={{ padding: '24px', maxWidth: '800px', margin: '0 auto' }}>
+      <div style={{ padding: 'clamp(4px, 2vw, 24px)', maxWidth: '800px', margin: '0 auto' }}>
         <div style={{ fontSize: '13px', color: '#64748b', marginBottom: '16px' }}>
           <span style={{ cursor: 'pointer', color: '#3b82f6' }} onClick={() => setIsPosting(false)}>Community Care</span>
           <span style={{ margin: '0 8px' }}>/</span>
@@ -75,12 +75,12 @@ export default function Community() {
         </div>
 
         <div style={{
-          background: 'white', borderRadius: '16px', padding: '32px',
+          background: 'white', borderRadius: '16px', padding: 'clamp(16px, 4vw, 32px)',
           boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
         }}>
-          <h2 style={{ margin: '0 0 24px', fontSize: '24px', color: '#1e293b' }}>Create a New Post</h2>
+          <h2 style={{ margin: '0 0 24px', fontSize: 'clamp(20px, 4.5vw, 24px)', color: '#1e293b' }}>Create a New Post</h2>
 
-          <div style={{ display: 'flex', gap: '16px', marginBottom: '24px' }}>
+          <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
             <button
               onClick={() => setPostType('sos')}
               style={{
@@ -170,18 +170,18 @@ export default function Community() {
   }
 
   return (
-    <div style={{ padding: '24px', maxWidth: '800px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+    <div style={{ padding: 'clamp(4px, 2vw, 24px)', maxWidth: '800px', margin: '0 auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
         <h2 style={{ fontSize: '24px', fontWeight: 700, color: '#1e293b', margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <i className="bi bi-people" style={{ color: '#4f46e5' }}></i>
+          <i className="bi bi-people" style={{ color: '#2563eb' }}></i>
           Community Care
         </h2>
         <button
           onClick={() => setIsPosting(true)}
           style={{
-            background: '#4f46e5', color: 'white', border: 'none', borderRadius: '8px',
+            background: '#2563eb', color: 'white', border: 'none', borderRadius: '8px',
             padding: '10px 20px', fontSize: '14px', fontWeight: 600, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px rgba(79, 70, 229, 0.2)'
+            display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px rgba(37, 99, 235, 0.2)'
           }}
         >
           <i className="bi bi-pencil-square"></i> Create Post

@@ -53,7 +53,7 @@ export default function CounterDateModal({ open, mode = 'decline', offeredDate, 
     onSubmit({ counterDate: date ? `${date} ${time}` : '', reason: reason.trim() });
   };
 
-  const accent = isPropose ? '#6d28d9' : '#dc2626';
+  const accent = isPropose ? '#2563eb' : '#dc2626';
 
   return (
     <div
@@ -61,22 +61,22 @@ export default function CounterDateModal({ open, mode = 'decline', offeredDate, 
       aria-modal="true"
       style={{
         position: 'fixed', inset: 0, backgroundColor: 'rgba(15,23,42,0.55)', zIndex: 9999,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px',
       }}
     >
       <div style={{
-        backgroundColor: '#fff', borderRadius: '16px', padding: '24px',
-        maxWidth: '440px', width: '100%', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.15)',
+        backgroundColor: '#fff', borderRadius: '16px', padding: 'clamp(16px, 4vw, 24px)',
+        maxWidth: '440px', width: '100%', boxSizing: 'border-box', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.15)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
           <div style={{
-            width: '40px', height: '40px', borderRadius: '20px',
-            backgroundColor: isPropose ? '#ede9fe' : '#fee2e2',
+            width: '40px', height: '40px', borderRadius: '20px', flexShrink: 0,
+            backgroundColor: isPropose ? '#dbeafe' : '#fee2e2',
             display: 'flex', alignItems: 'center', justifyContent: 'center', color: accent,
           }}>
             <i className={isPropose ? 'fas fa-calendar-plus' : 'fas fa-calendar-times'} style={{ fontSize: '18px' }}></i>
           </div>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: '#111827' }}>
               {isPropose ? 'Propose a Preferred Date' : 'Decline or Propose New Date'}
             </h3>
@@ -90,21 +90,21 @@ export default function CounterDateModal({ open, mode = 'decline', offeredDate, 
           <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#374151', marginBottom: '6px' }}>
             {isPropose ? 'Your Preferred Date & Time' : 'Suggest Preferred Date & Time (Optional)'}
           </label>
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '4px' }}>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
             <input
               id="counter-date-input"
               type="date"
               min={tomorrowYmd()}
               value={date}
               onChange={(e) => { setDate(e.target.value); setFieldError(''); }}
-              style={{ flex: 1.4, borderRadius: '8px', border: '1px solid #d1d5db', padding: '9px 10px', fontSize: '13px' }}
+              style={{ flex: '1 1 160px', minWidth: 0, borderRadius: '8px', border: '1px solid #d1d5db', padding: '9px 10px', fontSize: '13px', boxSizing: 'border-box' }}
             />
             <select
               id="counter-time-select"
               value={time}
               onChange={(e) => setTime(e.target.value)}
               disabled={!date}
-              style={{ flex: 1, borderRadius: '8px', border: '1px solid #d1d5db', padding: '9px 10px', fontSize: '13px', background: '#fff' }}
+              style={{ flex: '1 1 130px', minWidth: 0, borderRadius: '8px', border: '1px solid #d1d5db', padding: '9px 10px', fontSize: '13px', background: '#fff', boxSizing: 'border-box' }}
             >
               {TIME_SLOTS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>

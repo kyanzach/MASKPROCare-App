@@ -444,7 +444,8 @@ export default function Bookings() {
       {/* Unified Booking List */}
       <div className="card-modern" style={{ borderRadius: '16px', overflow: 'hidden' }}>
         {unifiedList.length > 0 ? (
-          <div style={{ overflowX: 'auto' }}>
+          <>
+          <div className="bookings-desktop-table" style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
               <thead>
                 <tr style={{ background: 'rgba(59,130,246,0.05)', borderBottom: '2px solid rgba(59,130,246,0.1)' }}>
@@ -621,6 +622,176 @@ export default function Bookings() {
               </tbody>
             </table>
           </div>
+
+          {/* Mobile Card Layout */}
+          <div className="bookings-mobile-cards">
+            {unifiedList.map((item) => {
+              const isNegotiationStage = item.status === 'negotiating' || item.status === 'waitlisted';
+              const sc = isNegotiationStage ? STATUS_CONFIG.pending : (STATUS_CONFIG[item.status] || STATUS_CONFIG.scheduled);
+              const subSc = isNegotiationStage ? STATUS_CONFIG[item.status] : null;
+              const isRejected = item.status === 'rejected';
+              const hasOffer = !!item.offered_date;
+              const isOfferOpen = hasOffer && (!item.offer_status || item.offer_status === 'offered');
+              const canPropose = item.type === 'request' && (isRejected || item.status === 'negotiating') && !isOfferOpen;
+              return (
+                <div
+                  key={`mobile-${item.type}-${item.id}`}
+                  style={{
+                    borderRadius: '14px',
+                    border: isRejected ? '1.5px solid #fca5a5' : '1px solid rgba(59,130,246,0.14)',
+                    background: isRejected ? '#fff8f8' : '#ffffff',
+                    padding: '14px',
+                    opacity: item.status === 'cancelled' ? 0.7 : 1,
+                    boxShadow: '0 2px 8px rgba(15,23,42,0.04)',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '14px', color: isRejected ? '#991b1b' : '#1f2937' }}>{item.dateStr}</div>
+                      <div style={{ fontSize: '12px', color: '#64748b' }}>{item.timeStr}</div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '4px',
+                        padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 700,
+                        background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`, whiteSpace: 'nowrap',
+                      }}>
+                        <i className={`fas ${sc.icon}`} style={{ fontSize: '10px' }}></i>
+                        {sc.label}
+                      </span>
+                      {subSc && (
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '4px',
+                          padding: '2px 8px', borderRadius: '20px', fontSize: '10px', fontWeight: 700,
+                          background: subSc.bg, color: subSc.color, border: `1px solid ${subSc.border}`, whiteSpace: 'nowrap',
+                        }}>
+                          <i className={`fas ${subSc.icon}`} style={{ fontSize: '9px' }}></i>
+                          {subSc.label}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '13px', color: '#334155', marginBottom: '6px' }}>
+                    <div style={{ fontWeight: 700, color: '#0f172a' }}>
+                      {item.make} {item.model} {item.plate_no ? <span style={{ fontWeight: 500, color: '#64748b' }}>• {item.plate_no}</span> : null}
+                    </div>
+                    <div style={{ color: '#2563eb', fontWeight: 600, marginTop: '2px' }}>{item.service}</div>
+                  </div>
+
+                  {isRejected && item.rejection_reason && (
+                    <div style={{ fontSize: '12px', color: '#b91c1c', background: '#fee2e2', padding: '6px 8px', borderRadius: '8px', marginTop: '6px' }}>
+                      <strong>Reason:</strong> {item.rejection_reason}
+                    </div>
+                  )}
+
+                  {hasOffer && (
+                    <div style={{ fontSize: '12px', color: '#1e40af', background: '#eff6ff', padding: '8px 10px', borderRadius: '8px', marginTop: '8px', border: '1px solid #bfdbfe' }}>
+                      <div>
+                        <strong>Proposed Date:</strong> {new Date(item.offered_date).toLocaleDateString()} {new Date(item.offered_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                      {isOfferOpen && (item.status === 'rejected' || item.status === 'negotiating') && (
+                        <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleAcceptOffer(item.id)}
+                            disabled={respondingOffer}
+                            style={{ padding: '5px 10px', borderRadius: '6px', border: 'none', background: '#16a34a', color: '#fff', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                          >
+                            Accept Date
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeclineModal({ open: true, item, mode: 'decline' })}
+                            disabled={respondingOffer}
+                            style={{ padding: '5px 10px', borderRadius: '6px', border: '1px solid #ef4444', background: '#fff', color: '#dc2626', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                          >
+                            Decline / Propose
+                          </button>
+                        </div>
+                      )}
+                      {item.offer_status === 'countered' && (
+                        <div style={{ color: '#1e40af', fontWeight: 600, marginTop: '4px' }}>
+                          ⇄ You suggested a different schedule.
+                        </div>
+                      )}
+                      {item.offer_status === 'accepted' && (
+                        <div style={{ color: '#15803d', fontWeight: 600, marginTop: '4px' }}>✓ Accepted agreed date</div>
+                      )}
+                      {item.offer_status === 'declined' && (
+                        <div style={{ color: '#b91c1c', fontWeight: 600, marginTop: '4px' }}>
+                          ✕ Declined: {item.customer_offer_reply}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {item.type === 'request' && (item.counter_date || item.status === 'waitlisted' || canPropose) && (
+                    <div style={{
+                      fontSize: '12px', padding: '8px 10px', borderRadius: '8px', marginTop: '8px',
+                      background: item.status === 'waitlisted' ? '#fffbeb' : '#eff6ff',
+                      border: `1px solid ${item.status === 'waitlisted' ? '#fde68a' : '#bfdbfe'}`,
+                    }}>
+                      {item.counter_date && (
+                        <div style={{ color: item.status === 'waitlisted' ? '#92400e' : '#1e40af' }}>
+                          <i className="fas fa-calendar-plus" style={{ marginRight: 4 }}></i>
+                          <strong>Your Preferred Date:</strong> {formatCounterDate(item.counter_date)}
+                        </div>
+                      )}
+                      <div style={{ color: '#4b5563', marginTop: item.counter_date ? '3px' : 0 }}>
+                        {item.status === 'waitlisted'
+                          ? "You're on the waitlist — we'll call you once a slot opens."
+                          : item.counter_date
+                          ? 'Our branch will call you to finalize your schedule.'
+                          : 'None of the dates work? Propose your preferred date.'}
+                      </div>
+                      {canPropose && (
+                        <button
+                          type="button"
+                          onClick={() => setDeclineModal({ open: true, item, mode: 'propose' })}
+                          disabled={respondingOffer}
+                          style={{ marginTop: '6px', padding: '5px 10px', borderRadius: '6px', border: 'none', background: '#2563eb', color: '#fff', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                        >
+                          <i className="fas fa-calendar-alt" style={{ marginRight: 4 }}></i>
+                          {item.counter_date ? 'Change Preferred Date' : 'Propose a Preferred Date'}
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {(canEdit(item) || canCancel(item)) && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}>
+                      {canEdit(item) && (
+                        <button
+                          onClick={() => openEditModal(item)}
+                          style={{
+                            padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 600,
+                            border: '1px solid rgba(59,130,246,0.3)', background: 'rgba(59,130,246,0.06)',
+                            color: '#2563eb', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px',
+                          }}
+                        >
+                          <i className="fas fa-pencil-alt" style={{ fontSize: '11px' }}></i> Change Date
+                        </button>
+                      )}
+                      {canCancel(item) && (
+                        <button
+                          onClick={() => openCancelModal(item)}
+                          style={{
+                            padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 600,
+                            border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.06)',
+                            color: '#dc2626', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px',
+                          }}
+                        >
+                          <i className="fas fa-times" style={{ fontSize: '11px' }}></i> Cancel
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          </>
         ) : (
           <div className="empty-state">
             <div className="empty-state-icon"><i className="fas fa-calendar-check"></i></div>
@@ -647,7 +818,13 @@ export default function Bookings() {
                 <div className="form-group">
                   <label className="form-label"><i className="fas fa-car" style={{ marginRight: '6px', color: '#3b82f6' }}></i>Select Vehicle *</label>
                   {vehicles.length > 0 ? (
-                    <select className="form-select" value={String(bookingForm.vehicle_id || '')} onChange={e => handleVehicleChange(e.target.value)} required>
+                    <select
+                      className="form-select"
+                      style={{ width: '100%', maxWidth: '100%', minWidth: 0, textOverflow: 'ellipsis' }}
+                      value={String(bookingForm.vehicle_id || '')}
+                      onChange={e => handleVehicleChange(e.target.value)}
+                      required
+                    >
                       <option value="">Choose a vehicle...</option>
                       {vehicles.map(v => <option key={v.id} value={String(v.id)}>{v.make} {v.model} — {v.plate_no || 'No plate (Update in My Vehicle)'}</option>)}
                     </select>
@@ -666,7 +843,13 @@ export default function Bookings() {
                 {/* Service */}
                 <div className="form-group">
                   <label className="form-label"><i className="fas fa-wrench" style={{ marginRight: '6px', color: '#3b82f6' }}></i>Select Service *</label>
-                  <select className="form-select" value={bookingForm.service_type} onChange={e => handleServiceChange(e.target.value)} required>
+                  <select
+                    className="form-select"
+                    style={{ width: '100%', maxWidth: '100%', minWidth: 0, textOverflow: 'ellipsis' }}
+                    value={bookingForm.service_type}
+                    onChange={e => handleServiceChange(e.target.value)}
+                    required
+                  >
                     <option value="">Choose a service...</option>
                     {serviceTypes.map(s => <option key={s.api_name} value={s.api_name}>{s.label}</option>)}
                   </select>
@@ -679,7 +862,7 @@ export default function Bookings() {
                     {loadingDates ? (
                       <div style={{ textAlign: 'center', padding: '24px' }}><div className="spinner" style={{ borderColor: 'rgba(59,130,246,0.2)', borderTopColor: '#3b82f6', width: '28px', height: '28px' }}></div><p style={{ color: '#64748b', marginTop: '8px', fontSize: '13px' }}>Checking availability...</p></div>
                     ) : (
-                      <div style={{ background: 'rgba(255,255,255,0.95)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '12px', padding: '16px' }}>
+                      <div className="booking-calendar-box">
                         {renderCalendar(calendarMonth, setCalendarMonth, calendarDays, handleDateSelect)}
                       </div>
                     )}
@@ -788,7 +971,7 @@ export default function Bookings() {
                 {editLoadingDates ? (
                   <div style={{ textAlign: 'center', padding: '24px' }}><div className="spinner" style={{ borderColor: 'rgba(59,130,246,0.2)', borderTopColor: '#3b82f6', width: '28px', height: '28px' }}></div></div>
                 ) : (
-                  <div style={{ background: 'rgba(255,255,255,0.95)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '12px', padding: '16px' }}>
+                  <div className="booking-calendar-box">
                     {renderCalendar(editCalendarMonth, setEditCalendarMonth, editCalendarDays, (d) => setEditDate(d))}
                   </div>
                 )}
@@ -839,35 +1022,36 @@ export default function Bookings() {
 // Shared calendar renderer
 function renderCalendar(month, setMonth, days, onSelect) {
   return (
-    <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+    <div style={{ width: '100%', maxWidth: '100%', minWidth: 0 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', gap: '8px' }}>
         <button type="button" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1))}
-          style={{ background: 'var(--primary-gradient)', color: 'white', border: 'none', borderRadius: '8px', width: '32px', height: '32px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          style={{ background: 'var(--primary-gradient)', color: 'white', border: 'none', borderRadius: '8px', width: '32px', height: '32px', flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <i className="fas fa-chevron-left"></i>
         </button>
-        <span style={{ fontWeight: 600, color: '#374151' }}>
+        <span style={{ fontWeight: 700, color: '#374151', fontSize: '14px', textAlign: 'center' }}>
           {month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
         </span>
         <button type="button" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1))}
-          style={{ background: 'var(--primary-gradient)', color: 'white', border: 'none', borderRadius: '8px', width: '32px', height: '32px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          style={{ background: 'var(--primary-gradient)', color: 'white', border: 'none', borderRadius: '8px', width: '32px', height: '32px', flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <i className="fas fa-chevron-right"></i>
         </button>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '4px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '3px', marginBottom: '4px', width: '100%' }}>
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, idx) => (
-          <div key={d} style={{ textAlign: 'center', fontWeight: 600, color: idx === 0 ? '#ef4444' : '#6b7280', padding: '6px', fontSize: '12px' }}>{d}</div>
+          <div key={d} style={{ textAlign: 'center', fontWeight: 600, color: idx === 0 ? '#ef4444' : '#6b7280', padding: '4px 0', fontSize: '11px', minWidth: 0 }}>{d}</div>
         ))}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '3px', width: '100%' }}>
         {days.map((d, i) => {
-          if (!d) return <div key={`empty-${i}`} />;
+          if (!d) return <div key={`empty-${i}`} style={{ minWidth: 0 }} />;
           const canClick = (d.isAvailable || d.isLimited) && !d.isPast && !d.isSunday && !d.isClosed;
           return (
             <button key={d.dateStr} type="button" onClick={() => canClick && onSelect(d.dateStr)}
               title={d.isPast ? 'Past Date' : d.isClosed || d.isSunday ? 'Closed' : d.isLimited ? 'Almost Full' : d.isUnavailable ? 'Fully Booked' : 'Available'}
               style={{
+                width: '100%', minWidth: 0, padding: 0,
                 aspectRatio: '1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                borderRadius: '10px', position: 'relative',
+                borderRadius: '8px', position: 'relative', boxSizing: 'border-box',
                 border: d.isSelected ? '2px solid #1e40af'
                   : (d.isPast || d.isSunday) ? '1.5px solid #f3f4f6'
                   : d.isToday ? '2px solid #2563eb'
@@ -888,7 +1072,8 @@ function renderCalendar(month, setMonth, days, onSelect) {
                   : d.isAvailable ? '#15803d'
                   : d.isUnavailable ? '#b91c1c'
                   : d.isClosed ? '#94a3b8' : '#1f2937',
-                fontWeight: d.isSelected || d.isToday ? 800 : (d.isAvailable || d.isLimited || d.isUnavailable) ? 700 : 500, fontSize: '14px',
+                fontWeight: d.isSelected || d.isToday ? 800 : (d.isAvailable || d.isLimited || d.isUnavailable) ? 700 : 500,
+                fontSize: 'clamp(12px, 3.3vw, 14px)',
                 cursor: canClick ? 'pointer' : 'not-allowed',
                 transition: 'all 0.15s ease',
                 textDecoration: d.isUnavailable && !d.isPast ? 'line-through' : 'none',
@@ -898,17 +1083,17 @@ function renderCalendar(month, setMonth, days, onSelect) {
           );
         })}
       </div>
-      <div style={{ display: 'flex', gap: '8px', marginTop: '14px', justifyContent: 'center', fontSize: '11px', flexWrap: 'wrap', fontWeight: 600 }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 10px', borderRadius: '8px', background: '#dcfce7', border: '1px solid #86efac', color: '#15803d' }}>
-          <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#16a34a' }}></span>Available
+      <div style={{ display: 'flex', gap: '6px', marginTop: '12px', justifyContent: 'center', fontSize: '11px', flexWrap: 'wrap', fontWeight: 600 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: '#dcfce7', border: '1px solid #86efac', color: '#15803d', whiteSpace: 'nowrap' }}>
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#16a34a' }}></span>Available
         </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 10px', borderRadius: '8px', background: '#fef3c7', border: '1px solid #fcd34d', color: '#b45309' }}>
-          <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#d97706' }}></span>Almost Full
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: '#fef3c7', border: '1px solid #fcd34d', color: '#b45309', whiteSpace: 'nowrap' }}>
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#d97706' }}></span>Almost Full
         </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 10px', borderRadius: '8px', background: '#fee2e2', border: '1px solid #fca5a5', color: '#b91c1c' }}>
-          <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#dc2626' }}></span>Full
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 8px', borderRadius: '8px', background: '#fee2e2', border: '1px solid #fca5a5', color: '#b91c1c', whiteSpace: 'nowrap' }}>
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#dc2626' }}></span>Full
         </span>
       </div>
-    </>
+    </div>
   );
 }
