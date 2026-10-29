@@ -188,48 +188,66 @@ function evaluateMonthScore(inputMonthText, bookingDate) {
   return 0;
 }
 
-// Identifier 3: Booked Service Evaluator (Max 20 pts)
+// Identifier 3: Booked Service Evaluator (Max 20 pts) — Strict per actual service category
 function evaluateServiceScore(inputService, actualServices) {
   if (!inputService || !actualServices || actualServices.length === 0) return 0;
-  const input = inputService.toLowerCase();
+  const input = inputService.toLowerCase().trim();
 
-  const serviceKeywords = [
-    { aliases: ['nanofix', 'nano fix', 'maintenance', 'fix', 'maintain'] },
-    { aliases: ['ceramic coating', 'ceramic', 'coating', 'nano ceramic'] },
-    { aliases: ['tint', 'window tint', 'ceramic tint', 'titanium', 'film'] },
-    { aliases: ['graphene', 'graphene coating'] },
-    { aliases: ['paint', 'auto paint', 'repair', 'body repair'] },
-    { aliases: ['ppf', 'paint protection film', 'protection film'] },
-    { aliases: ['clean', 'go and clean', 'go & clean', 'carwash', 'wash', 'detailing'] },
+  // Strict category definitions:
+  // - Maintenance / NanoFix share the same answer, but NEVER match Coating
+  // - "coating" matches only when the actual service is Coating
+  // - "tint" matches only when the actual service is Tint
+  // - "ppf" matches only when the actual service is PPF
+  const strictCategories = [
+    {
+      name: 'nanofix_maintenance',
+      actualMatchers: ['nanofix', 'nano fix', 'maintenance'],
+      userAliases: ['nanofix', 'nano fix', 'maintenance', 'maintain', 'fix', 'pms'],
+    },
+    {
+      name: 'coating',
+      actualMatchers: ['coating', 'graphene'],
+      userAliases: ['nano ceramic coating', 'ceramic coating', 'graphene coating', 'coating', 'ceramic', 'graphene'],
+    },
+    {
+      name: 'tint',
+      actualMatchers: ['tint'],
+      userAliases: ['nano ceramic tint', 'ceramic tint', 'window tint', 'titanium tint', 'tint', 'tinting'],
+    },
+    {
+      name: 'ppf',
+      actualMatchers: ['ppf', 'paint protection film', 'protection film'],
+      userAliases: ['ppf', 'paint protection film', 'protection film'],
+    },
+    {
+      name: 'clean_wash',
+      actualMatchers: ['go & clean', 'go and clean', 'clean', 'carwash', 'wash', 'detailing'],
+      userAliases: ['go & clean', 'go and clean', 'clean', 'carwash', 'car wash', 'wash', 'detailing'],
+    },
+    {
+      name: 'paint_repair',
+      actualMatchers: ['auto paint', 'body repair', 'repaint'],
+      userAliases: ['auto paint', 'paint', 'body repair', 'repair', 'repaint'],
+    },
   ];
 
-  const actualNames = actualServices.map(s => (s.service_name || s.name || '').toLowerCase()).join(' ');
+  const actualNames = actualServices.map(s => (s.service_name || s.name || '').toLowerCase()).join(' | ');
 
-  for (const group of serviceKeywords) {
-    const userMentions = group.aliases.some(alias => input.includes(alias));
-    const actualHas = group.aliases.some(alias => actualNames.includes(alias));
-    if (userMentions && actualHas) {
+  for (const cat of strictCategories) {
+    const actualHasCategory = cat.actualMatchers.some(m => actualNames.includes(m));
+    const userMentionsCategory = cat.userAliases.some(alias => input.includes(alias));
+    if (actualHasCategory && userMentionsCategory) {
+      // Extra guard: if user only typed "ceramic", ensure if they typed "ceramic coating" it doesn't match "Nano Ceramic Tint"
+      if (cat.name === 'coating' && input.includes('tint')) continue;
+      if (cat.name === 'tint' && input.includes('coating')) continue;
       return 20.0;
     }
-  }
-
-  // Domain intelligence: NanoFix is the maintenance program for Nano Ceramic Coating.
-  // Customers whose earliest imported booking is "Nano Fix (Maintenance)" often state "Nano Ceramic Coating" (or vice versa).
-  const mentionsCoating = ['ceramic coating', 'ceramic', 'coating', 'nano ceramic'].some(a => input.includes(a));
-  const mentionsNanoFix = ['nanofix', 'nano fix', 'maintenance'].some(a => input.includes(a));
-  const actualHasCoating = ['ceramic coating', 'nano ceramic'].some(a => actualNames.includes(a));
-  const actualHasNanoFix = ['nanofix', 'nano fix', 'maintenance'].some(a => actualNames.includes(a));
-  if ((mentionsCoating && actualHasNanoFix) || (mentionsNanoFix && actualHasCoating)) {
-    return 20.0;
   }
 
   for (const s of actualServices) {
     const name = (s.service_name || s.name || '').toLowerCase();
-    if (name && (input.includes(name) || name.includes(input))) {
+    if (name && calculateStringSimilarity(input, name) >= 0.75) {
       return 20.0;
-    }
-    if (calculateStringSimilarity(input, name) >= 0.6) {
-      return 17.0;
     }
   }
 
@@ -576,42 +594,28 @@ router.post('/message', async (req, res) => {
       const nameScore = evaluateNameScore(claimedName, customer.full_name); // max 25
       const mobileScore = evaluateMobileScore(claimedMobile, customer.mobile_number); // max 15
 
-      // Also fetch all customer vehicles in case vehicle is on profile
-      const [customerVehicles] = await pool.query(
-        'SELECT make, model FROM vehicles WHERE customer_id = ?',
-        [customer.id]
-      );
-
-      // Evaluate Month, Service, and Vehicle across the customer's booking history & vehicles.
-      // Customers often provide their first visit date (e.g., March 2021) + their main service (e.g., Nano Ceramic Coating)
-      // + their vehicle (e.g., Innova), even if those span multiple booking records on the same vehicle/account.
+      // Strictly evaluate Month, Service, and Vehicle against the same booking record (first booking or best matching booking)
       let bestMonthScore = 0;
       let bestServiceScore = 0;
       let bestVehicleScore = 0;
 
-      const allProfileServices = [];
+      if (firstBooking) {
+        bestMonthScore = evaluateMonthScore(claimedMonth, firstBooking.booking_date);
+        bestServiceScore = evaluateServiceScore(claimedService, firstBooking.services);
+        bestVehicleScore = evaluateVehicleScore(claimedVehicle, { make: firstBooking.make, model: firstBooking.model });
+      }
+
+      // If customer had multiple bookings on the same date or remembered another specific booking, evaluate each booking strictly as a unit
       for (const b of bookingList) {
         const mScore = evaluateMonthScore(claimedMonth, b.booking_date);
-        if (mScore > bestMonthScore) bestMonthScore = mScore;
-
         const sScore = evaluateServiceScore(claimedService, b.services);
-        if (sScore > bestServiceScore) bestServiceScore = sScore;
-
         const vScore = evaluateVehicleScore(claimedVehicle, { make: b.make, model: b.model });
-        if (vScore > bestVehicleScore) bestVehicleScore = vScore;
 
-        if (b.services && b.services.length > 0) {
-          allProfileServices.push(...b.services);
+        if ((mScore + sScore + vScore) > (bestMonthScore + bestServiceScore + bestVehicleScore)) {
+          bestMonthScore = mScore;
+          bestServiceScore = sScore;
+          bestVehicleScore = vScore;
         }
-      }
-
-      if (bestServiceScore === 0 && allProfileServices.length > 0) {
-        bestServiceScore = evaluateServiceScore(claimedService, allProfileServices);
-      }
-
-      for (const veh of customerVehicles) {
-        const vScore = evaluateVehicleScore(claimedVehicle, veh);
-        if (vScore > bestVehicleScore) bestVehicleScore = vScore;
       }
 
       const totalScore = parseFloat((nameScore + bestMonthScore + bestServiceScore + bestVehicleScore + mobileScore).toFixed(1));

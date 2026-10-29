@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.17.10] — 2026-10-29
+### Changed
+- **Strict Per-Booking Service Category Matching with Short-Form Acceptance in Izumi AI Identity Verification (`server/routes/aiAuth.js`)**:
+  - Reverted the `coating <-> nanofix` equivalence and cross-booking dilution so Izumi strictly verifies the exact service category recorded on that specific booking (`mScore + sScore + vScore` evaluated as a single booking unit).
+  - Kept short-form acceptance within each true service category: `maintenance` and `nanofix` share the same category (`Nano Fix (Maintenance)`), while `coating` matches `Nano Ceramic Coating` / `Graphene Coating`, `tint` matches `Nano Ceramic Tint` / `Window Tint`, and `ppf` matches `PPF` / `Paint Protection Film`.
+
 ## [v1.17.9] — 2026-10-29
 ### Fixed & Improved
 - **Smarter Izumi AI Identity Verification: Cross-Booking Service Matching, NanoFix/Coating Domain Equivalence & Year-Only Acceptance (`server/routes/aiAuth.js`)**:
