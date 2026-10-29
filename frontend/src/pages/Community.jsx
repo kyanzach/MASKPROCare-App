@@ -25,6 +25,8 @@ export default function Community() {
 
   useEffect(() => {
     fetchPosts();
+    const interval = setInterval(fetchPosts, 6000);
+    return () => clearInterval(interval);
   }, []);
 
   const fetchPosts = async () => {

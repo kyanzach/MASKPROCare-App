@@ -102,6 +102,8 @@ export default function CommunityScreen() {
 
   useEffect(() => {
     fetchPosts();
+    const interval = setInterval(fetchPosts, 6000);
+    return () => clearInterval(interval);
   }, []);
 
   const onRefresh = useCallback(() => {

@@ -262,12 +262,11 @@ router.post('/login', async (req, res) => {
 router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
   try {
     // 1. Core KPIs
-    const [[custCount]] = await pool.query('SELECT COUNT(*) AS total FROM customers');
-    const [[vehCount]] = await pool.query('SELECT COUNT(*) AS total FROM customer_vehicles');
-    const [[cardCount]] = await pool.query('SELECT COUNT(*) AS total FROM bookings WHERE status = "Done"');
+    const [[custCount]] = await pool.query('SELECT COUNT(*) AS total FROM customers').catch(() => [[{ total: 0 }]]);
+    const [[cardCount]] = await pool.query('SELECT COUNT(*) AS total FROM bookings WHERE status = "Done"').catch(() => [[{ total: 0 }]]);
     const [[pendingBookings]] = await pool.query('SELECT COUNT(*) AS total FROM care_booking_requests WHERE status = "pending"').catch(() => [[{ total: 0 }]]);
-    const [[sosCount]] = await pool.query("SELECT COUNT(*) AS total FROM community_posts WHERE type = 'sos' AND status = 'open' AND is_approved = 1");
-    const [[pendingModCount]] = await pool.query("SELECT COUNT(*) AS total FROM community_posts WHERE moderation_status = 'pending' AND status != 'hidden'");
+    const [[sosCount]] = await pool.query("SELECT COUNT(*) AS total FROM community_posts WHERE type = 'sos' AND status = 'open' AND is_approved = 1").catch(() => [[{ total: 0 }]]);
+    const [[pendingModCount]] = await pool.query("SELECT COUNT(*) AS total FROM community_posts WHERE moderation_status = 'pending' AND status != 'hidden'").catch(() => [[{ total: 0 }]]);
 
     // 2. Platform Breakdown from care_app_telemetry
     const [platformRows] = await pool.query(`
@@ -351,13 +350,12 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
         t.api_hits,
         t.first_seen_at,
         t.last_seen_at,
-        (SELECT COUNT(*) FROM bookings b WHERE b.customer_id = c.id) AS booking_count,
-        (SELECT COUNT(*) FROM customer_vehicles cv WHERE cv.customer_id = c.id) AS vehicle_count
+        (SELECT COUNT(*) FROM bookings b WHERE b.customer_id = c.id) AS booking_count
       FROM care_app_telemetry t
       JOIN customers c ON c.id = t.customer_id
       ORDER BY t.last_seen_at DESC
       LIMIT 40
-    `);
+    `).catch(() => [[]]);
 
     return res.json({
       success: true,
@@ -365,9 +363,12 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
         kpis: {
           total_customers: Number(custCount?.total || 0),
           active_app_users: activeAppUsers,
+          web_users: Number(platformMap.web.unique_users || 0),
+          android_users: Number(platformMap.android.unique_users || 0),
+          ios_users: Number(platformMap.ios.unique_users || 0),
+          native_users: Number(platformMap.android.unique_users || 0) + Number(platformMap.ios.unique_users || 0),
           total_sessions: totalSessions,
           total_api_hits: totalApiHits,
-          total_vehicles: Number(vehCount?.total || 0),
           total_care_cards: Number(cardCount?.total || 0),
           pending_booking_requests: Number(pendingBookings?.total || 0),
           active_sos_count: Number(sosCount?.total || 0),

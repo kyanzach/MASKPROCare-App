@@ -76,6 +76,11 @@ export default function AdminPanelScreen() {
   const [toastMsg, setToastMsg] = useState('');
 
   const searchTimeoutRef = useRef<any>(null);
+  const modFilterRef = useRef<'pending' | 'sos' | 'approved' | 'rejected'>('pending');
+
+  useEffect(() => {
+    modFilterRef.current = modFilter;
+  }, [modFilter]);
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -90,8 +95,8 @@ export default function AdminPanelScreen() {
         if (isMounted) {
           if (res.data?.data?.isAdmin) {
             setIsAdmin(true);
-            loadDashboard();
-            loadModerationPosts('pending');
+            loadDashboard(false);
+            loadModerationPosts('pending', false);
             loadCustomers(1, '');
           } else {
             setIsAdmin(false);
@@ -109,32 +114,42 @@ export default function AdminPanelScreen() {
     };
   }, []);
 
-  const loadDashboard = async () => {
-    setDashLoading(true);
+  // Real-time background polling every 5s so moderation queue & usage analytics update automatically
+  useEffect(() => {
+    if (!isAdmin) return;
+    const interval = setInterval(() => {
+      loadDashboard(true);
+      loadModerationPosts(modFilterRef.current, true);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isAdmin]);
+
+  const loadDashboard = async (silent = false) => {
+    if (!silent) setDashLoading(true);
     try {
       const res = await client.get('/admin/dashboard');
       if (res.data?.success) {
         setDashData(res.data.data);
       }
-    } catch (err) {
-      console.error('[Admin] Dashboard load error:', err);
+    } catch {
+      // silent background error handling
     } finally {
-      setDashLoading(false);
+      if (!silent) setDashLoading(false);
     }
   };
 
-  const loadModerationPosts = async (filterVal = modFilter) => {
-    setModLoading(true);
+  const loadModerationPosts = async (filterVal = modFilter, silent = false) => {
+    if (!silent) setModLoading(true);
     try {
       const res = await client.get(`/admin/community/posts?filter=${encodeURIComponent(filterVal)}`);
       if (res.data?.success) {
         setModPosts(res.data.data.posts || []);
         setModCounts(res.data.data.counts || { pending: 0, active_sos: 0, approved: 0, rejected: 0, total: 0 });
       }
-    } catch (err) {
-      console.error('[Admin] Moderation load error:', err);
+    } catch {
+      // silent background error handling
     } finally {
-      setModLoading(false);
+      if (!silent) setModLoading(false);
     }
   };
 
@@ -355,17 +370,29 @@ export default function AdminPanelScreen() {
             <RefreshControl refreshing={dashLoading} onRefresh={loadDashboard} tintColor="#f59e0b" />
           }
         >
-          {/* KPI Grid */}
+          {/* KPI Grid — Focused strictly on App Access (Web vs Native iOS/Android) & Moderation */}
           <View style={styles.kpiGrid}>
             <View style={styles.kpiCard}>
               <Text style={styles.kpiLabel}>Total Customers</Text>
               <Text style={styles.kpiValue}>{(kpis.total_customers || 0).toLocaleString()}</Text>
-              <Text style={styles.kpiSub}>{(kpis.total_vehicles || 0).toLocaleString()} vehicles</Text>
+              <Text style={styles.kpiSub}>Registered in Unify</Text>
             </View>
             <View style={styles.kpiCard}>
               <Text style={styles.kpiLabel}>Active App Users</Text>
               <Text style={[styles.kpiValue, { color: '#34d399' }]}>{kpis.active_app_users || 0}</Text>
-              <Text style={styles.kpiSub}>{kpis.total_sessions || 0} sessions</Text>
+              <Text style={styles.kpiSub}>{kpis.total_sessions || 0} total sessions</Text>
+            </View>
+            <View style={styles.kpiCard}>
+              <Text style={styles.kpiLabel}>Web App Users</Text>
+              <Text style={[styles.kpiValue, { color: '#60a5fa' }]}>{kpis.web_users || 0}</Text>
+              <Text style={styles.kpiSub}>Browser Access</Text>
+            </View>
+            <View style={styles.kpiCard}>
+              <Text style={styles.kpiLabel}>Native App Users</Text>
+              <Text style={[styles.kpiValue, { color: '#38bdf8' }]}>{kpis.native_users || 0}</Text>
+              <Text style={styles.kpiSub}>
+                iOS ({kpis.ios_users || 0}) • Android ({kpis.android_users || 0})
+              </Text>
             </View>
             <TouchableOpacity
               style={[styles.kpiCard, kpis.pending_moderation_count > 0 && { borderColor: '#f59e0b' }]}

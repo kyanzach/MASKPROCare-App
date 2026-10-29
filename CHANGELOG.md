@@ -1,5 +1,16 @@
 # Changelog
 
+## [v1.16.1] — 2026-10-29
+### Fixed & Improved
+- **Fixed `/api/admin/dashboard` 500 Error & Focused KPIs on App Access (`server/routes/admin.js`, `mobile/app/admin.tsx`, `frontend/src/pages/AdminPanel.jsx`)**:
+  - Removed the non-existent `customer_vehicles` query in `GET /api/admin/dashboard` that caused a `500` error (`Table 'unify_maskpro.customer_vehicles' doesn't exist`).
+  - Removed `"0 vehicles"` from the Admin Dashboard KPI cards and replaced it with **App Access & Platform Usage** metrics (`Total Customers (Registered in Unify)`, `Active App Users`, `Web App Users`, `Native App Users (iOS & Android)`, `Pending Approval`, and `Active S.O.S.`).
+- **Held Pending Discussion Posts Strictly in Admin Moderation Without Premature Push Alerts (`server/routes/community.js`)**:
+  - Updated `GET /api/community/posts` so unapproved `Maintenance Discussion` posts (`moderation_status = 'pending'`) do **not** appear in the Community Care feed until an Admin approves them in the Moderation tab.
+  - Stopped inserting `community_moderation` rows into `customer_notifications` on pending post creation so pending posts never trigger a customer push notification before approval.
+- **Added Real-Time Auto-Sync Polling to Admin Moderation & Community Feed (`mobile/app/admin.tsx`, `frontend/src/pages/AdminPanel.jsx`, `mobile/app/(tabs)/community.tsx`, `frontend/src/pages/Community.jsx`)**:
+  - Added silent 5-second background polling on the Admin Dashboard & Moderation tabs and 6-second polling on the Community Care feed so new pending posts, approvals, and S.O.S. alerts appear automatically without manual refreshing.
+
 ## [v1.16.0] — 2026-10-29
 ### Added & Changed
 - **Urgent `MASKPRO S.O.S.` Post & S.O.S. Comment Notifications in Notification Bell + Push Alerts (`server/routes/community.js`, `frontend/src/components/Layout.jsx`, `frontend/src/pages/Community.jsx`, `mobile/components/ui/NotificationModal.tsx`, `mobile/components/ui/TopHeader.tsx`)**:

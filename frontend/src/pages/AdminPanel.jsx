@@ -4,7 +4,7 @@
  *   2. Community Moderation (Facebook-Group style approval queue for Maintenance Discussions + S.O.S. management)
  *   3. Customer Impersonation (Searchable directory with 1-click Login As)
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import api from '../api/client';
 
@@ -41,6 +41,11 @@ export default function AdminPanel() {
   // Confirmation modal state
   const [confirmModal, setConfirmModal] = useState(null);
   const [impersonating, setImpersonating] = useState(false);
+  const modFilterRef = useRef('pending');
+
+  useEffect(() => {
+    modFilterRef.current = modFilter;
+  }, [modFilter]);
 
   const showToast = (text, type = 'success') => {
     setToast({ text, type });
@@ -67,8 +72,8 @@ export default function AdminPanel() {
         const res = await api.get('/admin/check');
         if (res.data.data?.isAdmin) {
           setIsAdmin(true);
-          loadDashboard();
-          loadModerationPosts('pending');
+          loadDashboard(false);
+          loadModerationPosts('pending', false);
           loadCustomers(1, '');
         } else {
           setIsAdmin(false);
@@ -79,32 +84,42 @@ export default function AdminPanel() {
     })();
   }, []);
 
-  const loadDashboard = async () => {
-    setDashLoading(true);
+  // Real-time background polling every 5s so moderation queue & usage analytics update automatically
+  useEffect(() => {
+    if (!isAdmin) return;
+    const interval = setInterval(() => {
+      loadDashboard(true);
+      loadModerationPosts(modFilterRef.current, true);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isAdmin]);
+
+  const loadDashboard = async (silent = false) => {
+    if (!silent) setDashLoading(true);
     try {
       const res = await api.get('/admin/dashboard');
       if (res.data.success) {
         setDashData(res.data.data);
       }
-    } catch (err) {
-      console.error('[Admin] Load dashboard error:', err);
+    } catch {
+      // silent background handling
     } finally {
-      setDashLoading(false);
+      if (!silent) setDashLoading(false);
     }
   };
 
-  const loadModerationPosts = async (filterVal = modFilter) => {
-    setModLoading(true);
+  const loadModerationPosts = async (filterVal = modFilter, silent = false) => {
+    if (!silent) setModLoading(true);
     try {
       const res = await api.get(`/admin/community/posts?filter=${encodeURIComponent(filterVal)}`);
       if (res.data.success) {
         setModPosts(res.data.data.posts || []);
         setModCounts(res.data.data.counts || { pending: 0, active_sos: 0, approved: 0, rejected: 0, total: 0 });
       }
-    } catch (err) {
-      console.error('[Admin] Load moderation posts error:', err);
+    } catch {
+      // silent background handling
     } finally {
-      setModLoading(false);
+      if (!silent) setModLoading(false);
     }
   };
 
@@ -417,7 +432,7 @@ export default function AdminPanel() {
                 {(kpis.total_customers || 0).toLocaleString()}
               </div>
               <div style={{ fontSize: '11.5px', color: '#64748b', marginTop: '4px' }}>
-                {(kpis.total_vehicles || 0).toLocaleString()} registered vehicles
+                Registered in Unify
               </div>
             </div>
 
@@ -431,6 +446,19 @@ export default function AdminPanel() {
               </div>
               <div style={{ fontSize: '11.5px', color: '#10b981', fontWeight: 600, marginTop: '4px' }}>
                 {(kpis.total_sessions || 0).toLocaleString()} total sessions
+              </div>
+            </div>
+
+            <div style={{ background: 'white', borderRadius: '16px', padding: '18px', border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Web vs Native Users</span>
+                <i className="bi bi-laptop" style={{ color: '#0284c7', fontSize: '18px' }}></i>
+              </div>
+              <div style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a' }}>
+                {kpis.web_users || 0} Web / {kpis.native_users || 0} Native
+              </div>
+              <div style={{ fontSize: '11.5px', color: '#64748b', marginTop: '4px' }}>
+                iOS ({kpis.ios_users || 0}) • Android ({kpis.android_users || 0})
               </div>
             </div>
 

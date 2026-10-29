@@ -63,11 +63,10 @@ async function getAdminCustomerIds() {
 // ─── GET /api/community/posts ─────────────────────────────────────
 // Facebook-Group style feed:
 // 1. Open MASKPRO S.O.S. emergencies pinned first
-// 2. Author's own pending Maintenance Discussions (with Pending Approval badge)
-// 3. Approved posts ranked by Facebook Group EdgeRank-style engagement & recency decay
+// 2. Approved posts ranked by Facebook Group EdgeRank-style engagement & recency decay
+// (Pending posts are held exclusively in Admin Moderation until approved)
 router.get('/posts', async (req, res) => {
   try {
-    const customerId = req.user.customer_id;
     const [posts] = await pool.query(`
       SELECT 
         p.id, p.customer_id, p.type, p.title, p.body, p.location, p.status,
@@ -77,13 +76,11 @@ router.get('/posts', async (req, res) => {
         (SELECT COUNT(*) FROM community_comments cc2 WHERE cc2.post_id = p.id AND cc2.is_approved = 1 AND cc2.is_tech = 1) as tech_comment_count
       FROM community_posts p
       JOIN customers c ON p.customer_id = c.id
-      WHERE (p.is_approved = 1 AND p.status != 'hidden' AND p.moderation_status != 'rejected')
-         OR (p.customer_id = ? AND p.moderation_status = 'pending' AND p.status != 'hidden')
+      WHERE p.is_approved = 1 AND p.status != 'hidden' AND p.moderation_status = 'approved'
       ORDER BY 
         CASE 
-          WHEN p.type = 'sos' AND p.status = 'open' AND p.is_approved = 1 THEN 0
-          WHEN p.customer_id = ? AND p.moderation_status = 'pending' THEN 1
-          ELSE 2
+          WHEN p.type = 'sos' AND p.status = 'open' THEN 0
+          ELSE 1
         END ASC,
         (
           (SELECT COUNT(*) FROM community_comments cc WHERE cc.post_id = p.id AND cc.is_approved = 1) * 5 +
@@ -92,7 +89,7 @@ router.get('/posts', async (req, res) => {
         ) / POW(GREATEST(TIMESTAMPDIFF(HOUR, p.created_at, NOW()), 0) + 2, 1.4) DESC,
         p.created_at DESC
       LIMIT 50
-    `, [customerId, customerId]);
+    `);
 
     return res.json({ success: true, data: { posts }, message: 'Posts retrieved', errors: [] });
   } catch (err) {
@@ -203,22 +200,7 @@ router.post('/posts', async (req, res) => {
         errors: []
       });
     } else {
-      // Maintenance Discussion -> Notify admins for moderation approval
-      try {
-        const adminIds = await getAdminCustomerIds();
-        if (adminIds.length > 0) {
-          const notifTitle = `Pending Community Post Approval`;
-          const notifMsg = `${authorName} submitted "${title.trim()}" in Maintenance Discussion. Tap to review and approve.`;
-          const values = adminIds.map((cid) => [cid, 'community_moderation', notifTitle, notifMsg, '/admin?tab=moderation']);
-          await pool.query(
-            `INSERT INTO customer_notifications (customer_id, type, title, message, link) VALUES ?`,
-            [values]
-          );
-        }
-      } catch (modErr) {
-        console.warn('[Community] Failed to send admin moderation alert:', modErr.message);
-      }
-
+      // Maintenance Discussion -> Held in Admin Moderation queue (no push notification sent while pending)
       return res.json({
         success: true,
         data: { post: createdPost, moderation_status: 'pending' },
