@@ -1,5 +1,10 @@
 # Changelog
 
+## [v1.15.7] — 2026-10-29
+### Changed
+- **Renamed `My VIP Cards` / `VIP Cards` to `My MASKPROCare Cards` / `MASKPROCare Cards` (`frontend/src/pages/Dashboard.jsx`, `frontend/src/pages/Profile.jsx`, `mobile/app/(tabs)/index.tsx`, `mobile/app/(tabs)/profile.tsx`)**:
+  - Updated the Dashboard section heading to `My MASKPROCare Cards` and the Profile tab label to `MASKPROCare Cards` across Web and Native Mobile (iOS & Android).
+
 ## [v1.15.6] — 2026-10-29
 ### Fixed & Improved
 - **Unified Calendar Availability Logic & Past-Date Styling Across Web, Android, and iOS (`server/routes/bookings.js`, `frontend/src/pages/Bookings.jsx`, `mobile/app/(tabs)/bookings.tsx`, `mobile/components/ui/CalendarPicker.tsx`)**:

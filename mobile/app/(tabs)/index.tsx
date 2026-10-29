@@ -1017,10 +1017,10 @@ export default function DashboardScreen() {
         )}
       </View>
 
-      {/* ─── My VIP Cards Section ─── */}
+      {/* ─── My MASKPROCare Cards Section ─── */}
       <View style={styles.sectionContainer}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>My VIP Cards</Text>
+          <Text style={styles.sectionTitle}>My MASKPROCare Cards</Text>
           {loyaltyCards.length > 0 && (
             <TouchableOpacity
               onPress={() => router.push('/(tabs)/profile?tab=loyalty' as any)}

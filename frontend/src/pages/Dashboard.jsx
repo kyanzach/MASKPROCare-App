@@ -776,7 +776,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* My VIP Cards */}
+      {/* My MASKPROCare Cards */}
       <div className="card-modern mb-32">
         <div className="card-modern-body">
           <div className="flex-between mb-24">
@@ -784,7 +784,7 @@ export default function Dashboard() {
               <div className="stats-icon" style={{ width: '40px', height: '40px', borderRadius: '12px', fontSize: '16px', background: 'linear-gradient(135deg, #2563eb, #1e40af)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <i className="fas fa-id-card"></i>
               </div>
-              <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#1f2937', margin: 0 }}>My VIP Cards</h2>
+              <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#1f2937', margin: 0 }}>My MASKPROCare Cards</h2>
             </div>
             {loyaltyCards.length > 0 && (
               <Link to="/profile?tab=loyalty" style={{ fontSize: '13px', fontWeight: 600, color: '#2563eb', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -862,10 +862,10 @@ export default function Dashboard() {
           ) : (
             <div className="empty-state">
               <div className="empty-state-icon"><i className="fas fa-credit-card"></i></div>
-              <h3>No VIP cards registered</h3>
-              <p>Your warranty and maintenance VIP cards will appear here once issued.</p>
+              <h3>No MASKPROCare cards registered</h3>
+              <p>Your warranty and maintenance MASKPROCare cards will appear here once issued.</p>
               <Link to="/profile?tab=loyalty" className="btn-gradient">
-                <i className="fas fa-id-card"></i> View VIP Cards
+                <i className="fas fa-id-card"></i> View MASKPROCare Cards
               </Link>
             </div>
           )}

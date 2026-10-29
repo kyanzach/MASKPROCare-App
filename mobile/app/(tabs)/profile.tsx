@@ -419,8 +419,13 @@ export default function ProfileScreen() {
           onPress={() => setActiveTab('loyalty')}
         >
           <View style={styles.loyaltyTabTitle}>
-            <Text style={[styles.tabButtonText, activeTab === 'loyalty' && styles.tabButtonTextActive]}>
-              VIP Cards
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
+              style={[styles.tabButtonText, activeTab === 'loyalty' && styles.tabButtonTextActive]}
+            >
+              MASKPROCare Cards
             </Text>
             {loyaltyCards.length > 0 ? (
               <View style={styles.loyaltyBadge}>
