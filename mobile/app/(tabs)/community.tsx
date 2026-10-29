@@ -399,7 +399,7 @@ export default function CommunityScreen() {
                   style={styles.input}
                   placeholder={
                     postType === 'sos'
-                      ? 'E.g. Flat tire at EDSA Ayala, need help!'
+                      ? 'E.g. Flat tire at J.P. Laurel Bajada, Davao, need help!'
                       : "E.g. What's the best tire wax for ceramic coating?"
                   }
                   value={title}
@@ -412,7 +412,7 @@ export default function CommunityScreen() {
                   style={[styles.input, styles.textArea]}
                   placeholder={
                     postType === 'sos'
-                      ? 'Guide: Where are you? What is your car model? What is the issue?\n\nExample: My car battery died at SM Megamall parking. I drive a Toyota Fortuner. Can any techs or members nearby help?'
+                      ? 'Guide: Where are you? What is your car model? What is the issue?\n\nExample: My car battery died at SM Lanang Premier parking. I drive a Toyota Fortuner. Can any techs or members nearby help?'
                       : 'Share your thoughts or ask a question...'
                   }
                   value={body}

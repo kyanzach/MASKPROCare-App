@@ -159,7 +159,7 @@ export default function Layout() {
     { path: '/bookings', icon: 'bi-calendar-check', label: 'My Bookings' },
     { path: '/vehicles', icon: 'bi-car-front', label: 'My Vehicles' },
     { path: '/community-care', icon: 'bi-people', label: 'Community Care' },
-    { path: '/profile?tab=loyalty', icon: 'bi-credit-card-2-front', label: 'My Loyalty Cards' },
+    { path: '/profile?tab=loyalty', icon: 'bi-credit-card-2-front', label: 'My MASKPROCare Cards' },
   ];
 
   const mobileNavItems = [

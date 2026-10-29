@@ -1,5 +1,12 @@
 # Changelog
 
+## [v1.15.10] — 2026-10-29
+### Changed
+- **Renamed Sidebar Menu `My Loyalty Cards` to `My MASKPROCare Cards` (`frontend/src/components/Layout.jsx`, `frontend/src/pages/Loyalty.jsx`)**:
+  - Updated the sidebar navigation label in `Layout.jsx` (`navItems`) and page heading/breadcrumb in `Loyalty.jsx` from `My Loyalty Cards` / `Loyalty Cards` to `My MASKPROCare Cards` / `MASKPROCare Cards`.
+- **Updated Community Care S.O.S. Example Placeholders to Davao Locations (`frontend/src/pages/Community.jsx`, `mobile/app/(tabs)/community.tsx`)**:
+  - Updated the `MASKPRO S.O.S.` title and details example placeholders from Manila locations (`EDSA Ayala` / `SM Megamall`) to Davao locations (`E.g. Flat tire at J.P. Laurel Bajada, Davao, need help!` and `SM Lanang Premier parking`) across Web and Mobile.
+
 ## [v1.15.9] — 2026-10-29
 ### Fixed & Added
 - **Centered Mobile Header Notifications Dropdown Inside Viewport (`frontend/src/components/Layout.jsx`, `frontend/src/index.css`)**:

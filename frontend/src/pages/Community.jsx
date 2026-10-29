@@ -115,7 +115,7 @@ export default function Community() {
                 required
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder={postType === 'sos' ? "E.g. Flat tire at EDSA Ayala, need help!" : "E.g. How to maintain my Nano Ceramic Coating?"}
+                placeholder={postType === 'sos' ? "E.g. Flat tire at J.P. Laurel Bajada, Davao, need help!" : "E.g. How to maintain my Nano Ceramic Coating?"}
                 style={{
                   width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1',
                   fontSize: '15px'
@@ -132,7 +132,7 @@ export default function Community() {
                 rows={6}
                 placeholder={
                   postType === 'sos' 
-                  ? "Guide: Where are you? What is your car model? What is the issue?\n\nExample: My car battery died at SM Megamall parking. I drive a Toyota Fortuner. Can any techs or members nearby help?"
+                  ? "Guide: Where are you? What is your car model? What is the issue?\n\nExample: My car battery died at SM Lanang Premier parking. I drive a Toyota Fortuner. Can any techs or members nearby help?"
                   : "Share or ask about maintenance tips for your coating, tint, or PPF. Note: For service issues, please contact support directly."
                 }
                 style={{

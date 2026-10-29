@@ -343,7 +343,7 @@ export default function Loyalty() {
       <div className="breadcrumb" style={{ marginBottom: '8px', fontSize: '13px', color: '#94a3b8' }}>
         <a href="/" style={{ color: '#3b82f6', textDecoration: 'none' }}>Home</a>
         <span style={{ margin: '0 8px' }}>/</span>
-        <span>Loyalty Cards</span>
+        <span>MASKPROCare Cards</span>
       </div>
 
       {/* Header */}
@@ -354,7 +354,7 @@ export default function Loyalty() {
             display: 'flex', alignItems: 'center', gap: '10px',
           }}>
             <i className="bi bi-ticket-perforated" style={{ color: '#3b82f6' }}></i>
-            My Loyalty Cards
+            My MASKPROCare Cards
           </h1>
           <p style={{ margin: '4px 0 0', fontSize: '14px', color: '#94a3b8' }}>
             Track your stamps, visits, and rewards across MaskPro services
