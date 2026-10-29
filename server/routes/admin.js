@@ -345,18 +345,77 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
              ) AS verified_logins
     `).catch(() => [[{ total_attempts: 0, verified_logins: 0 }]]);
 
-    // 4. Magic Link Security & Intrusion Audit Logs (Paginated 5/page + Lazy Prefetch Window)
+    // 4. Magic Link Security & Intrusion Audit Logs (Paginated 5/page + Lazy Prefetch Window + Search & Sort)
     const secLimit = Math.min(200, Math.max(10, parseInt(req.query.sec_limit, 10) || 10));
     const secFilter = String(req.query.sec_filter || 'all');
+    const secSearch = String(req.query.sec_search || '').trim();
+    const secSort = String(req.query.sec_sort || 'newest');
     const usersLimit = Math.min(200, Math.max(20, parseInt(req.query.users_limit, 10) || 20));
 
     let secWhereSql = '1=1';
+    const secParams = [];
     if (secFilter === 'blocked') {
       secWhereSql = "s.event_type NOT IN ('first_bind', 'authorized_access', 'preview_bot_ignored')";
     } else if (secFilter === 'authorized') {
       secWhereSql = "s.event_type IN ('first_bind', 'authorized_access')";
     } else if (secFilter === 'bot') {
       secWhereSql = "s.event_type = 'preview_bot_ignored'";
+    }
+
+    if (secSearch) {
+      const likeVal = `%${secSearch}%`;
+      const cleanIdVal = `%${secSearch.replace(/^#/, '')}%`;
+      secWhereSql += ` AND (
+        c.full_name LIKE ?
+        OR c.mobile_number LIKE ?
+        OR CAST(s.customer_id AS CHAR) LIKE ?
+        OR CAST(s.id AS CHAR) LIKE ?
+        OR v.make LIKE ?
+        OR v.model LIKE ?
+        OR CONCAT_WS(' ', v.make, v.model) LIKE ?
+        OR v.plate_no LIKE ?
+        OR s.slug LIKE ?
+        OR s.request_url LIKE ?
+        OR s.attempted_platform LIKE ?
+        OR s.bound_platform LIKE ?
+        OR s.browser_detail LIKE ?
+        OR s.os_detail LIKE ?
+        OR s.device_fingerprint LIKE ?
+        OR s.ip_address LIKE ?
+        OR s.location LIKE ?
+        OR s.server_code LIKE ?
+      )`;
+      secParams.push(
+        likeVal,
+        likeVal,
+        cleanIdVal,
+        cleanIdVal,
+        likeVal,
+        likeVal,
+        likeVal,
+        likeVal,
+        likeVal,
+        likeVal,
+        likeVal,
+        likeVal,
+        likeVal,
+        likeVal,
+        likeVal,
+        likeVal,
+        likeVal,
+        likeVal
+      );
+    }
+
+    let secOrderBySql = 's.created_at DESC, s.id DESC';
+    if (secSort === 'oldest') {
+      secOrderBySql = 's.created_at ASC, s.id ASC';
+    } else if (secSort === 'most_attempts') {
+      secOrderBySql = 's.device_attempt_count DESC, s.ip_attempt_count DESC, s.created_at DESC';
+    } else if (secSort === 'customer_az') {
+      secOrderBySql = "COALESCE(c.full_name, 'ZZZZ') ASC, s.created_at DESC";
+    } else if (secSort === 'ip_az') {
+      secOrderBySql = 's.ip_address ASC, s.created_at DESC';
     }
 
     const [[secCounts]] = await pool.query(`
@@ -431,9 +490,9 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
       LEFT JOIN care_magic_links ml ON ml.id = s.magic_link_id
       LEFT JOIN vehicles v ON v.id = ml.vehicle_id
       WHERE ${secWhereSql}
-      ORDER BY s.created_at DESC, s.id DESC
+      ORDER BY ${secOrderBySql}
       LIMIT ?
-    `, [secLimit]).catch((err) => {
+    `, [...secParams, secLimit]).catch((err) => {
       console.error('[Admin] magicSecurityLogs query error:', err.message);
       return [[]];
     });

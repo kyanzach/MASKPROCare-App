@@ -48,12 +48,16 @@ export default function AdminPanelScreen() {
   const [dashData, setDashData] = useState<any>(null);
   const [dashLoading, setDashLoading] = useState(false);
 
-  // Pagination & Lazy-Prefetch state for Who Uses the App (10/page) & Magic Link Security (5/page)
+  // Pagination, Search, Sort & Lazy-Prefetch state for Who Uses the App (10/page) & Magic Link Security (5/page)
   const [activeUsersPage, setActiveUsersPage] = useState(1);
   const [secLogPage, setSecLogPage] = useState(1);
   const [secLogFilter, setSecLogFilter] = useState<'all' | 'blocked' | 'authorized' | 'bot'>('all');
+  const [secSearch, setSecSearch] = useState('');
+  const [secSort, setSecSort] = useState<'newest' | 'most_attempts' | 'customer_az' | 'ip_az' | 'oldest'>('newest');
   const activeLimitRef = useRef<number>(20);
   const secLimitRef = useRef<number>(15);
+  const secSearchRef = useRef<string>('');
+  const secSortRef = useRef<string>('newest');
 
   // Moderation state
   const [modFilter, setModFilter] = useState<'pending' | 'sos' | 'approved' | 'rejected'>('pending');
@@ -136,7 +140,9 @@ export default function AdminPanelScreen() {
     try {
       const aLim = customActiveLimit || activeLimitRef.current;
       const sLim = customSecLimit || secLimitRef.current;
-      const res = await client.get(`/admin/dashboard?active_limit=${aLim}&sec_limit=${sLim}`);
+      const sSearch = encodeURIComponent(secSearchRef.current || '');
+      const sSort = encodeURIComponent(secSortRef.current || 'newest');
+      const res = await client.get(`/admin/dashboard?users_limit=${aLim}&sec_limit=${sLim}&sec_search=${sSearch}&sec_sort=${sSort}`);
       if (res.data?.success) {
         setDashData(res.data.data);
       }
@@ -145,6 +151,23 @@ export default function AdminPanelScreen() {
     } finally {
       if (!silent) setDashLoading(false);
     }
+  };
+
+  const handleSecSearchChange = (val: string) => {
+    setSecSearch(val);
+    secSearchRef.current = val;
+    setSecLogPage(1);
+    if (val.trim()) {
+      secLimitRef.current = Math.max(secLimitRef.current, 50);
+    }
+    loadDashboard(true, activeLimitRef.current, secLimitRef.current);
+  };
+
+  const handleSecSortChange = (nextSort: 'newest' | 'most_attempts' | 'customer_az' | 'ip_az' | 'oldest') => {
+    setSecSort(nextSort);
+    secSortRef.current = nextSort;
+    setSecLogPage(1);
+    loadDashboard(true, activeLimitRef.current, secLimitRef.current);
   };
 
   const handleActivePageChange = (nextPage: number) => {
@@ -638,7 +661,7 @@ export default function AdminPanelScreen() {
             </View>
 
             {/* Filter Pills on Mobile */}
-            <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+            <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
               {([
                 { key: 'all', label: `All (${securityOverview.total_all_events ?? magicSecurityLogs.length})` },
                 { key: 'blocked', label: `Blocked (${securityOverview.total_intrusion_events ?? 0})` },
@@ -667,24 +690,123 @@ export default function AdminPanelScreen() {
               })}
             </View>
 
+            {/* Search Input & Sort Pills for Troubleshooting */}
+            <View style={{
+              flexDirection: 'row', alignItems: 'center', gap: 8,
+              backgroundColor: '#0f172a', borderWidth: 1, borderColor: '#334155',
+              borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 8,
+            }}>
+              <Ionicons name="search-outline" size={14} color="#94a3b8" />
+              <TextInput
+                value={secSearch}
+                onChangeText={handleSecSearchChange}
+                placeholder="Search name, mobile, #ID, vehicle, device, IP..."
+                placeholderTextColor="#64748b"
+                style={{ flex: 1, fontSize: 12, color: '#f8fafc', paddingVertical: 0 }}
+              />
+              {secSearch.length > 0 && (
+                <TouchableOpacity onPress={() => handleSecSearchChange('')}>
+                  <Ionicons name="close-circle" size={16} color="#94a3b8" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+              {([
+                { key: 'newest', label: 'Sort: Newest' },
+                { key: 'most_attempts', label: 'Most Attempts' },
+                { key: 'customer_az', label: 'Name A–Z' },
+                { key: 'ip_az', label: 'IP Address' },
+                { key: 'oldest', label: 'Oldest' },
+              ] as const).map((s) => {
+                const active = secSort === s.key;
+                return (
+                  <TouchableOpacity
+                    key={s.key}
+                    onPress={() => handleSecSortChange(s.key)}
+                    style={{
+                      paddingHorizontal: 8,
+                      paddingVertical: 3,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      borderColor: active ? '#38bdf8' : '#1e293b',
+                      backgroundColor: active ? 'rgba(56, 189, 248, 0.16)' : '#0f172a',
+                    }}
+                  >
+                    <Text numberOfLines={1} style={{ fontSize: 10.5, fontWeight: '700', color: active ? '#38bdf8' : '#64748b' }}>
+                      {s.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
             {(() => {
-              const filteredSecLogs = magicSecurityLogs.filter((log: any) => {
-                const isIntr = log.event_type !== 'first_bind' && log.event_type !== 'authorized_access' && log.event_type !== 'preview_bot_ignored';
-                if (secLogFilter === 'blocked') return isIntr;
-                if (secLogFilter === 'authorized') return log.event_type === 'first_bind' || log.event_type === 'authorized_access';
-                if (secLogFilter === 'bot') return log.event_type === 'preview_bot_ignored';
-                return true;
-              });
+              const qLower = secSearch.trim().toLowerCase();
+              const qIdClean = qLower.replace(/^#/, '');
+
+              const filteredSecLogs = magicSecurityLogs
+                .filter((log: any) => {
+                  const isIntr = log.event_type !== 'first_bind' && log.event_type !== 'authorized_access' && log.event_type !== 'preview_bot_ignored';
+                  if (secLogFilter === 'blocked' && !isIntr) return false;
+                  if (secLogFilter === 'authorized' && log.event_type !== 'first_bind' && log.event_type !== 'authorized_access') return false;
+                  if (secLogFilter === 'bot' && log.event_type !== 'preview_bot_ignored') return false;
+
+                  if (!qLower) return true;
+                  const blob = [
+                    log.customer_name,
+                    log.customer_mobile,
+                    log.customer_id ? `#${log.customer_id} ${log.customer_id}` : '',
+                    log.id ? `#${log.id} ${log.id}` : '',
+                    log.vehicle_make,
+                    log.vehicle_model,
+                    log.vehicle_plate,
+                    log.slug,
+                    log.request_url,
+                    log.attempted_platform,
+                    log.bound_platform,
+                    log.browser_detail,
+                    log.os_detail,
+                    log.device_fingerprint,
+                    log.ip_address,
+                    log.location,
+                    log.server_code,
+                    log.user_agent,
+                  ]
+                    .filter(Boolean)
+                    .join(' ')
+                    .toLowerCase();
+
+                  return blob.includes(qLower) || (qIdClean !== '' && blob.includes(qIdClean));
+                })
+                .sort((a: any, b: any) => {
+                  if (secSort === 'oldest') {
+                    return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
+                  }
+                  if (secSort === 'most_attempts') {
+                    const diffDev = Number(b.device_attempt_count || 0) - Number(a.device_attempt_count || 0);
+                    if (diffDev !== 0) return diffDev;
+                    return Number(b.ip_attempt_count || 0) - Number(a.ip_attempt_count || 0);
+                  }
+                  if (secSort === 'customer_az') {
+                    return String(a.customer_name || 'ZZZZ').localeCompare(String(b.customer_name || 'ZZZZ'));
+                  }
+                  if (secSort === 'ip_az') {
+                    return String(a.ip_address || '').localeCompare(String(b.ip_address || ''));
+                  }
+                  return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+                });
 
               const SEC_PER_PAGE = 5;
-              const totalFilteredCount =
-                secLogFilter === 'all'
-                  ? Number(securityOverview.total_all_events || filteredSecLogs.length)
-                  : secLogFilter === 'blocked'
-                  ? Number(securityOverview.total_intrusion_events || filteredSecLogs.length)
-                  : secLogFilter === 'authorized'
-                  ? Number(securityOverview.total_authorized_events || filteredSecLogs.length)
-                  : Number(securityOverview.total_bot_events || filteredSecLogs.length);
+              const totalFilteredCount = qLower
+                ? filteredSecLogs.length
+                : secLogFilter === 'all'
+                ? Number(securityOverview.total_all_events || filteredSecLogs.length)
+                : secLogFilter === 'blocked'
+                ? Number(securityOverview.total_intrusion_events || filteredSecLogs.length)
+                : secLogFilter === 'authorized'
+                ? Number(securityOverview.total_authorized_events || filteredSecLogs.length)
+                : Number(securityOverview.total_bot_events || filteredSecLogs.length);
               const totalSecPages = Math.max(1, Math.ceil(totalFilteredCount / SEC_PER_PAGE));
               const safeSecPage = Math.min(secLogPage, totalSecPages);
               const pagedSecLogs = filteredSecLogs.slice(

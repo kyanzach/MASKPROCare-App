@@ -43,21 +43,23 @@ export default function AdminPanel() {
   const [impersonating, setImpersonating] = useState(false);
   const [secActionLoading, setSecActionLoading] = useState(null);
   const [secLogFilter, setSecLogFilter] = useState('all');
+  const [secSearch, setSecSearch] = useState('');
+  const [secSort, setSecSort] = useState('newest');
   const [secPage, setSecPage] = useState(1);
   const [secLimit, setSecLimit] = useState(10); // Prefetch 2 pages (5 per page = 10 items) initially
   const [usersPage, setUsersPage] = useState(1);
   const [usersLimit, setUsersLimit] = useState(20); // Prefetch 2 pages (10 per page = 20 items) initially
   const [lastSyncedAt, setLastSyncedAt] = useState(new Date());
   const modFilterRef = useRef('pending');
-  const dashParamsRef = useRef({ secLimit: 10, secFilter: 'all', usersLimit: 20 });
+  const dashParamsRef = useRef({ secLimit: 10, secFilter: 'all', secSearch: '', secSort: 'newest', usersLimit: 20 });
 
   useEffect(() => {
     modFilterRef.current = modFilter;
   }, [modFilter]);
 
   useEffect(() => {
-    dashParamsRef.current = { secLimit, secFilter: secLogFilter, usersLimit };
-  }, [secLimit, secLogFilter, usersLimit]);
+    dashParamsRef.current = { secLimit, secFilter: secLogFilter, secSearch, secSort, usersLimit };
+  }, [secLimit, secLogFilter, secSearch, secSort, usersLimit]);
 
   const showToast = (text, type = 'success') => {
     setToast({ text, type });
@@ -112,7 +114,7 @@ export default function AdminPanel() {
     try {
       const p = customParams || dashParamsRef.current;
       const res = await api.get(
-        `/admin/dashboard?sec_limit=${p.secLimit}&sec_filter=${encodeURIComponent(p.secFilter)}&users_limit=${p.usersLimit}`
+        `/admin/dashboard?sec_limit=${p.secLimit}&sec_filter=${encodeURIComponent(p.secFilter)}&sec_search=${encodeURIComponent(p.secSearch || '')}&sec_sort=${encodeURIComponent(p.secSort || 'newest')}&users_limit=${p.usersLimit}`
       );
       if (res.data.success) {
         setDashData(res.data.data);
@@ -143,6 +145,24 @@ export default function AdminPanel() {
     setSecPage(1);
     const updated = { ...dashParamsRef.current, secFilter: nextFilter, secLimit: 10 };
     setSecLimit(10);
+    dashParamsRef.current = updated;
+    loadDashboard(true, updated);
+  };
+
+  const handleSecSearchChange = (val) => {
+    setSecSearch(val);
+    setSecPage(1);
+    const needed = val.trim() ? Math.max(secLimit, 50) : 10;
+    setSecLimit(needed);
+    const updated = { ...dashParamsRef.current, secSearch: val, secLimit: needed };
+    dashParamsRef.current = updated;
+    loadDashboard(true, updated);
+  };
+
+  const handleSecSortChange = (nextSort) => {
+    setSecSort(nextSort);
+    setSecPage(1);
+    const updated = { ...dashParamsRef.current, secSort: nextSort };
     dashParamsRef.current = updated;
     loadDashboard(true, updated);
   };
@@ -918,28 +938,81 @@ export default function AdminPanel() {
                   Tracks 2nd-device link sharing, exact accessed URL, browser/OS fingerprint, IP/Geo-ISP, server HTTP logs & tiered lockouts (5 per page)
                 </p>
 
-                {/* Filter Pills */}
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '12px' }}>
-                  {[
-                    { key: 'all', label: `All Server Events (${securityOverview.total_all_events ?? magicSecurityLogs.length})` },
-                    { key: 'blocked', label: `Blocked Intrusions (${securityOverview.total_intrusion_events ?? 0})` },
-                    { key: 'authorized', label: `Authorized Opens (${securityOverview.total_authorized_events ?? 0})` },
-                    { key: 'bot', label: `Preview Bots (${securityOverview.total_bot_events ?? 0})` },
-                  ].map((f) => (
-                    <button
-                      key={f.key}
-                      onClick={() => handleSecFilterChange(f.key)}
+                {/* Filter Pills + Search & Sort Toolbar */}
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginTop: '12px' }}>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {[
+                      { key: 'all', label: `All Server Events (${securityOverview.total_all_events ?? magicSecurityLogs.length})` },
+                      { key: 'blocked', label: `Blocked Intrusions (${securityOverview.total_intrusion_events ?? 0})` },
+                      { key: 'authorized', label: `Authorized Opens (${securityOverview.total_authorized_events ?? 0})` },
+                      { key: 'bot', label: `Preview Bots (${securityOverview.total_bot_events ?? 0})` },
+                    ].map((f) => (
+                      <button
+                        key={f.key}
+                        onClick={() => handleSecFilterChange(f.key)}
+                        style={{
+                          padding: '5px 11px', borderRadius: '16px', fontSize: '11.5px', fontWeight: 700,
+                          cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                          border: secLogFilter === f.key ? '1px solid #0f172a' : '1px solid #e2e8f0',
+                          background: secLogFilter === f.key ? '#0f172a' : 'white',
+                          color: secLogFilter === f.key ? 'white' : '#475569',
+                        }}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Search Input (Name, Mobile, #ID, Vehicle, Device, Browser, IP, Slug) */}
+                  <div style={{
+                    position: 'relative', display: 'flex', alignItems: 'center',
+                    minWidth: '280px', flex: '1 1 280px', maxWidth: '420px',
+                  }}>
+                    <i className="bi bi-search" style={{
+                      position: 'absolute', left: '11px', fontSize: '12.5px', color: '#64748b', pointerEvents: 'none',
+                    }}></i>
+                    <input
+                      type="text"
+                      value={secSearch}
+                      onChange={(e) => handleSecSearchChange(e.target.value)}
+                      placeholder="Search name, mobile, #ID, vehicle, device, IP, URL..."
                       style={{
-                        padding: '5px 11px', borderRadius: '16px', fontSize: '11.5px', fontWeight: 700,
-                        cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-                        border: secLogFilter === f.key ? '1px solid #0f172a' : '1px solid #e2e8f0',
-                        background: secLogFilter === f.key ? '#0f172a' : 'white',
-                        color: secLogFilter === f.key ? 'white' : '#475569',
+                        width: '100%', padding: '6px 28px 6px 32px', borderRadius: '10px',
+                        border: '1px solid #cbd5e1', fontSize: '12px', fontWeight: 500,
+                        color: '#0f172a', background: 'white', fontFamily: 'inherit', outline: 'none',
                       }}
-                    >
-                      {f.label}
-                    </button>
-                  ))}
+                    />
+                    {secSearch && (
+                      <button
+                        type="button"
+                        onClick={() => handleSecSearchChange('')}
+                        title="Clear search"
+                        style={{
+                          position: 'absolute', right: '7px', border: 'none', background: 'transparent',
+                          color: '#64748b', cursor: 'pointer', fontSize: '13px', padding: '2px 4px',
+                        }}
+                      >
+                        <i className="bi bi-x-circle-fill"></i>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Sort Select */}
+                  <select
+                    value={secSort}
+                    onChange={(e) => handleSecSortChange(e.target.value)}
+                    style={{
+                      padding: '6px 10px', borderRadius: '10px', border: '1px solid #cbd5e1',
+                      fontSize: '12px', fontWeight: 700, color: '#0f172a', background: 'white',
+                      fontFamily: 'inherit', cursor: 'pointer', outline: 'none',
+                    }}
+                  >
+                    <option value="newest">Sort: Newest First</option>
+                    <option value="most_attempts">Sort: Most Attempts</option>
+                    <option value="customer_az">Sort: Customer Name (A–Z)</option>
+                    <option value="ip_az">Sort: IP Address</option>
+                    <option value="oldest">Sort: Oldest First</option>
+                  </select>
                 </div>
               </div>
 
@@ -967,29 +1040,76 @@ export default function AdminPanel() {
 
             {(() => {
               const SEC_PER_PAGE = 5;
-              const filteredLogs = magicSecurityLogs.filter((log) => {
-                if (secLogFilter === 'blocked') {
-                  return log.event_type !== 'first_bind' && log.event_type !== 'authorized_access' && log.event_type !== 'preview_bot_ignored';
-                }
-                if (secLogFilter === 'authorized') {
-                  return log.event_type === 'first_bind' || log.event_type === 'authorized_access';
-                }
-                if (secLogFilter === 'bot') {
-                  return log.event_type === 'preview_bot_ignored';
-                }
-                return true;
-              });
+              const qLower = secSearch.trim().toLowerCase();
+              const qIdClean = qLower.replace(/^#/, '');
 
-              const totalFilteredCount = Math.max(
-                filteredLogs.length,
-                secLogFilter === 'blocked'
-                  ? Number(securityOverview.total_intrusion_events || 0)
-                  : secLogFilter === 'authorized'
-                  ? Number(securityOverview.total_authorized_events || 0)
-                  : secLogFilter === 'bot'
-                  ? Number(securityOverview.total_bot_events || 0)
-                  : Number(securityOverview.total_all_events || 0)
-              );
+              const filteredLogs = magicSecurityLogs
+                .filter((log) => {
+                  if (secLogFilter === 'blocked') {
+                    if (log.event_type === 'first_bind' || log.event_type === 'authorized_access' || log.event_type === 'preview_bot_ignored') return false;
+                  } else if (secLogFilter === 'authorized') {
+                    if (log.event_type !== 'first_bind' && log.event_type !== 'authorized_access') return false;
+                  } else if (secLogFilter === 'bot') {
+                    if (log.event_type !== 'preview_bot_ignored') return false;
+                  }
+
+                  if (!qLower) return true;
+                  const blob = [
+                    log.customer_name,
+                    log.customer_mobile,
+                    log.customer_id ? `#${log.customer_id} ${log.customer_id}` : '',
+                    log.id ? `#${log.id} ${log.id}` : '',
+                    log.vehicle_make,
+                    log.vehicle_model,
+                    log.vehicle_plate,
+                    log.slug,
+                    log.request_url,
+                    log.attempted_platform,
+                    log.bound_platform,
+                    log.browser_detail,
+                    log.os_detail,
+                    log.device_fingerprint,
+                    log.ip_address,
+                    log.location,
+                    log.server_code,
+                    log.user_agent,
+                  ]
+                    .filter(Boolean)
+                    .join(' ')
+                    .toLowerCase();
+
+                  return blob.includes(qLower) || (qIdClean && blob.includes(qIdClean));
+                })
+                .sort((a, b) => {
+                  if (secSort === 'oldest') {
+                    return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
+                  }
+                  if (secSort === 'most_attempts') {
+                    const diffDev = Number(b.device_attempt_count || 0) - Number(a.device_attempt_count || 0);
+                    if (diffDev !== 0) return diffDev;
+                    return Number(b.ip_attempt_count || 0) - Number(a.ip_attempt_count || 0);
+                  }
+                  if (secSort === 'customer_az') {
+                    return String(a.customer_name || 'ZZZZ').localeCompare(String(b.customer_name || 'ZZZZ'));
+                  }
+                  if (secSort === 'ip_az') {
+                    return String(a.ip_address || '').localeCompare(String(b.ip_address || ''));
+                  }
+                  return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+                });
+
+              const totalFilteredCount = qLower
+                ? filteredLogs.length
+                : Math.max(
+                    filteredLogs.length,
+                    secLogFilter === 'blocked'
+                      ? Number(securityOverview.total_intrusion_events || 0)
+                      : secLogFilter === 'authorized'
+                      ? Number(securityOverview.total_authorized_events || 0)
+                      : secLogFilter === 'bot'
+                      ? Number(securityOverview.total_bot_events || 0)
+                      : Number(securityOverview.total_all_events || 0)
+                  );
 
               const totalSecPages = Math.max(1, Math.ceil(totalFilteredCount / SEC_PER_PAGE));
               const safeSecPage = Math.min(secPage, totalSecPages);

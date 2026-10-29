@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.17.11] — 2026-10-29
+### Added
+- **Multi-Field Search & Sort Bar in Magic Link Security & Intrusion Audit Log Across Web, iOS & Android (`server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`, `mobile/app/admin.tsx`)**:
+  - Added instant client-side + server-side search (`sec_search`) across customer name, mobile number, customer ID (`#1924`), event ID, vehicle make/model/plate, URL slug, attempted/bound device, browser/OS, device fingerprint hash, IP address, location/ISP, and HTTP server code.
+  - Added a 5-mode sort selector (`sec_sort`: `Sort: Newest First`, `Sort: Most Attempts`, `Sort: Customer Name (A–Z)`, `Sort: IP Address`, `Sort: Oldest First`) for rapid customer support troubleshooting on Desktop Web, Mobile Web, iOS, and Android.
+
 ## [v1.17.10] — 2026-10-29
 ### Changed
 - **Strict Per-Booking Service Category Matching with Short-Form Acceptance in Izumi AI Identity Verification (`server/routes/aiAuth.js`)**:
