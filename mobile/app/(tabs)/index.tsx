@@ -991,7 +991,7 @@ export default function DashboardScreen() {
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.vehicleCardBtnGradient}
-                      onPress={() => router.push('/(tabs)/bookings?openBooking=true' as any)}
+                      onPress={() => router.push(`/(tabs)/bookings?openBooking=true&vehicle_id=${vehicle.id}` as any)}
                       activeOpacity={0.7}
                     >
                       <LinearGradient

@@ -178,9 +178,12 @@ export default function BookingsScreen() {
   // Watch for parameters from index dashboard screen
   useEffect(() => {
     if (params.openBooking === 'true' && !loading) {
-      openBookingModal();
+      const preVehicleId = params.vehicle_id ? String(params.vehicle_id) : '';
+      const preService = params.service ? String(params.service) : '';
+      openBookingModal(preVehicleId, preService);
+      router.setParams({ openBooking: undefined, vehicle_id: undefined, service: undefined } as any);
     }
-  }, [params.openBooking, loading]);
+  }, [params.openBooking, params.vehicle_id, params.service, loading]);
 
   // Prompt modal state
   const [promptModal, setPromptModal] = useState<{
@@ -352,12 +355,22 @@ export default function BookingsScreen() {
     setBookingForm({ ...bookingForm, booking_date: dateStr });
   };
 
-  const openBookingModal = () => {
+  const openBookingModal = (preselectVehicleId: any = '', preselectService: any = '') => {
+    const vId = typeof preselectVehicleId === 'string' || typeof preselectVehicleId === 'number'
+      ? String(preselectVehicleId)
+      : '';
+    const sRaw = typeof preselectService === 'string' ? preselectService : '';
+    const sType = (sRaw === 'NanoFix' || sRaw === 'Nano Fix (Maintenance)')
+      ? 'Nano Fix (Maintenance)'
+      : sRaw;
     setError('');
-    setBookingForm({ vehicle_id: '', service_type: '', booking_date: '', notes: '' });
+    setBookingForm({ vehicle_id: vId, service_type: sType, booking_date: '', notes: '' });
     setAvailableDates([]);
     setCalendarMonth(new Date());
     setShowBookingModal(true);
+    if (sType) {
+      loadAvailability(sType);
+    }
   };
 
   const handleBookingSubmit = async () => {

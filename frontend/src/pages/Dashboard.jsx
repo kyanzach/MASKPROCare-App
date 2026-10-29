@@ -750,7 +750,11 @@ export default function Dashboard() {
                         <Link to={`/vehicles?vehicle_id=${v.id}`} className="btn-outline btn-sm" style={{ flex: 1, justifyContent: 'center' }}>
                           <i className="fas fa-eye"></i> Details
                         </Link>
-                        <button className="btn-gradient btn-sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => navigate('/bookings', { state: { openBooking: true } })}>
+                        <button
+                          className="btn-gradient btn-sm"
+                          style={{ flex: 1, justifyContent: 'center' }}
+                          onClick={() => navigate(`/bookings?openBooking=true&vehicle_id=${v.id}`, { state: { openBooking: true, vehicle_id: String(v.id) } })}
+                        >
                           <i className="bi bi-shield-check"></i> Service
                         </button>
                       </div>

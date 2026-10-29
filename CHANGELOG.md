@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.15.5] — 2026-10-29
+### Fixed & Improved
+- **Auto-Preselect Vehicle When Clicking `Service` on Vehicle Cards (`frontend/src/pages/Dashboard.jsx`, `frontend/src/pages/Bookings.jsx`, `mobile/app/(tabs)/index.tsx`, `mobile/app/(tabs)/bookings.tsx`)**:
+  - Updated the `Service` button on every vehicle card in the Dashboard (both Web and Native Mobile iOS/Android) to pass that vehicle's `vehicle_id` into `/bookings?openBooking=true&vehicle_id={id}` so the New Booking modal opens with that exact vehicle already selected.
+  - Added a clean `Loading your vehicles...` state in the New Booking modal while vehicle data is fetching so the pre-selected vehicle immediately binds without flashing an empty state.
+
 ## [v1.15.4] — 2026-10-29
 ### Added & Enhanced
 - **Smart Drip SMS `maskpro.link` Device-Bound (TOFU) Magic Link Gatekeeper (`server/routes/auth.js`, `frontend/src/pages/MagicLinkGate.jsx`, `frontend/src/App.jsx`, `frontend/src/pages/Bookings.jsx`)**:

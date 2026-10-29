@@ -643,10 +643,14 @@ export default function Bookings() {
                 <div className="form-group">
                   <label className="form-label"><i className="fas fa-car" style={{ marginRight: '6px', color: '#3b82f6' }}></i>Select Vehicle *</label>
                   {vehicles.length > 0 ? (
-                    <select className="form-select" value={bookingForm.vehicle_id} onChange={e => handleVehicleChange(e.target.value)} required>
+                    <select className="form-select" value={String(bookingForm.vehicle_id || '')} onChange={e => handleVehicleChange(e.target.value)} required>
                       <option value="">Choose a vehicle...</option>
-                      {vehicles.map(v => <option key={v.id} value={v.id}>{v.make} {v.model} — {v.plate_no || 'No plate (Update in My Vehicle)'}</option>)}
+                      {vehicles.map(v => <option key={v.id} value={String(v.id)}>{v.make} {v.model} — {v.plate_no || 'No plate (Update in My Vehicle)'}</option>)}
                     </select>
+                  ) : loading ? (
+                    <div style={{ padding: '12px 16px', background: '#f8fafc', borderRadius: '12px', color: '#64748b', fontSize: '14px', border: '1px solid #e2e8f0' }}>
+                      Loading your vehicles...
+                    </div>
                   ) : (
                     <div style={{ padding: '16px', background: '#fef2f2', borderRadius: '12px', color: '#dc2626', fontSize: '14px' }}>
                       <i className="fas fa-exclamation-triangle" style={{ marginRight: '6px' }}></i>
