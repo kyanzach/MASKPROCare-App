@@ -312,30 +312,32 @@ export default function Layout() {
       <aside className={`sidebar${sidebarOpen ? ' open' : ''}`}>
         <div className="sidebar-header" style={{ cursor: 'pointer' }} onClick={() => { navigate('/'); setSidebarOpen(false); }}>
           <img src="/maskpro_logo.png" alt="MaskPro" className="sidebar-logo-img" />
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
             <div className="sidebar-brand">
               MASKPRO<span>Care</span>
             </div>
-            <span style={{ fontSize: '9px', fontWeight: 700, color: '#fff', background: 'var(--primary-gradient)', padding: '1px 7px', borderRadius: '20px', marginTop: '-2px', letterSpacing: '0.5px' }}>v{APP_VERSION}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '-1px' }} onClick={(e) => e.stopPropagation()}>
+              <span style={{ fontSize: '9px', fontWeight: 700, color: '#fff', background: 'var(--primary-gradient)', padding: '1px 7px', borderRadius: '20px', letterSpacing: '0.5px' }}>v{APP_VERSION}</span>
+              {isAdmin && (
+                <button
+                  onClick={() => { navigate('/admin'); setSidebarOpen(false); }}
+                  title="Admin Panel"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '3px',
+                    background: 'rgba(245, 158, 11, 0.14)', border: '1px solid rgba(245, 158, 11, 0.38)',
+                    color: '#d97706', padding: '1px 7px', borderRadius: '20px',
+                    fontSize: '9.5px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                    whiteSpace: 'nowrap', lineHeight: 1.3,
+                  }}
+                >
+                  <i className="bi bi-shield-lock-fill" style={{ fontSize: '9px' }}></i>
+                  <span>Admin</span>
+                </button>
+              )}
+            </div>
           </div>
-          {/* Admin badge + Bell in sidebar header */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={(e) => e.stopPropagation()}>
-            {isAdmin && (
-              <button
-                onClick={() => { navigate('/admin'); setSidebarOpen(false); }}
-                title="Admin Panel"
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '4px',
-                  background: 'rgba(245, 158, 11, 0.14)', border: '1px solid rgba(245, 158, 11, 0.35)',
-                  color: '#d97706', padding: '5px 10px', borderRadius: '10px',
-                  fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                <i className="bi bi-shield-lock-fill" style={{ fontSize: '12px' }}></i>
-                <span>Admin</span>
-              </button>
-            )}
+          {/* Bell in sidebar header (desktop only) */}
+          <div className="sidebar-bell-wrap" style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
             <BellIcon placement="sidebar" />
           </div>
         </div>

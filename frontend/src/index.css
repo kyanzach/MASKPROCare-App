@@ -1297,8 +1297,9 @@ textarea.form-input { resize: vertical; min-height: 100px; }
 }
 
 @media (max-width: 768px) {
-  .sidebar { transform: translateX(-100%); }
-  .sidebar.open { transform: translateX(0); }
+  .sidebar { transform: translateX(-100%); visibility: hidden; pointer-events: none; }
+  .sidebar.open { transform: translateX(0); visibility: visible; pointer-events: auto; }
+  .sidebar-bell-wrap { display: none !important; }
   .main-content { margin-left: 0; padding: 14px; padding-bottom: 88px; }
   .mobile-nav { display: block; }
   .grid-4 { grid-template-columns: repeat(2, 1fr); }

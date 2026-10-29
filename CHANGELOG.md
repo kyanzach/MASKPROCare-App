@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.16.3] — 2026-10-29
+### Fixed
+- **Fixed Sidebar Header Admin Button & Notification Bell Overflow on Desktop & Mobile Web (`frontend/src/components/Layout.jsx`, `frontend/src/index.css`)**:
+  - Moved the compact `Admin` badge inline with the `v1.16.3` version pill directly underneath `MASKPROCare` inside `.sidebar-header`, preventing the `Admin` pill and Notification Bell from overflowing past the `280px` sidebar width onto the main content area on Desktop.
+  - Added `visibility: hidden; pointer-events: none;` on `.sidebar:not(.open)` and hid `.sidebar-bell-wrap` on mobile viewports (`@media (max-width: 768px)`) so the desktop sidebar bell never bleeds onto the top-left mobile hamburger menu (`☰`).
+
 ## [v1.16.2] — 2026-10-29
 ### Fixed & Improved
 - **Purged Test Community S.O.S. & Discussion Posts + Cascaded Notification Cleanup on Post Delete/Reject (`server/routes/admin.js`)**:
