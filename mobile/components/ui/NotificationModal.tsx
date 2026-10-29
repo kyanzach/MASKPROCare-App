@@ -36,7 +36,12 @@ const NOTIF_ICONS: Record<string, { icon: React.ComponentProps<typeof FontAwesom
   registration_renewal: { icon: 'car', color: '#f59e0b', bg: '#fef3c7' },
   booking_confirmed: { icon: 'calendar-check-o', color: '#10b981', bg: '#d1fae5' },
   booking_reminder: { icon: 'clock-o', color: '#3b82f6', bg: '#dbeafe' },
-  system: { icon: 'info-circle', color: '#6366f1', bg: '#e0e7ff' },
+  community_sos: { icon: 'exclamation-triangle', color: '#dc2626', bg: '#fee2e2' },
+  community_sos_comment: { icon: 'comments', color: '#ea580c', bg: '#ffedd5' },
+  community_comment: { icon: 'comment-o', color: '#0284c7', bg: '#e0f2fe' },
+  community_moderation: { icon: 'shield', color: '#d97706', bg: '#fef3c7' },
+  community_approved: { icon: 'check-circle', color: '#10b981', bg: '#d1fae5' },
+  system: { icon: 'info-circle', color: '#2563eb', bg: '#dbeafe' },
 };
 
 export default function NotificationModal({

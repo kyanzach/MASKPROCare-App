@@ -32,6 +32,7 @@ interface Post {
   author_photo?: string | null;
   comment_count?: number;
   status?: string;
+  moderation_status?: string;
 }
 
 interface Comment {
@@ -53,11 +54,11 @@ export default function CommunityScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Form states (Create post)
+  // Form states (Create post) — MASKPRO S.O.S. is first & default open
   const [isPosting, setIsPosting] = useState(false);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
-  const [postType, setPostType] = useState<'discussion' | 'sos'>('discussion');
+  const [postType, setPostType] = useState<'sos' | 'discussion'>('sos');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Detail / Comments Modal
@@ -129,10 +130,10 @@ export default function CommunityScreen() {
         fetchPosts();
         showAlert(
           'success',
-          postType === 'sos' ? 'S.O.S. Sent!' : 'Post Published',
+          postType === 'sos' ? 'S.O.S. Broadcast Live!' : 'Submitted for Approval',
           postType === 'sos'
-            ? 'Your MASKPRO S.O.S. request was submitted. Nearby drivers and admins have been notified.'
-            : 'Your post has been published to the Care Community.'
+            ? 'Your MASKPRO S.O.S. emergency alert is live. Nearby members and admins have been notified.'
+            : 'Your discussion post has been submitted and is pending admin approval.'
         );
       } else {
         showAlert('error', 'Post Submission Failed', res.data?.message || 'Failed to submit post. Please try again.');
@@ -252,6 +253,10 @@ export default function CommunityScreen() {
                 {isResolved ? 'S.O.S. RESOLVED' : 'MASKPRO S.O.S.'}
               </Text>
             </View>
+          ) : post.moderation_status === 'pending' ? (
+            <View style={[styles.sosTag, { backgroundColor: '#f59e0b' }]}>
+              <Text style={styles.sosTagText}>PENDING APPROVAL</Text>
+            </View>
           ) : null}
 
           <View style={styles.postHeader}>
@@ -364,34 +369,75 @@ export default function CommunityScreen() {
               <View style={{ backgroundColor: 'transparent' }}>
                 <View style={styles.typeSelector}>
                   <TouchableOpacity
-                    style={[styles.typeButton, postType === 'discussion' && styles.typeActive]}
-                    onPress={() => setPostType('discussion')}
-                  >
-                    <FontAwesome
-                      name="comments-o"
-                      size={16}
-                      color={postType === 'discussion' ? '#1d4ed8' : '#6b7280'}
-                      style={styles.selectorIcon}
-                    />
-                    <Text style={postType === 'discussion' ? styles.typeActiveText : styles.typeText}>
-                      Discussion
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
                     style={[styles.typeButtonSos, postType === 'sos' && styles.typeActiveSos]}
                     onPress={() => setPostType('sos')}
                   >
                     <FontAwesome
                       name="exclamation-triangle"
-                      size={16}
+                      size={15}
                       color={postType === 'sos' ? '#b91c1c' : '#6b7280'}
                       style={styles.selectorIcon}
                     />
-                    <Text style={postType === 'sos' ? styles.typeActiveTextSos : styles.typeTextSos}>
+                    <Text
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      style={postType === 'sos' ? styles.typeActiveTextSos : styles.typeTextSos}
+                    >
                       MASKPRO S.O.S.
                     </Text>
                   </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.typeButton, postType === 'discussion' && styles.typeActive]}
+                    onPress={() => setPostType('discussion')}
+                  >
+                    <FontAwesome
+                      name="comments-o"
+                      size={15}
+                      color={postType === 'discussion' ? '#1d4ed8' : '#6b7280'}
+                      style={styles.selectorIcon}
+                    />
+                    <Text
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      style={postType === 'discussion' ? styles.typeActiveText : styles.typeText}
+                    >
+                      Maintenance Discussion
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View
+                  style={{
+                    backgroundColor: postType === 'sos' ? '#fef2f2' : '#fffbeb',
+                    borderColor: postType === 'sos' ? '#fecaca' : '#fde68a',
+                    borderWidth: 1,
+                    borderRadius: 10,
+                    paddingVertical: 10,
+                    paddingHorizontal: 12,
+                    marginBottom: 8,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                  }}
+                >
+                  <FontAwesome
+                    name={postType === 'sos' ? 'bullhorn' : 'shield'}
+                    size={14}
+                    color={postType === 'sos' ? '#dc2626' : '#d97706'}
+                    style={{ marginRight: 8 }}
+                  />
+                  <Text
+                    style={{
+                      flex: 1,
+                      fontSize: 12,
+                      fontWeight: '600',
+                      color: postType === 'sos' ? '#991b1b' : '#92400e',
+                    }}
+                  >
+                    {postType === 'sos'
+                      ? 'Publishes immediately and sends a push alert to nearby members.'
+                      : 'Moderated feed: Discussions require admin approval before going public.'}
+                  </Text>
                 </View>
 
                 <Text style={styles.label}>Title</Text>
@@ -839,7 +885,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     backgroundColor: 'transparent',
   },
-  typeButton: {
+  typeButtonSos: {
     flex: 1,
     flexDirection: 'row',
     padding: 12,
@@ -851,11 +897,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#ffffff',
   },
-  typeActive: {
-    backgroundColor: '#eff6ff',
-    borderColor: '#3b82f6',
+  typeActiveSos: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#ef4444',
   },
-  typeButtonSos: {
+  typeButton: {
     flex: 1,
     flexDirection: 'row',
     padding: 12,
@@ -867,9 +913,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#ffffff',
   },
-  typeActiveSos: {
-    backgroundColor: '#fef2f2',
-    borderColor: '#ef4444',
+  typeActive: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#3b82f6',
   },
   selectorIcon: {
     marginRight: 6,

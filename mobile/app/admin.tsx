@@ -1,15 +1,16 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
   FlatList,
+  ScrollView,
   StyleSheet,
   ActivityIndicator,
   Modal,
-  SafeAreaView,
   StatusBar,
+  RefreshControl,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -40,7 +41,21 @@ export default function AdminPanelScreen() {
   const insets = useSafeAreaInsets();
   const { user, startImpersonation, logout } = useAuth();
 
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'moderation' | 'impersonate'>('dashboard');
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+
+  // Dashboard state
+  const [dashData, setDashData] = useState<any>(null);
+  const [dashLoading, setDashLoading] = useState(false);
+
+  // Moderation state
+  const [modFilter, setModFilter] = useState<'pending' | 'sos' | 'approved' | 'rejected'>('pending');
+  const [modPosts, setModPosts] = useState<any[]>([]);
+  const [modCounts, setModCounts] = useState<any>({ pending: 0, active_sos: 0, approved: 0, rejected: 0, total: 0 });
+  const [modLoading, setModLoading] = useState(false);
+  const [modActionLoading, setModActionLoading] = useState<string | null>(null);
+
+  // Impersonation state
   const [customers, setCustomers] = useState<CustomerItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -58,11 +73,15 @@ export default function AdminPanelScreen() {
     customerName: string;
   } | null>(null);
   const [impersonating, setImpersonating] = useState(false);
-  const [errorToast, setErrorToast] = useState('');
+  const [toastMsg, setToastMsg] = useState('');
 
   const searchTimeoutRef = useRef<any>(null);
 
-  // Check admin authorization on mount
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(''), 3500);
+  };
+
   useEffect(() => {
     let isMounted = true;
     const verifyAdmin = async () => {
@@ -71,6 +90,8 @@ export default function AdminPanelScreen() {
         if (isMounted) {
           if (res.data?.data?.isAdmin) {
             setIsAdmin(true);
+            loadDashboard();
+            loadModerationPosts('pending');
             loadCustomers(1, '');
           } else {
             setIsAdmin(false);
@@ -87,6 +108,51 @@ export default function AdminPanelScreen() {
       if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     };
   }, []);
+
+  const loadDashboard = async () => {
+    setDashLoading(true);
+    try {
+      const res = await client.get('/admin/dashboard');
+      if (res.data?.success) {
+        setDashData(res.data.data);
+      }
+    } catch (err) {
+      console.error('[Admin] Dashboard load error:', err);
+    } finally {
+      setDashLoading(false);
+    }
+  };
+
+  const loadModerationPosts = async (filterVal = modFilter) => {
+    setModLoading(true);
+    try {
+      const res = await client.get(`/admin/community/posts?filter=${encodeURIComponent(filterVal)}`);
+      if (res.data?.success) {
+        setModPosts(res.data.data.posts || []);
+        setModCounts(res.data.data.counts || { pending: 0, active_sos: 0, approved: 0, rejected: 0, total: 0 });
+      }
+    } catch (err) {
+      console.error('[Admin] Moderation load error:', err);
+    } finally {
+      setModLoading(false);
+    }
+  };
+
+  const handleModerate = async (postId: number, action: string) => {
+    setModActionLoading(`${postId}:${action}`);
+    try {
+      const res = await client.post('/admin/community/moderate', { post_id: postId, action });
+      if (res.data?.success) {
+        showToast(res.data.message || 'Updated');
+        loadModerationPosts(modFilter);
+        loadDashboard();
+      }
+    } catch (err: any) {
+      showToast(err.response?.data?.message || 'Moderation failed');
+    } finally {
+      setModActionLoading(null);
+    }
+  };
 
   const loadCustomers = async (p = 1, q = '', isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -151,13 +217,10 @@ export default function AdminPanelScreen() {
 
         setConfirmModal(null);
       } else {
-        setErrorToast(res.data?.message || 'Failed to impersonate customer');
-        setTimeout(() => setErrorToast(''), 3500);
+        showToast(res.data?.message || 'Failed to impersonate customer');
       }
     } catch (err: any) {
-      const msg = err.response?.data?.message || 'Impersonation request failed';
-      setErrorToast(msg);
-      setTimeout(() => setErrorToast(''), 3500);
+      showToast(err.response?.data?.message || 'Impersonation request failed');
     } finally {
       setImpersonating(false);
     }
@@ -168,6 +231,19 @@ export default function AdminPanelScreen() {
     router.replace('/login');
   };
 
+  const timeAgo = (dateStr?: string) => {
+    if (!dateStr) return 'Never';
+    try {
+      const diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
+      if (diff < 60) return 'Just now';
+      if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+      if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+      return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    } catch {
+      return '';
+    }
+  };
+
   if (isAdmin === false) {
     return (
       <View style={[styles.container, styles.centerContent, { paddingTop: insets.top }]}>
@@ -175,7 +251,7 @@ export default function AdminPanelScreen() {
         <FontAwesome name="lock" size={48} color="#ef4444" />
         <Text style={styles.deniedTitle}>Admin Access Required</Text>
         <Text style={styles.deniedSubtitle}>
-          Your account does not have admin permissions to view this directory.
+          Your account does not have admin permissions.
         </Text>
         <TouchableOpacity style={styles.backButton} onPress={handleExitAdmin}>
           <Text style={styles.backButtonText}>Return to Login</Text>
@@ -183,6 +259,11 @@ export default function AdminPanelScreen() {
       </View>
     );
   }
+
+  const kpis = dashData?.kpis || {};
+  const platforms = dashData?.platforms || [];
+  const authMethods = dashData?.auth_methods || {};
+  const activeUsers = dashData?.active_users || [];
 
   return (
     <View style={[styles.container, { paddingTop: Math.max(insets.top, 12) }]}>
@@ -197,7 +278,7 @@ export default function AdminPanelScreen() {
           <View>
             <Text style={styles.headerTitle}>Admin Panel</Text>
             <Text style={styles.headerSubtitle}>
-              {pagination.total} customer{pagination.total === 1 ? '' : 's'} registered
+              Analytics, Moderation & Impersonate
             </Text>
           </View>
         </View>
@@ -208,8 +289,8 @@ export default function AdminPanelScreen() {
             onPress={() => router.replace('/(tabs)')}
             activeOpacity={0.7}
           >
-            <FontAwesome name="arrow-left" size={13} color="#60a5fa" />
-            <Text style={styles.backToAppText}>App</Text>
+            <FontAwesome name="arrow-left" size={12} color="#60a5fa" />
+            <Text style={styles.backToAppText} numberOfLines={1}>App</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -217,122 +298,366 @@ export default function AdminPanelScreen() {
             onPress={handleExitAdmin}
             activeOpacity={0.7}
           >
-            <FontAwesome name="sign-out" size={15} color="#94a3b8" />
-            <Text style={styles.exitAdminText}>Sign Out</Text>
+            <FontAwesome name="sign-out" size={14} color="#94a3b8" />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Error Toast */}
-      {errorToast ? (
+      {/* 3-Tab Segmented Bar */}
+      <View style={styles.tabBar}>
+        <TouchableOpacity
+          style={[styles.tabBtn, activeTab === 'dashboard' && styles.tabBtnActive]}
+          onPress={() => setActiveTab('dashboard')}
+          activeOpacity={0.8}
+        >
+          <FontAwesome name="bar-chart" size={12} color={activeTab === 'dashboard' ? '#fbbf24' : '#94a3b8'} />
+          <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.tabBtnText, activeTab === 'dashboard' && styles.tabBtnTextActive]}>
+            Dashboard
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabBtn, activeTab === 'moderation' && styles.tabBtnActive]}
+          onPress={() => setActiveTab('moderation')}
+          activeOpacity={0.8}
+        >
+          <FontAwesome name="shield" size={12} color={activeTab === 'moderation' ? '#fbbf24' : '#94a3b8'} />
+          <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.tabBtnText, activeTab === 'moderation' && styles.tabBtnTextActive]}>
+            Moderation {modCounts.pending > 0 ? `(${modCounts.pending})` : ''}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabBtn, activeTab === 'impersonate' && styles.tabBtnActive]}
+          onPress={() => setActiveTab('impersonate')}
+          activeOpacity={0.8}
+        >
+          <FontAwesome name="user-secret" size={12} color={activeTab === 'impersonate' ? '#fbbf24' : '#94a3b8'} />
+          <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.tabBtnText, activeTab === 'impersonate' && styles.tabBtnTextActive]}>
+            Impersonate
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {toastMsg ? (
         <View style={styles.errorToast}>
-          <FontAwesome name="exclamation-circle" size={16} color="#ef4444" />
-          <Text style={styles.errorToastText}>{errorToast}</Text>
+          <FontAwesome name="info-circle" size={15} color="#fbbf24" />
+          <Text style={styles.errorToastText}>{toastMsg}</Text>
         </View>
       ) : null}
 
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <FontAwesome name="search" size={15} color="#64748b" style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          value={search}
-          onChangeText={handleSearchChange}
-          placeholder="Search by name or mobile number..."
-          placeholderTextColor="#64748b"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-        {search ? (
-          <TouchableOpacity onPress={handleClearSearch} style={styles.clearSearchBtn}>
-            <FontAwesome name="times-circle" size={16} color="#94a3b8" />
-          </TouchableOpacity>
-        ) : null}
-      </View>
-
-      {/* Customer Directory List */}
-      {loading && !refreshing && customers.length === 0 ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#f59e0b" />
-          <Text style={styles.loadingText}>Loading directory...</Text>
-        </View>
-      ) : (
-        <FlatList
+      {/* ═══════════════ TAB 1: DASHBOARD & ANALYTICS ═══════════════ */}
+      {activeTab === 'dashboard' && (
+        <ScrollView
           style={{ flex: 1 }}
-          data={customers}
-          keyExtractor={(item) => String(item.id)}
-          contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 60 }]}
-          showsVerticalScrollIndicator={true}
-          refreshing={refreshing}
-          onRefresh={() => loadCustomers(1, search, true)}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <FontAwesome name="users" size={42} color="#334155" />
-              <Text style={styles.emptyText}>No customers found matching search</Text>
-            </View>
+          contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 40 }}
+          refreshControl={
+            <RefreshControl refreshing={dashLoading} onRefresh={loadDashboard} tintColor="#f59e0b" />
           }
-          renderItem={({ item }) => {
-            const initials = item.full_name
-              ? item.full_name
-                  .split(' ')
-                  .map((n) => n[0])
-                  .join('')
-                  .toUpperCase()
-                  .slice(0, 2)
-              : 'CU';
+        >
+          {/* KPI Grid */}
+          <View style={styles.kpiGrid}>
+            <View style={styles.kpiCard}>
+              <Text style={styles.kpiLabel}>Total Customers</Text>
+              <Text style={styles.kpiValue}>{(kpis.total_customers || 0).toLocaleString()}</Text>
+              <Text style={styles.kpiSub}>{(kpis.total_vehicles || 0).toLocaleString()} vehicles</Text>
+            </View>
+            <View style={styles.kpiCard}>
+              <Text style={styles.kpiLabel}>Active App Users</Text>
+              <Text style={[styles.kpiValue, { color: '#34d399' }]}>{kpis.active_app_users || 0}</Text>
+              <Text style={styles.kpiSub}>{kpis.total_sessions || 0} sessions</Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.kpiCard, kpis.pending_moderation_count > 0 && { borderColor: '#f59e0b' }]}
+              onPress={() => { setModFilter('pending'); setActiveTab('moderation'); }}
+            >
+              <Text style={styles.kpiLabel}>Pending Approval</Text>
+              <Text style={[styles.kpiValue, { color: '#fbbf24' }]}>{kpis.pending_moderation_count || 0}</Text>
+              <Text style={styles.kpiSub}>Tap to moderate</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.kpiCard, kpis.active_sos_count > 0 && { borderColor: '#ef4444' }]}
+              onPress={() => { setModFilter('sos'); setActiveTab('moderation'); }}
+            >
+              <Text style={styles.kpiLabel}>Active S.O.S.</Text>
+              <Text style={[styles.kpiValue, { color: '#f87171' }]}>{kpis.active_sos_count || 0}</Text>
+              <Text style={styles.kpiSub}>Roadside alerts</Text>
+            </TouchableOpacity>
+          </View>
 
-            return (
-              <View style={styles.customerCard}>
-                <View style={styles.cardHeaderRow}>
-                  {/* Avatar Initials */}
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>{initials}</Text>
+          {/* Platform Breakdown */}
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Platform Breakdown (Web, Android, iOS)</Text>
+            {platforms.map((p: any) => {
+              const icon = p.platform === 'android' ? 'android' : p.platform === 'ios' ? 'apple' : 'globe';
+              const color = p.platform === 'android' ? '#34d399' : p.platform === 'ios' ? '#e2e8f0' : '#60a5fa';
+              return (
+                <View key={p.platform} style={styles.platformRow}>
+                  <View style={[styles.platformIconBox, { borderColor: color }]}>
+                    <FontAwesome name={icon as any} size={16} color={color} />
                   </View>
-
-                  {/* Customer Info */}
-                  <View style={styles.customerInfo}>
-                    <Text style={styles.customerName} numberOfLines={1}>
-                      {item.full_name || 'Unnamed Customer'}
-                    </Text>
-                    <Text style={styles.customerMobile}>{item.mobile_number || '—'}</Text>
-                    {item.email ? (
-                      <Text style={styles.customerEmail} numberOfLines={1}>
-                        {item.email}
-                      </Text>
-                    ) : null}
-                  </View>
-
-                  {/* Booking count chip */}
-                  <View style={styles.bookingChip}>
-                    <Text style={styles.bookingChipText}>
-                      {item.booking_count} {item.booking_count === 1 ? 'booking' : 'bookings'}
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={styles.platformTitle}>{p.label}</Text>
+                      <Text style={[styles.platformShare, { color }]}>{p.share_pct || 0}%</Text>
+                    </View>
+                    <Text style={styles.platformMeta}>
+                      {p.unique_users} users • {p.total_sessions} sessions • {p.total_api_hits} hits
                     </Text>
                   </View>
                 </View>
+              );
+            })}
+          </View>
 
-                {/* Impersonate Button */}
+          {/* Auth Funnel */}
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Authentication & Login Methods</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
+              <View style={styles.authMiniBox}>
+                <Text style={styles.authMiniValue}>{authMethods.magic_link?.links_opened || 0}</Text>
+                <Text style={styles.authMiniLabel}>Magic Links</Text>
+              </View>
+              <View style={styles.authMiniBox}>
+                <Text style={styles.authMiniValue}>{authMethods.otp?.verified_logins || 0}</Text>
+                <Text style={styles.authMiniLabel}>SMS OTP</Text>
+              </View>
+              <View style={styles.authMiniBox}>
+                <Text style={styles.authMiniValue}>{authMethods.ai_verification?.verified_logins || 0}</Text>
+                <Text style={styles.authMiniLabel}>AI Logins</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Who Uses the App */}
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Who Uses the App (Recent Active Users)</Text>
+            {activeUsers.map((u: any) => (
+              <View key={u.telemetry_id} style={styles.activeUserRow}>
+                <View style={{ flex: 1, marginRight: 8 }}>
+                  <Text style={styles.activeUserName}>{u.full_name}</Text>
+                  <Text style={styles.activeUserSub}>
+                    {u.platform?.toUpperCase()} • {u.device_label || u.app_type} • {timeAgo(u.last_seen_at)}
+                  </Text>
+                </View>
                 <TouchableOpacity
-                  style={styles.impersonateBtn}
-                  onPress={() => handleImpersonatePress(item.id, item.full_name)}
-                  activeOpacity={0.8}
+                  style={styles.miniImpBtn}
+                  onPress={() => handleImpersonatePress(u.customer_id, u.full_name)}
                 >
-                  <LinearGradient
-                    colors={['#f59e0b', '#fbbf24']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={styles.impersonateGradient}
-                  >
-                    <FontAwesome name="eye" size={13} color="#78350f" />
-                    <Text style={styles.impersonateText}>Impersonate</Text>
-                  </LinearGradient>
+                  <Text style={styles.miniImpBtnText}>Login as</Text>
                 </TouchableOpacity>
               </View>
-            );
-          }}
-        />
+            ))}
+          </View>
+        </ScrollView>
       )}
 
-      {/* Impersonation Confirmation Modal (No native alert/confirm per Rule 14) */}
+      {/* ═══════════════ TAB 2: COMMUNITY MODERATION ═══════════════ */}
+      {activeTab === 'moderation' && (
+        <View style={{ flex: 1 }}>
+          <View style={styles.filterRow}>
+            {(['pending', 'sos', 'approved', 'rejected'] as const).map((f) => {
+              const active = modFilter === f;
+              const label =
+                f === 'pending'
+                  ? `Pending (${modCounts.pending || 0})`
+                  : f === 'sos'
+                  ? `S.O.S. (${modCounts.active_sos || 0})`
+                  : f === 'approved'
+                  ? `Approved (${modCounts.approved || 0})`
+                  : `Rejected`;
+              return (
+                <TouchableOpacity
+                  key={f}
+                  style={[styles.filterPill, active && styles.filterPillActive]}
+                  onPress={() => { setModFilter(f); loadModerationPosts(f); }}
+                >
+                  <Text numberOfLines={1} style={[styles.filterPillText, active && styles.filterPillTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {modLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#f59e0b" />
+            </View>
+          ) : (
+            <FlatList
+              style={{ flex: 1 }}
+              data={modPosts}
+              keyExtractor={(item) => String(item.id)}
+              contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 40, gap: 12 }}
+              ListEmptyComponent={
+                <View style={styles.emptyContainer}>
+                  <FontAwesome name="check-circle" size={40} color="#10b981" />
+                  <Text style={styles.emptyText}>No posts in this moderation queue</Text>
+                </View>
+              }
+              renderItem={({ item: post }) => {
+                const isSos = post.type === 'sos';
+                const isPending = post.moderation_status === 'pending';
+                const isApproved = post.is_approved === 1 && post.moderation_status === 'approved';
+                return (
+                  <View style={[styles.customerCard, isPending && { borderColor: '#f59e0b' }]}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <Text style={{ fontSize: 11, fontWeight: '800', color: isSos ? '#f87171' : '#60a5fa' }}>
+                        {isSos ? 'MASKPRO S.O.S.' : 'MAINTENANCE DISCUSSION'}
+                      </Text>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: isPending ? '#fbbf24' : '#34d399' }}>
+                        {isPending ? 'Pending Approval' : isApproved ? 'Approved' : 'Rejected'}
+                      </Text>
+                    </View>
+                    <Text style={{ fontSize: 16, fontWeight: '800', color: '#fff', marginBottom: 4 }}>{post.title}</Text>
+                    <Text style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>
+                      By {post.author_name} ({post.author_mobile || 'N/A'}) • {timeAgo(post.created_at)}
+                    </Text>
+                    <Text style={{ fontSize: 13, color: '#cbd5e1', lineHeight: 19, marginBottom: 12 }}>{post.body}</Text>
+
+                    <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                      {(!isApproved || isPending) && (
+                        <TouchableOpacity
+                          style={[styles.modBtn, { backgroundColor: '#10b981' }]}
+                          disabled={!!modActionLoading}
+                          onPress={() => handleModerate(post.id, 'approve')}
+                        >
+                          <FontAwesome name="check" size={12} color="#fff" />
+                          <Text style={styles.modBtnText}>Approve</Text>
+                        </TouchableOpacity>
+                      )}
+                      {post.moderation_status !== 'rejected' && (
+                        <TouchableOpacity
+                          style={[styles.modBtn, { backgroundColor: '#b45309' }]}
+                          disabled={!!modActionLoading}
+                          onPress={() => handleModerate(post.id, 'reject')}
+                        >
+                          <FontAwesome name="eye-slash" size={12} color="#fff" />
+                          <Text style={styles.modBtnText}>Reject</Text>
+                        </TouchableOpacity>
+                      )}
+                      {isSos && post.status === 'open' && (
+                        <TouchableOpacity
+                          style={[styles.modBtn, { backgroundColor: '#2563eb' }]}
+                          disabled={!!modActionLoading}
+                          onPress={() => handleModerate(post.id, 'resolve')}
+                        >
+                          <FontAwesome name="check-circle" size={12} color="#fff" />
+                          <Text style={styles.modBtnText}>Resolve</Text>
+                        </TouchableOpacity>
+                      )}
+                      <TouchableOpacity
+                        style={[styles.modBtn, { backgroundColor: '#7f1d1d' }]}
+                        disabled={!!modActionLoading}
+                        onPress={() => handleModerate(post.id, 'delete')}
+                      >
+                        <FontAwesome name="trash" size={12} color="#fca5a5" />
+                        <Text style={[styles.modBtnText, { color: '#fca5a5' }]}>Delete</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              }}
+            />
+          )}
+        </View>
+      )}
+
+      {/* ═══════════════ TAB 3: CUSTOMER IMPERSONATION ═══════════════ */}
+      {activeTab === 'impersonate' && (
+        <View style={{ flex: 1 }}>
+          <View style={styles.searchContainer}>
+            <FontAwesome name="search" size={15} color="#64748b" style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              value={search}
+              onChangeText={handleSearchChange}
+              placeholder="Search by name or mobile number..."
+              placeholderTextColor="#64748b"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {search ? (
+              <TouchableOpacity onPress={handleClearSearch} style={styles.clearSearchBtn}>
+                <FontAwesome name="times-circle" size={16} color="#94a3b8" />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          {loading && !refreshing && customers.length === 0 ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#f59e0b" />
+              <Text style={styles.loadingText}>Loading directory...</Text>
+            </View>
+          ) : (
+            <FlatList
+              style={{ flex: 1 }}
+              data={customers}
+              keyExtractor={(item) => String(item.id)}
+              contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 60 }]}
+              showsVerticalScrollIndicator={true}
+              refreshing={refreshing}
+              onRefresh={() => loadCustomers(1, search, true)}
+              ListEmptyComponent={
+                <View style={styles.emptyContainer}>
+                  <FontAwesome name="users" size={42} color="#334155" />
+                  <Text style={styles.emptyText}>No customers found matching search</Text>
+                </View>
+              }
+              renderItem={({ item }) => {
+                const initials = item.full_name
+                  ? item.full_name
+                      .split(' ')
+                      .map((n) => n[0])
+                      .join('')
+                      .toUpperCase()
+                      .slice(0, 2)
+                  : 'CU';
+
+                return (
+                  <View style={styles.customerCard}>
+                    <View style={styles.cardHeaderRow}>
+                      <View style={styles.avatar}>
+                        <Text style={styles.avatarText}>{initials}</Text>
+                      </View>
+                      <View style={styles.customerInfo}>
+                        <Text style={styles.customerName} numberOfLines={1}>
+                          {item.full_name || 'Unnamed Customer'}
+                        </Text>
+                        <Text style={styles.customerMobile}>{item.mobile_number || '—'}</Text>
+                      </View>
+                      <View style={styles.bookingChip}>
+                        <Text style={styles.bookingChipText}>
+                          {item.booking_count} {item.booking_count === 1 ? 'booking' : 'bookings'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <TouchableOpacity
+                      style={styles.impersonateBtn}
+                      onPress={() => handleImpersonatePress(item.id, item.full_name)}
+                      activeOpacity={0.8}
+                    >
+                      <LinearGradient
+                        colors={['#f59e0b', '#fbbf24']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={styles.impersonateGradient}
+                      >
+                        <FontAwesome name="eye" size={13} color="#78350f" />
+                        <Text style={styles.impersonateText}>Impersonate</Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </View>
+                );
+              }}
+            />
+          )}
+        </View>
+      )}
+
+      {/* Impersonation Confirmation Modal */}
       <Modal
         visible={!!confirmModal}
         transparent
@@ -349,11 +674,11 @@ export default function AdminPanelScreen() {
 
             <Text style={styles.modalTitle}>Impersonate Customer</Text>
             <Text style={styles.modalDescription}>
-              You will view and interact with the app as{' '}
+              View MASKPRO Care as{' '}
               <Text style={styles.modalBoldName}>
                 {confirmModal?.customerName || 'this customer'}
               </Text>
-              . You can exit anytime via the top banner.
+              .
             </Text>
 
             <View style={styles.modalActions}>
@@ -381,7 +706,7 @@ export default function AdminPanelScreen() {
                   {impersonating ? (
                     <ActivityIndicator size="small" color="#78350f" />
                   ) : (
-                    <Text style={styles.confirmModalText}>Start Impersonating</Text>
+                    <Text style={styles.confirmModalText}>Login as</Text>
                   )}
                 </LinearGradient>
               </TouchableOpacity>
@@ -719,6 +1044,204 @@ const styles = StyleSheet.create({
   confirmModalText: {
     color: '#78350f',
     fontSize: 14,
+    fontWeight: '700',
+  },
+  tabBar: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginTop: 12,
+    backgroundColor: 'rgba(30, 41, 59, 0.85)',
+    borderRadius: 12,
+    padding: 4,
+    gap: 6,
+  },
+  tabBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 9,
+    paddingHorizontal: 8,
+    borderRadius: 9,
+  },
+  tabBtnActive: {
+    backgroundColor: '#1e293b',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.4)',
+  },
+  tabBtnText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  tabBtnTextActive: {
+    color: '#fbbf24',
+  },
+  kpiGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 14,
+  },
+  kpiCard: {
+    width: '48%',
+    backgroundColor: 'rgba(30, 41, 59, 0.7)',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(51, 65, 85, 0.6)',
+  },
+  kpiLabel: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  kpiValue: {
+    color: '#ffffff',
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  kpiSub: {
+    color: '#64748b',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  sectionCard: {
+    backgroundColor: 'rgba(30, 41, 59, 0.7)',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(51, 65, 85, 0.6)',
+    marginBottom: 14,
+  },
+  sectionTitle: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 12,
+  },
+  platformRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(51, 65, 85, 0.4)',
+  },
+  platformIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+  },
+  platformTitle: {
+    color: '#f8fafc',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  platformShare: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  platformMeta: {
+    color: '#94a3b8',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  authMiniBox: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(51, 65, 85, 0.5)',
+  },
+  authMiniValue: {
+    color: '#34d399',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  authMiniLabel: {
+    color: '#94a3b8',
+    fontSize: 11,
+    marginTop: 3,
+    fontWeight: '600',
+  },
+  activeUserRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(51, 65, 85, 0.4)',
+  },
+  activeUserName: {
+    color: '#f8fafc',
+    fontSize: 13.5,
+    fontWeight: '700',
+  },
+  activeUserSub: {
+    color: '#94a3b8',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  miniImpBtn: {
+    backgroundColor: 'rgba(245, 158, 11, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.4)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  miniImpBtnText: {
+    color: '#fbbf24',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  filterRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    marginTop: 12,
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  filterPill: {
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(30, 41, 59, 0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(51, 65, 85, 0.6)',
+  },
+  filterPillActive: {
+    backgroundColor: 'rgba(245, 158, 11, 0.2)',
+    borderColor: '#f59e0b',
+  },
+  filterPillText: {
+    color: '#94a3b8',
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
+  filterPillTextActive: {
+    color: '#fbbf24',
+  },
+  modBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  modBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
     fontWeight: '700',
   },
 });

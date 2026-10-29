@@ -1,5 +1,23 @@
 # Changelog
 
+## [v1.16.0] — 2026-10-29
+### Added & Changed
+- **Urgent `MASKPRO S.O.S.` Post & S.O.S. Comment Notifications in Notification Bell + Push Alerts (`server/routes/community.js`, `frontend/src/components/Layout.jsx`, `frontend/src/pages/Community.jsx`, `mobile/components/ui/NotificationModal.tsx`, `mobile/components/ui/TopHeader.tsx`)**:
+  - Broadcasting a new `MASKPRO S.O.S.` post or commenting on an S.O.S. thread now automatically inserts `community_sos` and `community_sos_comment` notifications into `customer_notifications` for all active Care users (and `notifications` for Unify staff), immediately populating the Notification Bell list on Web/Android/iOS and triggering high-priority native push alerts via `syncAndAlertNewNotifications()`.
+  - Added full interactive **Post Detail & Comments Modal** (`Offer Help / Comment` and `Mark Resolved`) to Web `frontend/src/pages/Community.jsx` matching Mobile `community.tsx`.
+- **Default `MASKPRO S.O.S.` First on Mobile + Facebook-Group Style Moderation & EdgeRank Feed (`server/routes/community.js`, `mobile/app/(tabs)/community.tsx`, `frontend/src/pages/Community.jsx`)**:
+  - Made `MASKPRO S.O.S.` the first (left) button and default selected tab (`useState('sos')`) when creating a post on Android and iOS (`mobile/app/(tabs)/community.tsx`), matching the Web app.
+  - Added `moderation_status ENUM('pending','approved','rejected')`, `moderated_by`, and `moderated_at` to `community_posts`. `MASKPRO S.O.S.` emergencies publish immediately (`approved`), while `Maintenance Discussion` posts require Admin approval (`pending`) and notify Admins (`community_moderation`).
+  - Ranked the Community feed using a Facebook Group EdgeRank-style algorithm: Open S.O.S. pinned first → Author's own pending discussions (`Pending Approval` badge) → Approved discussions ranked by engagement & recency decay `((comments * 5 + tech_comments * 8 + 10) / POW(hours_age + 2, 1.4))`.
+- **Admin Button in Web Header & Web Profile Page (`frontend/src/components/Layout.jsx`, `frontend/src/pages/Profile.jsx`, `mobile/components/ui/TopHeader.tsx`)**:
+  - Added the gold `Admin` shield button in the Web top header and sidebar header (`Layout.jsx`) and the **Admin Panel** card in Web `Profile.jsx`, visible strictly only when `/api/admin/check` returns `isAdmin: true` (hidden for regular customers).
+- **3-Tab Admin Control Center: Dashboard & Usage Analytics, Community Moderation Queue, and Customer Impersonation (`server/middleware/auth.js`, `server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`, `mobile/app/admin.tsx`, `mobile/api/client.ts`)**:
+  - Created `care_app_telemetry` table and non-blocking session/platform telemetry tracking in `server/middleware/auth.js` + `X-Client-Platform` header in `mobile/api/client.ts`.
+  - Upgraded Web (`AdminPanel.jsx`) and Mobile (`mobile/app/admin.tsx`) Admin Panels into a 3-tab suite:
+    1. **Dashboard & Usage**: Core KPIs, **Platform Breakdown (`Web App`, `Android Native App`, `iOS Native App`)**, **Login & Auth Funnel (`1-Click Magic Links`, `SMS OTP`, `AI Verification`)**, and **Who Uses the App** live customer & device log with 1-click `Login as`.
+    2. **Community Moderation**: Filterable queue (`Pending Approval`, `MASKPRO S.O.S.`, `Approved`, `Rejected`) with 1-click `Approve & Publish`, `Reject / Hide`, `Mark S.O.S. Resolved`, and `Delete`.
+    3. **Customer Impersonate**: Dedicated searchable customer directory (`7,077` customers) with booking counts and 1-click `Login as`.
+
 ## [v1.15.10] — 2026-10-29
 ### Changed
 - **Renamed Sidebar Menu `My Loyalty Cards` to `My MASKPROCare Cards` (`frontend/src/components/Layout.jsx`, `frontend/src/pages/Loyalty.jsx`)**:

@@ -16,22 +16,83 @@ const straicoService = require('../services/straico');
 
 router.use(authenticateToken);
 
+// ─── Helper: Get all active Care app customer IDs for urgent S.O.S. broadcasts ──
+async function getActiveCareCustomerIds() {
+  try {
+    const [rows] = await pool.query(`
+      SELECT DISTINCT cid FROM (
+        SELECT customer_id AS cid FROM care_app_telemetry WHERE customer_id > 0
+        UNION
+        SELECT customer_id AS cid FROM care_magic_links WHERE customer_id > 0
+        UNION
+        SELECT customer_id AS cid FROM customer_notifications WHERE customer_id > 0
+        UNION
+        SELECT customer_id AS cid FROM community_posts WHERE customer_id > 0
+        UNION
+        SELECT c.id AS cid FROM customers c
+        JOIN login_otp l ON RIGHT(REPLACE(c.mobile_number, ' ', ''), 10) = RIGHT(REPLACE(l.mobile, ' ', ''), 10)
+        UNION
+        SELECT c.id AS cid FROM customers c
+        JOIN users u ON TRIM(u.full_name) = TRIM(c.full_name) OR (u.mobile_number != '' AND u.mobile_number = c.mobile_number)
+        WHERE u.access_level = 'admin'
+      ) active_users
+      WHERE cid IS NOT NULL AND cid > 0
+    `);
+    return rows.map((r) => Number(r.cid)).filter(Boolean);
+  } catch (err) {
+    console.warn('[Community] Failed to query active care customer IDs:', err.message);
+    return [];
+  }
+}
+
+// ─── Helper: Get admin customer IDs for moderation alerts ─────────
+async function getAdminCustomerIds() {
+  try {
+    const [rows] = await pool.query(`
+      SELECT DISTINCT c.id AS cid
+      FROM customers c
+      JOIN users u ON TRIM(u.full_name) = TRIM(c.full_name) OR (u.mobile_number != '' AND u.mobile_number = c.mobile_number)
+      WHERE u.access_level = 'admin'
+    `);
+    return rows.map((r) => Number(r.cid)).filter(Boolean);
+  } catch (err) {
+    return [];
+  }
+}
+
 // ─── GET /api/community/posts ─────────────────────────────────────
+// Facebook-Group style feed:
+// 1. Open MASKPRO S.O.S. emergencies pinned first
+// 2. Author's own pending Maintenance Discussions (with Pending Approval badge)
+// 3. Approved posts ranked by Facebook Group EdgeRank-style engagement & recency decay
 router.get('/posts', async (req, res) => {
   try {
+    const customerId = req.user.customer_id;
     const [posts] = await pool.query(`
       SELECT 
-        p.id, p.customer_id, p.type, p.title, p.body, p.location, p.status, p.created_at,
+        p.id, p.customer_id, p.type, p.title, p.body, p.location, p.status,
+        p.is_approved, p.moderation_status, p.created_at,
         c.full_name as author_name, c.profile_photo as author_photo,
-        (SELECT COUNT(*) FROM community_comments cc WHERE cc.post_id = p.id AND cc.is_approved = 1) as comment_count
+        (SELECT COUNT(*) FROM community_comments cc WHERE cc.post_id = p.id AND cc.is_approved = 1) as comment_count,
+        (SELECT COUNT(*) FROM community_comments cc2 WHERE cc2.post_id = p.id AND cc2.is_approved = 1 AND cc2.is_tech = 1) as tech_comment_count
       FROM community_posts p
       JOIN customers c ON p.customer_id = c.id
-      WHERE p.is_approved = 1 AND p.status != 'hidden'
+      WHERE (p.is_approved = 1 AND p.status != 'hidden' AND p.moderation_status != 'rejected')
+         OR (p.customer_id = ? AND p.moderation_status = 'pending' AND p.status != 'hidden')
       ORDER BY 
-        CASE WHEN p.type = 'sos' AND p.status = 'open' THEN 1 ELSE 2 END,
+        CASE 
+          WHEN p.type = 'sos' AND p.status = 'open' AND p.is_approved = 1 THEN 0
+          WHEN p.customer_id = ? AND p.moderation_status = 'pending' THEN 1
+          ELSE 2
+        END ASC,
+        (
+          (SELECT COUNT(*) FROM community_comments cc WHERE cc.post_id = p.id AND cc.is_approved = 1) * 5 +
+          (SELECT COUNT(*) FROM community_comments cc2 WHERE cc2.post_id = p.id AND cc2.is_approved = 1 AND cc2.is_tech = 1) * 8 +
+          10
+        ) / POW(GREATEST(TIMESTAMPDIFF(HOUR, p.created_at, NOW()), 0) + 2, 1.4) DESC,
         p.created_at DESC
       LIMIT 50
-    `);
+    `, [customerId, customerId]);
 
     return res.json({ success: true, data: { posts }, message: 'Posts retrieved', errors: [] });
   } catch (err) {
@@ -51,40 +112,120 @@ router.post('/posts', async (req, res) => {
     }
 
     const postType = type === 'sos' ? 'sos' : 'discussion';
-    let isApproved = 1;
 
-    // AI Moderation for all posts
+    // AI safety check for spam/profanity
     const isSafe = await straicoService.moderateContent(title, body);
+
+    // Facebook-Group style moderation:
+    // - MASKPRO S.O.S. emergencies go live immediately (if AI-safe) and trigger instant Bell + Push notifications
+    // - Maintenance Discussions require Admin Approval ('pending', is_approved = 0)
+    let isApproved = 1;
+    let moderationStatus = 'approved';
+
     if (!isSafe) {
-      // Shadowban the post if it fails AI moderation
       isApproved = 0;
+      moderationStatus = 'rejected';
+    } else if (postType === 'discussion') {
+      isApproved = 0;
+      moderationStatus = 'pending';
     }
 
     const [result] = await pool.query(`
-      INSERT INTO community_posts (customer_id, type, title, body, location, status, is_approved)
-      VALUES (?, ?, ?, ?, ?, 'open', ?)
-    `, [customerId, postType, title, body, location || null, isApproved]);
+      INSERT INTO community_posts (customer_id, type, title, body, location, status, is_approved, moderation_status)
+      VALUES (?, ?, ?, ?, ?, 'open', ?, ?)
+    `, [customerId, postType, title.trim(), body.trim(), location ? location.trim() : null, isApproved, moderationStatus]);
 
     const newPostId = result.insertId;
 
-    if (isApproved === 0) {
-      // If shadowbanned, we still return success so the spammer doesn't know
+    if (!isSafe) {
       return res.json({ 
         success: true, 
-        data: { id: newPostId, status: 'open' }, 
-        message: 'Post submitted successfully', 
+        data: { id: newPostId, status: 'open', moderation_status: 'pending' }, 
+        message: 'Post submitted for review', 
         errors: [] 
       });
     }
 
     const [newPost] = await pool.query(`
-      SELECT p.*, c.full_name as author_name 
+      SELECT p.*, c.full_name as author_name, c.profile_photo as author_photo,
+        0 as comment_count, 0 as tech_comment_count
       FROM community_posts p
       JOIN customers c ON p.customer_id = c.id
       WHERE p.id = ?
     `, [newPostId]);
 
-    return res.json({ success: true, data: { post: newPost[0] }, message: 'Post created successfully', errors: [] });
+    const createdPost = newPost[0];
+    const authorName = createdPost?.author_name || 'A MaskPro Member';
+
+    if (postType === 'sos') {
+      // Broadcast urgent S.O.S. alert to all active Care app users (Bell + Push Notification)
+      try {
+        const recipientIds = await getActiveCareCustomerIds();
+        if (!recipientIds.includes(customerId)) recipientIds.push(customerId);
+
+        const locSuffix = location ? ` near ${location.trim()}` : '';
+        const notifTitle = `MASKPRO S.O.S.: ${title.trim()}`;
+        const notifMsg = `${authorName} needs emergency roadside help${locSuffix}: "${body.trim().slice(0, 120)}" — Tap to respond immediately.`;
+
+        if (recipientIds.length > 0) {
+          const values = recipientIds.map((cid) => [cid, 'community_sos', notifTitle, notifMsg, '/community-care']);
+          await pool.query(
+            `INSERT INTO customer_notifications (customer_id, type, title, message, link) VALUES ?`,
+            [values]
+          );
+        }
+
+        // Also notify Unify branch staff & admins
+        const [staffUsers] = await pool.query(
+          `SELECT id FROM users WHERE status = 'active' AND access_level IN ('admin', 'branch')`
+        );
+        if (staffUsers.length > 0) {
+          const staffValues = staffUsers.map((u) => [
+            u.id,
+            'community_sos',
+            notifTitle,
+            notifMsg,
+            'bookings_list.php'
+          ]);
+          await pool.query(
+            `INSERT INTO notifications (user_id, type, title, message, link) VALUES ?`,
+            [staffValues]
+          ).catch(() => {});
+        }
+      } catch (notifErr) {
+        console.warn('[Community] Failed to broadcast S.O.S. notifications:', notifErr.message);
+      }
+
+      return res.json({
+        success: true,
+        data: { post: createdPost, moderation_status: 'approved' },
+        message: 'MASKPRO S.O.S. broadcast live! Community members and technicians have been notified.',
+        errors: []
+      });
+    } else {
+      // Maintenance Discussion -> Notify admins for moderation approval
+      try {
+        const adminIds = await getAdminCustomerIds();
+        if (adminIds.length > 0) {
+          const notifTitle = `Pending Community Post Approval`;
+          const notifMsg = `${authorName} submitted "${title.trim()}" in Maintenance Discussion. Tap to review and approve.`;
+          const values = adminIds.map((cid) => [cid, 'community_moderation', notifTitle, notifMsg, '/admin?tab=moderation']);
+          await pool.query(
+            `INSERT INTO customer_notifications (customer_id, type, title, message, link) VALUES ?`,
+            [values]
+          );
+        }
+      } catch (modErr) {
+        console.warn('[Community] Failed to send admin moderation alert:', modErr.message);
+      }
+
+      return res.json({
+        success: true,
+        data: { post: createdPost, moderation_status: 'pending' },
+        message: 'Your discussion post has been submitted and is pending admin approval.',
+        errors: []
+      });
+    }
   } catch (err) {
     console.error('Community create post error:', err);
     return res.status(500).json({ success: false, message: 'Failed to create post', errors: [] });
@@ -118,36 +259,38 @@ router.post('/comments', async (req, res) => {
     const customerId = req.user.customer_id;
     const { post_id, body } = req.body;
 
-    if (!post_id || !body) {
-      return res.status(422).json({ success: false, message: 'Post ID and body are required', errors: [] });
+    if (!post_id || !body || !String(body).trim()) {
+      return res.status(422).json({ success: false, message: 'Post ID and comment body are required', errors: [] });
     }
 
-    // Check if the user is a tech. 
-    // We check if the customer's phone number exists in the users table.
+    // Check if the user is a MaskPro technician/staff in the Unify users table
     let isTech = 0;
     try {
-      const [customerRecord] = await pool.query("SELECT mobile FROM customers WHERE id = ?", [customerId]);
-      if (customerRecord.length > 0 && customerRecord[0].mobile) {
-        const mobile = customerRecord[0].mobile;
-        // Last 10 digits comparison logic (naive approach for this check)
+      const [customerRecord] = await pool.query("SELECT full_name, mobile_number FROM customers WHERE id = ?", [customerId]);
+      if (customerRecord.length > 0) {
+        const mobile = String(customerRecord[0].mobile_number || '').replace(/\D/g, '');
         const last10 = mobile.slice(-10);
-        const [userRecord] = await pool.query("SELECT id FROM users WHERE phone LIKE ?", [`%${last10}`]);
+        const fullName = String(customerRecord[0].full_name || '').trim();
+        const [userRecord] = await pool.query(
+          "SELECT id FROM users WHERE (mobile_number != '' AND RIGHT(REPLACE(mobile_number, ' ', ''), 10) = ?) OR TRIM(full_name) = ? LIMIT 1",
+          [last10 || '___none___', fullName]
+        );
         if (userRecord.length > 0) {
           isTech = 1;
         }
       }
     } catch (e) {
-      console.warn('Failed to check if user is tech', e);
+      console.warn('Failed to check if user is tech:', e.message);
     }
 
-    // Moderation for comments (optional, we use same straico service)
+    // Moderation for comments
     const isSafe = await straicoService.moderateContent("Comment", body);
     const isApproved = isSafe ? 1 : 0;
 
     const [result] = await pool.query(`
       INSERT INTO community_comments (post_id, customer_id, is_tech, body, is_approved)
       VALUES (?, ?, ?, ?, ?)
-    `, [post_id, customerId, isTech, body, isApproved]);
+    `, [post_id, customerId, isTech, String(body).trim(), isApproved]);
 
     if (isApproved === 0) {
       return res.json({ success: true, message: 'Comment submitted successfully', errors: [] });
@@ -160,7 +303,66 @@ router.post('/comments', async (req, res) => {
       WHERE cc.id = ?
     `, [result.insertId]);
 
-    return res.json({ success: true, data: { comment: newComment[0] }, message: 'Comment added', errors: [] });
+    const commentObj = newComment[0];
+    const commenterName = commentObj?.author_name || 'A MaskPro Member';
+
+    // Fetch parent post details to trigger instant notifications
+    try {
+      const [postRows] = await pool.query(
+        `SELECT id, customer_id, type, title, location FROM community_posts WHERE id = ? LIMIT 1`,
+        [post_id]
+      );
+      if (postRows.length > 0) {
+        const parentPost = postRows[0];
+        if (parentPost.type === 'sos') {
+          // Time is of the essence for MASKPRO S.O.S. comments:
+          // Broadcast to all active Care users (Notification Bell + Push Notifications)
+          const recipientIds = await getActiveCareCustomerIds();
+          if (!recipientIds.includes(Number(parentPost.customer_id))) {
+            recipientIds.push(Number(parentPost.customer_id));
+          }
+          if (!recipientIds.includes(Number(customerId))) {
+            recipientIds.push(Number(customerId));
+          }
+
+          const notifTitle = `New S.O.S. Comment: ${parentPost.title}`;
+          const rolePrefix = isTech ? `${commenterName} (MaskPro Tech)` : commenterName;
+          const notifMsg = `${rolePrefix} commented: "${String(body).trim().slice(0, 120)}"`;
+
+          if (recipientIds.length > 0) {
+            const values = recipientIds.map((cid) => [cid, 'community_sos_comment', notifTitle, notifMsg, '/community-care']);
+            await pool.query(
+              `INSERT INTO customer_notifications (customer_id, type, title, message, link) VALUES ?`,
+              [values]
+            );
+          }
+        } else {
+          // Regular discussion comment: notify post author and previous commenters
+          const [prevCommenters] = await pool.query(
+            `SELECT DISTINCT customer_id FROM community_comments WHERE post_id = ? AND is_approved = 1`,
+            [post_id]
+          );
+          const notifySet = new Set([Number(parentPost.customer_id)]);
+          prevCommenters.forEach((r) => notifySet.add(Number(r.customer_id)));
+          notifySet.delete(Number(customerId)); // don't notify self on regular discussion
+
+          const targetIds = Array.from(notifySet).filter((id) => id > 0);
+          if (targetIds.length > 0) {
+            const notifTitle = `New Reply on "${parentPost.title}"`;
+            const notifMsg = `${commenterName}: "${String(body).trim().slice(0, 120)}"`;
+            const values = targetIds.map((cid) => [cid, 'community_comment', notifTitle, notifMsg, '/community-care']);
+            await pool.query(
+              `INSERT INTO customer_notifications (customer_id, type, title, message, link) VALUES ?`,
+              [values]
+            );
+          }
+        }
+      }
+    } catch (notifErr) {
+      console.warn('[Community] Failed to send comment notifications:', notifErr.message);
+    }
+
+    return res.json({ success: true, data: { comment: commentObj }, message: 'Comment added', errors: [] });
   } catch (err) {
     console.error('Community create comment error:', err);
     return res.status(500).json({ success: false, message: 'Failed to add comment', errors: [] });

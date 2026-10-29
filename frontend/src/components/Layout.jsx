@@ -151,7 +151,12 @@ export default function Layout() {
     registration_renewal: { icon: 'fas fa-car', color: '#f59e0b' },
     booking_confirmed: { icon: 'fas fa-calendar-check', color: '#10b981' },
     booking_reminder: { icon: 'fas fa-clock', color: '#3b82f6' },
-    system: { icon: 'fas fa-info-circle', color: '#6366f1' },
+    community_sos: { icon: 'fas fa-exclamation-triangle', color: '#dc2626' },
+    community_sos_comment: { icon: 'fas fa-comment-dots', color: '#ea580c' },
+    community_comment: { icon: 'fas fa-comments', color: '#0284c7' },
+    community_moderation: { icon: 'fas fa-shield-alt', color: '#d97706' },
+    community_approved: { icon: 'fas fa-check-circle', color: '#10b981' },
+    system: { icon: 'fas fa-info-circle', color: '#3b82f6' },
   };
 
   const navItems = [
@@ -313,8 +318,24 @@ export default function Layout() {
             </div>
             <span style={{ fontSize: '9px', fontWeight: 700, color: '#fff', background: 'var(--primary-gradient)', padding: '1px 7px', borderRadius: '20px', marginTop: '-2px', letterSpacing: '0.5px' }}>v{APP_VERSION}</span>
           </div>
-          {/* Bell in sidebar header */}
-          <div onClick={(e) => e.stopPropagation()}>
+          {/* Admin badge + Bell in sidebar header */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={(e) => e.stopPropagation()}>
+            {isAdmin && (
+              <button
+                onClick={() => { navigate('/admin'); setSidebarOpen(false); }}
+                title="Admin Panel"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '4px',
+                  background: 'rgba(245, 158, 11, 0.14)', border: '1px solid rgba(245, 158, 11, 0.35)',
+                  color: '#d97706', padding: '5px 10px', borderRadius: '10px',
+                  fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <i className="bi bi-shield-lock-fill" style={{ fontSize: '12px' }}></i>
+                <span>Admin</span>
+              </button>
+            )}
             <BellIcon placement="sidebar" />
           </div>
         </div>
@@ -441,6 +462,23 @@ export default function Layout() {
             </div>
           </div>
           <div className="top-header-right" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, marginLeft: 'auto' }}>
+            {/* Admin Shield Button (strictly Admin-only, matching Android & iOS) */}
+            {isAdmin && (
+              <button
+                onClick={() => navigate('/admin')}
+                title="Admin Panel"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '5px',
+                  background: 'rgba(245, 158, 11, 0.14)', border: '1px solid rgba(245, 158, 11, 0.35)',
+                  color: '#d97706', padding: '6px 12px', borderRadius: '10px',
+                  fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <i className="bi bi-shield-lock-fill" style={{ fontSize: '13px' }}></i>
+                <span>Admin</span>
+              </button>
+            )}
             {/* Bell in mobile header */}
             <BellIcon placement="mobile" />
             {profilePhoto ? (

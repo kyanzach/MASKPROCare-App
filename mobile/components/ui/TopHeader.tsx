@@ -28,17 +28,17 @@ export default function TopHeader() {
   const [notifLoading, setNotifLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // Check admin status
+  // Check admin status (strictly Admin-only visibility)
   useEffect(() => {
     let isMounted = true;
     (async () => {
       try {
         const res = await client.get('/admin/check');
-        if (isMounted && res.data?.data?.isAdmin) {
-          setIsAdmin(true);
+        if (isMounted) {
+          setIsAdmin(Boolean(res.data?.data?.isAdmin));
         }
       } catch {
-        // silent
+        if (isMounted) setIsAdmin(false);
       }
     })();
     return () => {
@@ -105,7 +105,9 @@ export default function TopHeader() {
 
     // Route based on link or type
     if (notif.link) {
-      if (notif.link.includes('booking')) {
+      if (notif.link.includes('admin')) {
+        router.push('/admin' as any);
+      } else if (notif.link.includes('booking')) {
         router.push('/(tabs)/bookings');
       } else if (notif.link.includes('vehicle')) {
         router.push('/(tabs)/vehicles');

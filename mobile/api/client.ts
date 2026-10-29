@@ -1,5 +1,6 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
 // Set to local IP during dev or fallback to production
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://care.maskpro.ph/api';
@@ -9,6 +10,7 @@ const client = axios.create({
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
+    'X-Client-Platform': Platform.OS,
   },
 });
 

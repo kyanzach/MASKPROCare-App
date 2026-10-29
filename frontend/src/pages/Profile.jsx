@@ -5,11 +5,11 @@ import api from '../api/client';
 
 // ── Loyalty Card category styling ────────────────────────────
 const CATEGORY_META = {
-  coating: { label: 'Nano Ceramic Coating', icon: 'bi-shield-check', gradient: 'linear-gradient(135deg, #3b82f6, #6366f1)' },
+  coating: { label: 'Nano Ceramic Coating', icon: 'bi-shield-check', gradient: 'linear-gradient(135deg, #3b82f6, #2563eb)' },
   tint:    { label: 'Nano Ceramic Tint',    icon: 'bi-brightness-high', gradient: 'linear-gradient(135deg, #0ea5e9, #38bdf8)' },
   ppf:     { label: 'Paint Protection Film', icon: 'bi-fire', gradient: 'linear-gradient(135deg, #ef4444, #f97316)' },
   wash:    { label: 'Care Wash',             icon: 'bi-stars', gradient: 'linear-gradient(135deg, #10b981, #34d399)' },
-  gift:    { label: 'Gift Card',             icon: 'bi-gift', gradient: 'linear-gradient(135deg, #8b5cf6, #a78bfa)' },
+  gift:    { label: 'Gift Card',             icon: 'bi-gift', gradient: 'linear-gradient(135deg, #d97706, #f59e0b)' },
   other:   { label: 'Other',                 icon: 'bi-card-text', gradient: 'linear-gradient(135deg, #64748b, #94a3b8)' },
 };
 const CATEGORY_ORDER = ['coating', 'ppf', 'tint', 'wash', 'gift', 'other'];
@@ -82,6 +82,7 @@ export default function Profile() {
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
   const [stats, setStats] = useState({ vehicles: 0, bookings: 0, completed: 0 });
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // ── Loyalty state ──
   const [loyaltyCards, setLoyaltyCards] = useState([]);
@@ -150,12 +151,14 @@ export default function Profile() {
 
    const loadProfile = async () => {
     try {
-      const [profileRes, statsRes] = await Promise.all([
+      const [profileRes, statsRes, adminRes] = await Promise.all([
         api.get('/profile/get'),
         api.get('/dashboard/stats'),
+        api.get('/admin/check').catch(() => ({ data: { data: { isAdmin: false } } })),
       ]);
       const p = profileRes.data.data?.customer || profileRes.data.data;
       setProfile(p);
+      setIsAdmin(Boolean(adminRes?.data?.data?.isAdmin));
       setForm({ full_name: p?.full_name || '', email: p?.email || '', address: p?.address || '' });
 
       // Profile/get may include stats; dashboard/stats nests under .stats
@@ -647,7 +650,9 @@ export default function Profile() {
                   )}
                 </div>
                 <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#1f2937', marginBottom: '4px' }}>{profile?.full_name}</h2>
-                <p style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '20px' }}>Customer</p>
+                <p style={{ fontSize: '13px', color: isAdmin ? '#d97706' : '#94a3b8', fontWeight: isAdmin ? 700 : 500, marginBottom: '20px' }}>
+                  {isAdmin ? 'Administrator' : 'Customer'}
+                </p>
                 <div className="profile-stat-row">
                   <div className="profile-stat">
                     <div className="profile-stat-value">{stats.vehicles}</div>
@@ -664,6 +669,39 @@ export default function Profile() {
                 </div>
               </div>
             </div>
+
+            {/* Admin Panel Card (Strictly Admin-Only, matching Android & iOS) */}
+            {isAdmin && (
+              <div
+                className="card-modern"
+                onClick={() => navigate('/admin')}
+                style={{
+                  marginBottom: '20px',
+                  cursor: 'pointer',
+                  border: '1px solid rgba(245, 158, 11, 0.35)',
+                  background: 'linear-gradient(135deg, rgba(254, 243, 199, 0.45), rgba(255, 255, 255, 0.98))',
+                  transition: 'transform 0.2s, box-shadow 0.2s',
+                }}
+              >
+                <div className="card-modern-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '16px 20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div style={{
+                      width: '44px', height: '44px', borderRadius: '12px',
+                      background: 'rgba(245, 158, 11, 0.16)', color: '#d97706',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '20px', flexShrink: 0,
+                    }}>
+                      <i className="bi bi-shield-lock-fill"></i>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '15px', fontWeight: 700, color: '#92400e' }}>Admin Panel</div>
+                      <div style={{ fontSize: '12px', color: '#b45309' }}>Analytics, Community Moderation & Impersonate</div>
+                    </div>
+                  </div>
+                  <i className="bi bi-chevron-right" style={{ color: '#d97706', fontSize: '16px' }}></i>
+                </div>
+              </div>
+            )}
 
             {/* Quick Info Card */}
             <div className="card-modern" style={{ marginBottom: '20px' }}>
