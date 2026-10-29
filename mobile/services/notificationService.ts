@@ -104,33 +104,46 @@ export async function syncAndAlertNewNotifications(): Promise<number> {
     }
 
     const lastSeenId = lastSeenStr ? parseInt(lastSeenStr, 10) : 0;
+    const maxOverallId = Math.max(...notifs.map((n: any) => Number(n.id) || 0));
 
-    // Filter unread notifications that have not been popped up yet
-    const newUnread = notifs.filter(
-      (n: any) => !n.is_read && n.id > lastSeenId
-    );
+    // If this is the very first sync on this device (lastSeenId === 0),
+    // calibrate lastSeenId to current max so historical notifications don't pop up as push banners
+    if (lastSeenId === 0) {
+      if (maxOverallId > 0) {
+        try {
+          await SecureStore.setItemAsync(LAST_SEEN_KEY, String(maxOverallId));
+        } catch {
+          // ignore
+        }
+      }
+      return unreadCount;
+    }
+
+    // Only trigger OS push banners for fresh unread notifications (created within the last 30 minutes)
+    // Older items remain visible inside the Notification Bell list without spamming lock-screen banners
+    const nowMs = Date.now();
+    const MAX_PUSH_AGE_MS = 30 * 60 * 1000; // 30 minutes
+
+    const newUnread = notifs.filter((n: any) => {
+      if (n.is_read || Number(n.id) <= lastSeenId) return false;
+      const createdMs = n.created_at ? new Date(n.created_at).getTime() : nowMs;
+      const ageMs = nowMs - createdMs;
+      return ageMs <= MAX_PUSH_AGE_MS;
+    });
 
     if (newUnread.length > 0) {
-      // Alert the newest notification
       for (const n of newUnread) {
         await triggerLocalNotification(n.title, n.message || '', {
           link: n.link || '/(tabs)/bookings',
           id: n.id,
         });
       }
+    }
 
-      // Update the highest seen ID so we don't alert again
-      const maxId = Math.max(...newUnread.map((n: any) => n.id));
+    // Always advance lastSeenId to the highest fetched notification ID so we never re-alert
+    if (maxOverallId > lastSeenId) {
       try {
-        await SecureStore.setItemAsync(LAST_SEEN_KEY, String(maxId));
-      } catch {
-        // ignore
-      }
-    } else if (lastSeenId === 0 && notifs.length > 0) {
-      // First run calibration: save highest existing ID
-      const maxId = Math.max(...notifs.map((n: any) => n.id));
-      try {
-        await SecureStore.setItemAsync(LAST_SEEN_KEY, String(maxId));
+        await SecureStore.setItemAsync(LAST_SEEN_KEY, String(maxOverallId));
       } catch {
         // ignore
       }

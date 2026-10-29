@@ -1,5 +1,13 @@
 # Changelog
 
+## [v1.16.2] — 2026-10-29
+### Fixed & Improved
+- **Purged Test Community S.O.S. & Discussion Posts + Cascaded Notification Cleanup on Post Delete/Reject (`server/routes/admin.js`)**:
+  - Deleted the 2 test posts (`"Flat tire po ako need help"` and `"Can I apply wax in my vehicle?"`), their comments, and all associated `customer_notifications` and `notifications` rows from the production database.
+  - Updated `POST /api/admin/community/moderate` (`delete` and `reject` actions) to automatically delete any associated `customer_notifications` and `notifications` rows for that post so deleted/rejected posts never leave lingering alerts in any user's Notification Bell.
+- **Prevented Historical / Next-Day Push Notification Spam (`mobile/services/notificationService.ts`)**:
+  - Updated `syncAndAlertNewNotifications()` so first-time logins calibrate `lastSeenId` without firing historical push banners, and only fresh unread notifications created within the last **30 minutes** trigger a pop-up OS push banner (older notifications remain quietly inside the Notification Bell list without popping up as a banner the next day).
+
 ## [v1.16.1] — 2026-10-29
 ### Fixed & Improved
 - **Fixed `/api/admin/dashboard` 500 Error & Focused KPIs on App Access (`server/routes/admin.js`, `mobile/app/admin.tsx`, `frontend/src/pages/AdminPanel.jsx`)**:

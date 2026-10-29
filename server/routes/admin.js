@@ -508,6 +508,12 @@ router.post('/community/moderate', authenticateToken, requireAdmin, async (req, 
          WHERE id = ?`,
         [req.adminUser.id, post_id]
       );
+      await pool.query(
+        `DELETE FROM customer_notifications 
+         WHERE type IN ('community_sos', 'community_sos_comment', 'community_comment', 'community_moderation', 'community_approved')
+           AND (title LIKE ? OR message LIKE ?)`,
+        [`%${post.title}%`, `%${post.title}%`]
+      ).catch(() => {});
       return res.json({ success: true, message: 'Post rejected and hidden from feed' });
     }
 
@@ -530,7 +536,19 @@ router.post('/community/moderate', authenticateToken, requireAdmin, async (req, 
     if (action === 'delete') {
       await pool.query('DELETE FROM community_comments WHERE post_id = ?', [post_id]);
       await pool.query('DELETE FROM community_posts WHERE id = ?', [post_id]);
-      return res.json({ success: true, message: 'Post permanently deleted' });
+      await pool.query(
+        `DELETE FROM customer_notifications 
+         WHERE type IN ('community_sos', 'community_sos_comment', 'community_comment', 'community_moderation', 'community_approved')
+           AND (title LIKE ? OR message LIKE ?)`,
+        [`%${post.title}%`, `%${post.title}%`]
+      ).catch(() => {});
+      await pool.query(
+        `DELETE FROM notifications 
+         WHERE type IN ('community_sos', 'community_sos_comment', 'community_moderation')
+           AND title LIKE ?`,
+        [`%${post.title}%`]
+      ).catch(() => {});
+      return res.json({ success: true, message: 'Post and its notifications permanently deleted' });
     }
 
     return res.status(400).json({ success: false, message: 'Invalid moderation action' });
