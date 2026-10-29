@@ -134,12 +134,6 @@ export default function MagicLinkGate() {
         padding: '32px 26px',
         textAlign: 'center',
       }}>
-        <img
-          src="/maskpro_logo.png"
-          alt="MaskPro Care"
-          style={{ height: '42px', marginBottom: '20px', objectFit: 'contain' }}
-        />
-
         {state.loading ? (
           <div style={{ padding: '16px 0' }}>
             <div className="spinner" style={{ width: '38px', height: '38px', margin: '0 auto 16px' }} />
@@ -260,6 +254,14 @@ export default function MagicLinkGate() {
             </Link>
           </div>
         )}
+
+        <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'center' }}>
+          <img
+            src="/maskpro_logo.png"
+            alt="MaskPro Care"
+            style={{ height: '40px', objectFit: 'contain' }}
+          />
+        </div>
       </div>
     </div>
   );

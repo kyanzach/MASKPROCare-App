@@ -1,5 +1,10 @@
 # Changelog
 
+## [v1.17.1] — 2026-10-29
+### Changed
+- **Repositioned MaskPro Icon Logo Below CTA Button on Magic Link Gate (`frontend/src/pages/MagicLinkGate.jsx`)**:
+  - Moved the `/maskpro_logo.png` icon from above the mobile/link status icon to below the `"Login Here with Mobile Number"` button with `24px` top spacing headroom.
+
 ## [v1.17.0] — 2026-10-29
 ### Added & Improved
 - **Magic Link Security & Intrusion Audit Log + Tiered Brute-Force Shield (`server/routes/auth.js`, `server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`, `mobile/app/admin.tsx`)**:
