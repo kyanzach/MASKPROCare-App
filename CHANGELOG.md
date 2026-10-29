@@ -1,5 +1,12 @@
 # Changelog
 
+## [v1.16.6] — 2026-10-29
+### Fixed
+- **Fixed Magic Link Double-Counting on Click (`frontend/src/pages/MagicLinkGate.jsx`, `frontend/src/context/AuthContext.jsx`, `server/routes/auth.js`)**:
+  - Added a `verifiedSlugRef` guard in `MagicLinkGate.jsx` and wrapped `login()` in `useCallback` in `AuthContext.jsx` so calling `login()` upon magic link verification no longer re-triggers `useEffect` a second time on the same click (`2 clicks × 2 = 4`).
+  - Added a 10-second burst deduplication window in `POST /api/auth/magic-verify` (`server/routes/auth.js`) so rapid back-to-back verification requests on the same click only increment `access_count` and `session_count` once.
+  - Corrected the existing `ryanp-bydtang-01` magic link `access_count` and `magic_link` telemetry `session_count` from `4` to the exact `2` clicks performed.
+
 ## [v1.16.5] — 2026-10-29
 ### Fixed & Improved
 - **Fixed Admin Dashboard Auth Funnel Widget Counts (`server/routes/admin.js`, `server/routes/auth.js`, `server/routes/aiAuth.js`, `server/middleware/auth.js`)**:

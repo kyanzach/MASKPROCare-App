@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
@@ -54,7 +54,12 @@ export default function MagicLinkGate() {
     meta: null,
   });
 
+  const verifiedSlugRef = useRef(null);
+
   useEffect(() => {
+    if (!slug || verifiedSlugRef.current === slug) return;
+    verifiedSlugRef.current = slug;
+
     let cancelled = false;
     async function verifyMagicLink() {
       const k = searchParams.get('k') || '';

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { authAPI } from '../api/client';
 
 const AuthContext = createContext(null);
@@ -18,12 +18,12 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }, []);
 
-  const login = (tokenStr, customerData) => {
+  const login = useCallback((tokenStr, customerData) => {
     localStorage.setItem('mpc_token', tokenStr);
     localStorage.setItem('mpc_customer', JSON.stringify(customerData));
     setToken(tokenStr);
     setCustomer(customerData);
-  };
+  }, []);
 
   const logout = async () => {
     try { await authAPI.logout(); } catch {}

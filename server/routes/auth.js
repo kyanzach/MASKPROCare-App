@@ -304,6 +304,7 @@ router.post('/magic-verify', async (req, res) => {
 
     let activeDeviceToken = bodyDeviceToken || cookieDeviceToken;
     let isFirstBind = false;
+    const isDuplicateBurst = link.last_accessed_at && (Date.now() - new Date(link.last_accessed_at).getTime() < 10000);
 
     if (!link.bound_device_token_hash) {
       // ── CASE 1: FIRST OPEN (TOFU — Lock to this device!) ──
@@ -326,10 +327,11 @@ router.post('/magic-verify', async (req, res) => {
       isFirstBind = true;
     } else if (candidateHashes.includes(link.bound_device_token_hash)) {
       // ── CASE 2: SUBSEQUENT OPEN FROM THE SAME LOCKED DEVICE ──
+      // Deduplicate rapid double-requests within 10 seconds so 1 click = 1 count
       await pool.query(
         `UPDATE care_magic_links
          SET last_accessed_at = NOW(),
-             access_count = access_count + 1
+             access_count = IF(last_accessed_at IS NULL OR TIMESTAMPDIFF(SECOND, last_accessed_at, NOW()) >= 10, access_count + 1, access_count)
          WHERE id = ?`,
         [link.id]
       );
@@ -395,7 +397,9 @@ router.post('/magic-verify', async (req, res) => {
       { expiresIn: magicJwtExpiry }
     );
 
-    recordAppTelemetry(req, { sub: customerId, magic_slug: link.slug, auth_method: 'magic_link' }, true);
+    if (!isDuplicateBurst) {
+      recordAppTelemetry(req, { sub: customerId, magic_slug: link.slug, auth_method: 'magic_link' }, true);
+    }
 
     const [customerData] = await pool.query('SELECT * FROM customers WHERE id = ?', [customerId]);
     const redirectUrl = link.vehicle_id
