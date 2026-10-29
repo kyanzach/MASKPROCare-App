@@ -1,5 +1,12 @@
 # Changelog
 
+## [v1.17.9] — 2026-10-29
+### Fixed & Improved
+- **Smarter Izumi AI Identity Verification: Cross-Booking Service Matching, NanoFix/Coating Domain Equivalence & Year-Only Acceptance (`server/routes/aiAuth.js`)**:
+  - Investigated `care_ai_login_logs` for `customer_id = 1924` (`Ryan Paco`): `"2021 march"` scored a full `25/25` (order-independent month+year parsing worked), `name` scored `25/25`, `vehicle` (`innova`) scored `15/15`, and `mobile` scored `15/15`, but `booked_service` (`nano ceramic coating`) scored `0/20` (`total = 80%`) because the earliest March 2021 booking (`#6964`) was imported as `"Nano Fix (Maintenance)"` while `"Nano Ceramic Coating"` was on a later booking (`#14946`).
+  - Updated `server/routes/aiAuth.js` to evaluate Month, Service, and Vehicle across the customer's full booking and vehicle history, and added domain equivalence between `Nano Ceramic Coating` and `Nano Fix (Maintenance)`.
+  - Updated `parseMonthFromText()` and `evaluateMonthScore()` to silently accept year-only answers (`22/25 pts`, e.g., `"2021"` or `"i forgot it seems like 2021"`) while keeping the prompt encouraging **month and year** (`"What month and year was your first visit or booking with MaskPro? (For example: March 2021, or July 2024)"`).
+
 ## [v1.17.8] — 2026-10-29
 ### Fixed
 - **Fixed Izumi AI Login Helper "Try Again" Button Not Restoring Chat Input Field (`frontend/src/components/AiLoginModal.jsx`)**:

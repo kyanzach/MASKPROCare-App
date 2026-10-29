@@ -125,15 +125,17 @@ function parseMonthFromText(text) {
   let matchedYear = null;
 
   for (const word of words) {
+    const yr = parseInt(word, 10);
+    if (yr >= 2015 && yr <= 2035 && String(yr).length === 4) {
+      matchedYear = yr;
+      continue;
+    }
     if (MONTH_MAP[word]) {
       matchedMonth = MONTH_MAP[word];
     }
-    const yr = parseInt(word, 10);
-    if (yr >= 2018 && yr <= 2035) {
-      matchedYear = yr;
-    }
   }
-  return matchedMonth ? { month: matchedMonth, year: matchedYear } : null;
+  if (!matchedMonth && !matchedYear) return null;
+  return { month: matchedMonth, year: matchedYear };
 }
 
 function evaluateMonthScore(inputMonthText, bookingDate) {
@@ -145,12 +147,44 @@ function evaluateMonthScore(inputMonthText, bookingDate) {
   const actualMonth = bDate.getMonth() + 1;
   const actualYear = bDate.getFullYear();
 
-  if (parsedInput.month === actualMonth) {
-    if (parsedInput.year) {
-      return parsedInput.year === actualYear ? 25.0 : 20.0;
+  // Case 1: User provided both Month and Year (in any order, e.g. "March 2021" or "2021 March")
+  if (parsedInput.month && parsedInput.year) {
+    if (parsedInput.month === actualMonth && parsedInput.year === actualYear) {
+      return 25.0; // Exact month + year match
     }
-    return 24.0; // Month matched without year
+    if (Math.abs(parsedInput.month - actualMonth) <= 1 && parsedInput.year === actualYear) {
+      return 22.0; // Off by 1 month in the exact year
+    }
+    if (parsedInput.month === actualMonth) {
+      return 21.0; // Exact month, slightly misremembered year
+    }
+    if (parsedInput.year === actualYear) {
+      return 20.0; // Exact year, misremembered month
+    }
+    return 0;
   }
+
+  // Case 2: User provided Month only (e.g. "March")
+  if (parsedInput.month && !parsedInput.year) {
+    if (parsedInput.month === actualMonth) {
+      return 24.0;
+    }
+    if (Math.abs(parsedInput.month - actualMonth) <= 1) {
+      return 18.0;
+    }
+    return 0;
+  }
+
+  // Case 3: User forgot the month and provided Year only (e.g. "2021" or "i forgot it seems like 2021")
+  if (!parsedInput.month && parsedInput.year) {
+    if (parsedInput.year === actualYear) {
+      return 22.0; // Enough to pass (>= 90%) when Name + Service + Vehicle + Mobile are correct
+    }
+    if (Math.abs(parsedInput.year - actualYear) === 1) {
+      return 15.0;
+    }
+  }
+
   return 0;
 }
 
@@ -177,6 +211,16 @@ function evaluateServiceScore(inputService, actualServices) {
     if (userMentions && actualHas) {
       return 20.0;
     }
+  }
+
+  // Domain intelligence: NanoFix is the maintenance program for Nano Ceramic Coating.
+  // Customers whose earliest imported booking is "Nano Fix (Maintenance)" often state "Nano Ceramic Coating" (or vice versa).
+  const mentionsCoating = ['ceramic coating', 'ceramic', 'coating', 'nano ceramic'].some(a => input.includes(a));
+  const mentionsNanoFix = ['nanofix', 'nano fix', 'maintenance'].some(a => input.includes(a));
+  const actualHasCoating = ['ceramic coating', 'nano ceramic'].some(a => actualNames.includes(a));
+  const actualHasNanoFix = ['nanofix', 'nano fix', 'maintenance'].some(a => actualNames.includes(a));
+  if ((mentionsCoating && actualHasNanoFix) || (mentionsNanoFix && actualHasCoating)) {
+    return 20.0;
   }
 
   for (const s of actualServices) {
@@ -373,7 +417,7 @@ router.post('/message', async (req, res) => {
         success: true,
         data: {
           step: 'month',
-          message: `Nice to meet you, ${userText}! What month was your first visit or booking with MaskPro? (For example: November, or July 2024)`
+          message: `Nice to meet you, ${userText}! What month and year was your first visit or booking with MaskPro? (For example: March 2021, or July 2024)`
         }
       });
     }
@@ -532,29 +576,42 @@ router.post('/message', async (req, res) => {
       const nameScore = evaluateNameScore(claimedName, customer.full_name); // max 25
       const mobileScore = evaluateMobileScore(claimedMobile, customer.mobile_number); // max 15
 
-      // Evaluate Month, Service, and Vehicle against bookings
-      // We test against their first booking (primary) and find the best matching booking on their profile
+      // Also fetch all customer vehicles in case vehicle is on profile
+      const [customerVehicles] = await pool.query(
+        'SELECT make, model FROM vehicles WHERE customer_id = ?',
+        [customer.id]
+      );
+
+      // Evaluate Month, Service, and Vehicle across the customer's booking history & vehicles.
+      // Customers often provide their first visit date (e.g., March 2021) + their main service (e.g., Nano Ceramic Coating)
+      // + their vehicle (e.g., Innova), even if those span multiple booking records on the same vehicle/account.
       let bestMonthScore = 0;
       let bestServiceScore = 0;
       let bestVehicleScore = 0;
 
-      if (firstBooking) {
-        bestMonthScore = evaluateMonthScore(claimedMonth, firstBooking.booking_date);
-        bestServiceScore = evaluateServiceScore(claimedService, firstBooking.services);
-        bestVehicleScore = evaluateVehicleScore(claimedVehicle, { make: firstBooking.make, model: firstBooking.model });
-      }
-
-      // If user provided details for another booking on their profile, also check all bookings
+      const allProfileServices = [];
       for (const b of bookingList) {
         const mScore = evaluateMonthScore(claimedMonth, b.booking_date);
-        const sScore = evaluateServiceScore(claimedService, b.services);
-        const vScore = evaluateVehicleScore(claimedVehicle, { make: b.make, model: b.model });
+        if (mScore > bestMonthScore) bestMonthScore = mScore;
 
-        if ((mScore + sScore + vScore) > (bestMonthScore + bestServiceScore + bestVehicleScore)) {
-          bestMonthScore = mScore;
-          bestServiceScore = sScore;
-          bestVehicleScore = vScore;
+        const sScore = evaluateServiceScore(claimedService, b.services);
+        if (sScore > bestServiceScore) bestServiceScore = sScore;
+
+        const vScore = evaluateVehicleScore(claimedVehicle, { make: b.make, model: b.model });
+        if (vScore > bestVehicleScore) bestVehicleScore = vScore;
+
+        if (b.services && b.services.length > 0) {
+          allProfileServices.push(...b.services);
         }
+      }
+
+      if (bestServiceScore === 0 && allProfileServices.length > 0) {
+        bestServiceScore = evaluateServiceScore(claimedService, allProfileServices);
+      }
+
+      for (const veh of customerVehicles) {
+        const vScore = evaluateVehicleScore(claimedVehicle, veh);
+        if (vScore > bestVehicleScore) bestVehicleScore = vScore;
       }
 
       const totalScore = parseFloat((nameScore + bestMonthScore + bestServiceScore + bestVehicleScore + mobileScore).toFixed(1));
