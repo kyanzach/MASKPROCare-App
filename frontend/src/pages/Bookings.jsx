@@ -222,7 +222,7 @@ export default function Bookings() {
   };
 
   useEffect(() => {
-    if (bookingForm.service_type && bookingForm.vehicle_id) {
+    if (bookingForm.service_type) {
       loadAvailability(bookingForm.service_type, bookingForm.vehicle_id, calendarMonth);
     } else {
       setAvailableDates([]);
@@ -238,22 +238,24 @@ export default function Bookings() {
     const month = calendarMonth.getMonth();
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const days = [];
     for (let i = 0; i < firstDay; i++) days.push(null);
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const dateInfo = availableDates.find(a => a.date === dateStr);
       const isSunday = new Date(year, month, d).getDay() === 0;
-      const isClosed = !dateInfo && !isSunday && dateStr >= today;
+      const isPast = dateStr < today;
+      const isClosed = !dateInfo && !isSunday && !isPast;
       days.push({
         day: d, dateStr,
         isToday: dateStr === today,
-        isPast: dateStr < today,
+        isPast,
         isSunday,
-        isAvailable: dateInfo ? dateInfo.available : false,
-        isLimited: dateInfo ? dateInfo.status === 'limited' : false,
-        isUnavailable: dateInfo ? dateInfo.status === 'full' : false,
+        isAvailable: !isPast && !isSunday && (dateInfo ? dateInfo.available : false),
+        isLimited: !isPast && !isSunday && (dateInfo ? dateInfo.status === 'limited' : false),
+        isUnavailable: !isPast && !isSunday && (dateInfo ? dateInfo.status === 'full' : false),
         isClosed,
         isSelected: bookingForm.booking_date === dateStr,
         capacity: dateInfo?.capacity,
@@ -359,22 +361,24 @@ export default function Bookings() {
     const month = editCalendarMonth.getMonth();
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const days = [];
     for (let i = 0; i < firstDay; i++) days.push(null);
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const dateInfo = editAvailableDates.find(a => a.date === dateStr);
       const isSunday = new Date(year, month, d).getDay() === 0;
-      const isClosed = !dateInfo && !isSunday && dateStr > today;
+      const isPast = dateStr <= today;
+      const isClosed = !dateInfo && !isSunday && !isPast;
       days.push({
         day: d, dateStr,
         isToday: dateStr === today,
-        isPast: dateStr <= today,
+        isPast,
         isSunday,
-        isAvailable: dateInfo ? dateInfo.available : false,
-        isLimited: dateInfo ? dateInfo.status === 'limited' : false,
-        isUnavailable: dateInfo ? dateInfo.status === 'full' : false,
+        isAvailable: !isPast && !isSunday && (dateInfo ? dateInfo.available : false),
+        isLimited: !isPast && !isSunday && (dateInfo ? dateInfo.status === 'limited' : false),
+        isUnavailable: !isPast && !isSunday && (dateInfo ? dateInfo.status === 'full' : false),
         isClosed,
         isSelected: editDate === dateStr,
         capacity: dateInfo?.capacity,
@@ -850,8 +854,8 @@ function renderCalendar(month, setMonth, days, onSelect) {
         </button>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '4px' }}>
-        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-          <div key={d} style={{ textAlign: 'center', fontWeight: 600, color: '#6b7280', padding: '6px', fontSize: '12px' }}>{d}</div>
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, idx) => (
+          <div key={d} style={{ textAlign: 'center', fontWeight: 600, color: idx === 0 ? '#ef4444' : '#6b7280', padding: '6px', fontSize: '12px' }}>{d}</div>
         ))}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
@@ -860,28 +864,31 @@ function renderCalendar(month, setMonth, days, onSelect) {
           const canClick = (d.isAvailable || d.isLimited) && !d.isPast && !d.isSunday && !d.isClosed;
           return (
             <button key={d.dateStr} type="button" onClick={() => canClick && onSelect(d.dateStr)}
-              title={d.isClosed || d.isSunday ? 'Closed' : d.isLimited ? 'Almost Full' : d.isUnavailable ? 'Fully Booked' : 'Available'}
+              title={d.isPast ? 'Past Date' : d.isClosed || d.isSunday ? 'Closed' : d.isLimited ? 'Almost Full' : d.isUnavailable ? 'Fully Booked' : 'Available'}
               style={{
                 aspectRatio: '1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                 borderRadius: '10px', position: 'relative',
-                border: d.isSelected ? '2px solid #312e81' : d.isToday ? '2px solid #4f46e5'
+                border: d.isSelected ? '2px solid #1e40af'
+                  : (d.isPast || d.isSunday) ? '1.5px solid #f3f4f6'
+                  : d.isToday ? '2px solid #2563eb'
                   : d.isLimited ? '1.5px solid #fcd34d'
                   : d.isAvailable ? '1.5px solid #86efac'
                   : d.isUnavailable ? '1.5px solid #fca5a5'
-                  : '1px solid #f3f4f6',
-                background: d.isSelected ? 'linear-gradient(135deg, #4f46e5, #3730a3)'
+                  : '1.5px solid #f3f4f6',
+                background: d.isSelected ? 'linear-gradient(135deg, #2563eb, #1d4ed8)'
                   : d.isPast || d.isSunday ? '#f9fafb'
                   : d.isLimited ? '#fef3c7'
                   : d.isAvailable ? '#dcfce7'
                   : d.isUnavailable ? '#fee2e2'
                   : d.isClosed ? '#f1f5f9' : 'transparent',
                 color: d.isSelected ? '#ffffff'
-                  : d.isPast || d.isSunday ? '#9ca3af'
+                  : d.isPast ? '#d1d5db'
+                  : d.isSunday ? '#f87171'
                   : d.isLimited ? '#b45309'
                   : d.isAvailable ? '#15803d'
                   : d.isUnavailable ? '#b91c1c'
                   : d.isClosed ? '#94a3b8' : '#1f2937',
-                fontWeight: d.isSelected || d.isAvailable || d.isLimited || d.isUnavailable ? 700 : 500, fontSize: '14px',
+                fontWeight: d.isSelected || d.isToday ? 800 : (d.isAvailable || d.isLimited || d.isUnavailable) ? 700 : 500, fontSize: '14px',
                 cursor: canClick ? 'pointer' : 'not-allowed',
                 transition: 'all 0.15s ease',
                 textDecoration: d.isUnavailable && !d.isPast ? 'line-through' : 'none',

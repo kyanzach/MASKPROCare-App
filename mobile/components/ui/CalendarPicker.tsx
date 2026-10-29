@@ -50,9 +50,10 @@ export default function CalendarPicker({
     const month = calendarMonth.getMonth();
     const firstDayIndex = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const todayStr = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     
-    const days: ({ day: number; dateStr: string; isToday: boolean; isPast: boolean; isSunday: boolean; isAvailable: boolean; isLimited: boolean; isUnavailable: boolean; isSelected: boolean } | null)[] = [];
+    const days: ({ day: number; dateStr: string; isToday: boolean; isPast: boolean; isSunday: boolean; isAvailable: boolean; isLimited: boolean; isUnavailable: boolean; isClosed: boolean; isSelected: boolean } | null)[] = [];
     
     // Empty cells for alignment
     for (let i = 0; i < firstDayIndex; i++) {
@@ -70,19 +71,11 @@ export default function CalendarPicker({
       
       const isPast = dateStr < todayStr;
       const isToday = dateStr === todayStr;
+      const isClosed = !dateInfo && !isSunday && !isPast;
       
-      // Matches web: isAvailable = dateInfo.available (if it exists) or (!isSunday && dateStr >= todayStr)
-      let isAvailable = false;
-      let isLimited = false;
-      let isUnavailable = false;
-      
-      if (dateInfo) {
-        isAvailable = dateInfo.available;
-        isLimited = dateInfo.status === 'limited';
-        isUnavailable = dateInfo.status === 'full';
-      } else {
-        isAvailable = !isSunday && !isPast;
-      }
+      const isAvailable = !isPast && !isSunday && (dateInfo ? dateInfo.available : false);
+      const isLimited = !isPast && !isSunday && (dateInfo ? dateInfo.status === 'limited' : false);
+      const isUnavailable = !isPast && !isSunday && (dateInfo ? dateInfo.status === 'full' : false);
       
       days.push({
         day: d,
@@ -93,6 +86,7 @@ export default function CalendarPicker({
         isAvailable,
         isLimited,
         isUnavailable,
+        isClosed,
         isSelected: selectedDate === dateStr,
       });
     }
@@ -137,8 +131,8 @@ export default function CalendarPicker({
               return <View key={`empty-${index}`} style={styles.dayCellPlaceholder} />;
             }
 
-            const { day, dateStr, isToday, isPast, isSunday, isAvailable, isLimited, isUnavailable, isSelected } = dayInfo;
-            const disabled = isPast || isSunday || isUnavailable;
+            const { day, dateStr, isToday, isPast, isSunday, isAvailable, isLimited, isUnavailable, isClosed, isSelected } = dayInfo;
+            const disabled = isPast || isSunday || isUnavailable || isClosed;
 
             // Determine status styles
             let statusCellStyle = null;
@@ -162,6 +156,9 @@ export default function CalendarPicker({
             } else if (isAvailable) {
               statusCellStyle = styles.availableDayCell;
               statusTextStyle = styles.availableDayText;
+            } else {
+              statusCellStyle = styles.disabledDayCell;
+              statusTextStyle = styles.disabledDayText;
             }
 
             return (

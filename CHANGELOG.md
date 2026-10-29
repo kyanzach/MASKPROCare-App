@@ -1,5 +1,12 @@
 # Changelog
 
+## [v1.15.6] — 2026-10-29
+### Fixed & Improved
+- **Unified Calendar Availability Logic & Past-Date Styling Across Web, Android, and iOS (`server/routes/bookings.js`, `frontend/src/pages/Bookings.jsx`, `mobile/app/(tabs)/bookings.tsx`, `mobile/components/ui/CalendarPicker.tsx`)**:
+  - **Fixed 1-Slot Service `Almost Full` False Positive (`server/routes/bookings.js`)**: Changed `booked >= max - 1` to `booked > 0 && booked >= max - 1` so services with a daily capacity of `1` (such as `Paint Protection Film (PPF)`) show `Available` (green) when `0` cars are booked (`0/1`), instead of showing `Almost Full` (yellow) on empty days.
+  - **Removed Colored Borders on Past Dates on Web (`frontend/src/pages/Bookings.jsx`)**: Checked `isPast || isSunday` first before `isLimited / isAvailable / isUnavailable` in both `calendarDays` and `renderCalendar` so past days (`Oct 1`–`Oct 28`) render as clean muted gray disabled cells matching Android and iOS, instead of showing red/yellow/green borders on past dates.
+  - **Aligned Mobile Availability Query & Local Timezone (`mobile/app/(tabs)/bookings.tsx`, `mobile/components/ui/CalendarPicker.tsx`)**: Updated Mobile `loadAvailability` and `loadEditAvailability` to pass `vehicle_id` and `month` (`YYYY-MM`) via `useEffect` on `[bookingForm.service_type, bookingForm.vehicle_id, calendarMonth]` (matching Web), and replaced UTC `toISOString().split('T')[0]` with local `YYYY-MM-DD` date strings across Web and Mobile.
+
 ## [v1.15.5] — 2026-10-29
 ### Fixed & Improved
 - **Auto-Preselect Vehicle When Clicking `Service` on Vehicle Cards (`frontend/src/pages/Dashboard.jsx`, `frontend/src/pages/Bookings.jsx`, `mobile/app/(tabs)/index.tsx`, `mobile/app/(tabs)/bookings.tsx`)**:

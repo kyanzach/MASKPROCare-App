@@ -331,12 +331,19 @@ export default function BookingsScreen() {
     return list;
   }, [bookings, requests]);
 
-  // Load calendar availability
-  const loadAvailability = async (serviceType: string) => {
+  // Load calendar availability (passes service_type, vehicle_id, and month — matching Web)
+  const loadAvailability = async (serviceType: string, vehicleId?: string, monthDate?: Date) => {
     setLoadingDates(true);
     try {
+      const m = monthDate || calendarMonth || new Date();
+      const month = `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, '0')}`;
       const res = await client.get('/bookings/availability', {
-        params: { action: 'get_available_dates', service_type: serviceType },
+        params: {
+          action: 'get_available_dates',
+          service_type: serviceType,
+          vehicle_id: vehicleId || bookingForm.vehicle_id || undefined,
+          month,
+        },
       });
       setAvailableDates(res.data?.data?.dates || []);
     } catch (err) {
@@ -346,9 +353,16 @@ export default function BookingsScreen() {
     }
   };
 
+  useEffect(() => {
+    if (bookingForm.service_type) {
+      loadAvailability(bookingForm.service_type, bookingForm.vehicle_id, calendarMonth);
+    } else {
+      setAvailableDates([]);
+    }
+  }, [bookingForm.service_type, bookingForm.vehicle_id, calendarMonth]);
+
   const handleServiceChange = (service: string) => {
     setBookingForm({ ...bookingForm, service_type: service, booking_date: '' });
-    if (service) loadAvailability(service);
   };
 
   const handleDateSelect = (dateStr: string) => {
@@ -368,9 +382,6 @@ export default function BookingsScreen() {
     setAvailableDates([]);
     setCalendarMonth(new Date());
     setShowBookingModal(true);
-    if (sType) {
-      loadAvailability(sType);
-    }
   };
 
   const handleBookingSubmit = async () => {
@@ -460,14 +471,20 @@ export default function BookingsScreen() {
     setEditCalendarMonth(new Date());
     setEditAvailableDates([]);
     setError('');
-    loadEditAvailability(item.latest_service || item.service_names || '');
   };
 
-  const loadEditAvailability = async (serviceType: string) => {
+  const loadEditAvailability = async (serviceType: string, monthDate?: Date, vehicleId?: number) => {
     setEditLoadingDates(true);
     try {
+      const m = monthDate || editCalendarMonth || new Date();
+      const month = `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, '0')}`;
       const res = await client.get('/bookings/availability', {
-        params: { action: 'get_available_dates', service_type: serviceType },
+        params: {
+          action: 'get_available_dates',
+          service_type: serviceType,
+          vehicle_id: vehicleId || undefined,
+          month,
+        },
       });
       setEditAvailableDates(res.data?.data?.dates || []);
     } catch (err) {
@@ -476,6 +493,14 @@ export default function BookingsScreen() {
       setEditLoadingDates(false);
     }
   };
+
+  useEffect(() => {
+    const svc = editTarget?.latest_service || editTarget?.service_names || '';
+    if (svc) {
+      const vId = editTarget?.customer_vehicle_id || editTarget?.vehicle_id;
+      loadEditAvailability(svc, editCalendarMonth, vId);
+    }
+  }, [editTarget, editCalendarMonth]);
 
   const handleEditSubmit = async () => {
     if (!editTarget) return;

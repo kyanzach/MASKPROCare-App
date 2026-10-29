@@ -729,14 +729,15 @@ async function handleAvailability(req, res) {
         if (dayOfWeek !== 0) { // Skip Sundays
           const booked = bookingCounts[dateStr] || 0;
 
-          // Compute status matching Unify's logic (bookings_create.php lines 116-153)
+          // Compute status matching Unify's logic:
+          // Only mark 'limited' (Almost Full) when at least 1 slot is already booked AND 1 slot remains
           let status;
           if (max === 0) {
             // Unlimited capacity — always available
             status = 'available';
           } else if (booked >= max) {
             status = 'full';
-          } else if (booked >= max - 1) {
+          } else if (booked > 0 && booked >= max - 1) {
             // Only 1 slot remaining — "Almost Full" (Unify calls it 'limited')
             status = 'limited';
           } else {
