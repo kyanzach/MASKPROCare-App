@@ -1,5 +1,10 @@
 # Changelog
 
+## [v1.17.8] — 2026-10-29
+### Fixed
+- **Fixed Izumi AI Login Helper "Try Again" Button Not Restoring Chat Input Field (`frontend/src/components/AiLoginModal.jsx`)**:
+  - Updated `startSession()` in `AiLoginModal.jsx` to reset `verificationResult` (`null`), `inputText` (`''`), `isTyping` (`false`), and `messages` (`[]`) when clicking **Try Again**, so the bottom footer immediately restores the chat text input and send button instead of keeping the `Try Again` / `Use Standard OTP` buttons stuck on screen.
+
 ## [v1.17.7] — 2026-10-29
 ### Fixed
 - **Fixed Mobile Web Admin Tab Bar Overlapping & iOS Header Button Clipping (`frontend/src/pages/AdminPanel.jsx`, `mobile/app/admin.tsx`)**:

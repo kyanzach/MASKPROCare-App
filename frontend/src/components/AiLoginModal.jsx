@@ -51,6 +51,10 @@ export default function AiLoginModal({ isOpen, onClose, initialMobile = '' }) {
   const startSession = async () => {
     setLoading(true);
     setErrorNotice('');
+    setVerificationResult(null);
+    setInputText('');
+    setIsTyping(false);
+    setMessages([]);
     try {
       const res = await api.post('/auth/ai-login/session');
       if (res.data.success) {
