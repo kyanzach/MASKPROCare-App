@@ -345,13 +345,38 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
              ) AS verified_logins
     `).catch(() => [[{ total_attempts: 0, verified_logins: 0 }]]);
 
-    // 4. Magic Link Security & Intrusion Audit Logs
+    // 4. Magic Link Security & Intrusion Audit Logs (Paginated 5/page + Lazy Prefetch Window)
+    const secLimit = Math.min(200, Math.max(10, parseInt(req.query.sec_limit, 10) || 10));
+    const secFilter = String(req.query.sec_filter || 'all');
+    const usersLimit = Math.min(200, Math.max(20, parseInt(req.query.users_limit, 10) || 20));
+
+    let secWhereSql = '1=1';
+    if (secFilter === 'blocked') {
+      secWhereSql = "s.event_type NOT IN ('first_bind', 'authorized_access', 'preview_bot_ignored')";
+    } else if (secFilter === 'authorized') {
+      secWhereSql = "s.event_type IN ('first_bind', 'authorized_access')";
+    } else if (secFilter === 'bot') {
+      secWhereSql = "s.event_type = 'preview_bot_ignored'";
+    }
+
     const [[secCounts]] = await pool.query(`
       SELECT
+        (SELECT COUNT(*) FROM care_magic_link_security_logs) AS total_all_events,
         (SELECT COUNT(*) FROM care_magic_link_security_logs WHERE event_type NOT IN ('first_bind', 'authorized_access', 'preview_bot_ignored')) AS total_intrusion_events,
+        (SELECT COUNT(*) FROM care_magic_link_security_logs WHERE event_type IN ('first_bind', 'authorized_access')) AS total_authorized_events,
+        (SELECT COUNT(*) FROM care_magic_link_security_logs WHERE event_type = 'preview_bot_ignored') AS total_bot_events,
         (SELECT COUNT(*) FROM care_blocked_devices WHERE is_active = 1 AND (blocked_until IS NULL OR blocked_until > NOW())) AS blocked_devices_count,
-        (SELECT COUNT(*) FROM care_blocked_ips WHERE blocked_until IS NULL OR blocked_until > NOW()) AS blocked_ips_count
-    `).catch(() => [[{ total_intrusion_events: 0, blocked_devices_count: 0, blocked_ips_count: 0 }]]);
+        (SELECT COUNT(*) FROM care_blocked_ips WHERE blocked_until IS NULL OR blocked_until > NOW()) AS blocked_ips_count,
+        (SELECT COUNT(*) FROM care_app_telemetry t JOIN customers c ON c.id = t.customer_id) AS total_active_users_rows
+    `).catch(() => [[{
+      total_all_events: 0,
+      total_intrusion_events: 0,
+      total_authorized_events: 0,
+      total_bot_events: 0,
+      blocked_devices_count: 0,
+      blocked_ips_count: 0,
+      total_active_users_rows: 0,
+    }]]);
 
     const [magicSecurityLogs] = await pool.query(`
       SELECT
@@ -405,14 +430,15 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
       LEFT JOIN customers c ON c.id = s.customer_id
       LEFT JOIN care_magic_links ml ON ml.id = s.magic_link_id
       LEFT JOIN vehicles v ON v.id = ml.vehicle_id
+      WHERE ${secWhereSql}
       ORDER BY s.created_at DESC, s.id DESC
-      LIMIT 60
-    `).catch((err) => {
+      LIMIT ?
+    `, [secLimit]).catch((err) => {
       console.error('[Admin] magicSecurityLogs query error:', err.message);
       return [[]];
     });
 
-    // 5. Who Uses the App (Live Active Users & Device Log)
+    // 5. Who Uses the App (Live Active Users & Device Log — Paginated 10/page + Lazy Prefetch Window)
     const [activeUsers] = await pool.query(`
       SELECT 
         t.id AS telemetry_id,
@@ -432,8 +458,8 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
       FROM care_app_telemetry t
       JOIN customers c ON c.id = t.customer_id
       ORDER BY t.last_seen_at DESC
-      LIMIT 40
-    `).catch(() => [[]]);
+      LIMIT ?
+    `, [usersLimit]).catch(() => [[]]);
 
     return res.json({
       success: true,
@@ -477,7 +503,10 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
           },
         },
         security_overview: {
+          total_all_events: Number(secCounts?.total_all_events || 0),
           total_intrusion_events: Number(secCounts?.total_intrusion_events || 0),
+          total_authorized_events: Number(secCounts?.total_authorized_events || 0),
+          total_bot_events: Number(secCounts?.total_bot_events || 0),
           blocked_attempts: Number(magicStats?.blocked_attempts || 0),
           blocked_devices_count: Number(secCounts?.blocked_devices_count || 0),
           blocked_ips_count: Number(secCounts?.blocked_ips_count || 0),
@@ -485,6 +514,7 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
         },
         magic_security_logs: magicSecurityLogs,
         active_users: activeUsers,
+        active_users_total: Number(secCounts?.total_active_users_rows || activeUsers.length),
       },
     });
   } catch (err) {

@@ -493,64 +493,6 @@ router.post('/magic-verify', async (req, res) => {
     const resolvedPlatform = detectPlatformLabel(ua, platform_label);
     const deviceFingerprint = primaryDeviceHash || crypto.createHash('sha256').update(`${clientIp}|${resolvedPlatform}`).digest('hex');
 
-    // 0a. Check if IP is blocked (100+ attempts or manual Admin IP block)
-    const [ipBlockRows] = await pool.query(
-      'SELECT id, reason FROM care_blocked_ips WHERE ip_address = ? AND (blocked_until IS NULL OR blocked_until > NOW()) LIMIT 1',
-      [clientIp]
-    ).catch(() => [[]]);
-    if (ipBlockRows.length > 0) {
-      await logMagicSecurityEvent({
-        slug: cleanSlug,
-        requestUrl: resolvedUrl,
-        eventType: 'ip_blocked',
-        httpStatus: 403,
-        serverCode: 'IP_BLOCKED',
-        attemptedPlatform: resolvedPlatform,
-        deviceTokenHash: primaryDeviceHash,
-        deviceFingerprint,
-        ip: clientIp,
-        ua,
-        requestHeaders: buildHeadersSummary('403 Forbidden (IP Blocked)'),
-        isFailure: true,
-      });
-      return res.status(403).json({
-        success: false,
-        code: 'IP_BLOCKED',
-        message: 'Access from this network has been blocked due to excessive security attempts. Please contact MaskPro support.',
-      });
-    }
-
-    // 0b. Check if Device is blocked (10+ attempts or manual Admin Device block)
-    const [devBlockRows] = await pool.query(
-      `SELECT id, reason FROM care_blocked_devices
-       WHERE is_active = 1
-         AND (blocked_until IS NULL OR blocked_until > NOW())
-         AND (device_fingerprint = ? OR (device_token_hash IS NOT NULL AND device_token_hash = ?))
-       LIMIT 1`,
-      [deviceFingerprint, primaryDeviceHash || '']
-    ).catch(() => [[]]);
-    if (devBlockRows.length > 0) {
-      await logMagicSecurityEvent({
-        slug: cleanSlug,
-        requestUrl: resolvedUrl,
-        eventType: 'device_blocked',
-        httpStatus: 403,
-        serverCode: 'DEVICE_BLOCKED',
-        attemptedPlatform: resolvedPlatform,
-        deviceTokenHash: primaryDeviceHash,
-        deviceFingerprint,
-        ip: clientIp,
-        ua,
-        requestHeaders: buildHeadersSummary('403 Forbidden (Device Blocked)'),
-        isFailure: true,
-      });
-      return res.status(403).json({
-        success: false,
-        code: 'DEVICE_BLOCKED',
-        message: 'This device has been blocked after repeated unauthorized smart link attempts. Please sign in with your mobile number or contact support.',
-      });
-    }
-
     const [links] = await pool.query(
       `SELECT ml.*, c.full_name, c.mobile_number, c.branch_id,
               v.make AS vehicle_make, v.model AS vehicle_model
@@ -561,6 +503,90 @@ router.post('/magic-verify', async (req, res) => {
        LIMIT 1`,
       [cleanSlug]
     );
+    const matchedLink = links[0] || null;
+
+    // 0a. Check if IP is blocked (100+ attempts or manual Admin IP block)
+    const [ipBlockRows] = await pool.query(
+      'SELECT id, reason, created_at FROM care_blocked_ips WHERE ip_address = ? AND (blocked_until IS NULL OR blocked_until > NOW()) LIMIT 1',
+      [clientIp]
+    ).catch(() => [[]]);
+    if (ipBlockRows.length > 0) {
+      if (matchedLink) {
+        await pool.query('UPDATE care_magic_links SET blocked_attempts = blocked_attempts + 1 WHERE id = ?', [matchedLink.id]).catch(() => {});
+      }
+      await logMagicSecurityEvent({
+        magicLinkId: matchedLink?.id || null,
+        customerId: matchedLink?.customer_id || null,
+        slug: cleanSlug,
+        requestUrl: resolvedUrl,
+        eventType: 'ip_blocked',
+        httpStatus: 403,
+        serverCode: 'IP_BLOCKED',
+        attemptedPlatform: resolvedPlatform,
+        boundPlatform: matchedLink?.bound_platform || null,
+        deviceTokenHash: primaryDeviceHash,
+        deviceFingerprint,
+        ip: clientIp,
+        ua,
+        requestHeaders: buildHeadersSummary('403 Forbidden (IP Blocked)'),
+        isFailure: true,
+      });
+      return res.status(403).json({
+        success: false,
+        code: 'IP_BLOCKED',
+        message: 'Access from this network IP has been blocked due to security policy or excessive unauthorized attempts.',
+        data: {
+          slug: cleanSlug,
+          attempted_platform: resolvedPlatform,
+          ip: clientIp,
+          reason: ipBlockRows[0]?.reason || 'Network IP blocked by MaskPro Security',
+        },
+      });
+    }
+
+    // 0b. Check if Device is blocked (10+ attempts or manual Admin Device block)
+    const [devBlockRows] = await pool.query(
+      `SELECT id, reason, created_at FROM care_blocked_devices
+       WHERE is_active = 1
+         AND (blocked_until IS NULL OR blocked_until > NOW())
+         AND (device_fingerprint = ? OR (device_token_hash IS NOT NULL AND device_token_hash = ?))
+       LIMIT 1`,
+      [deviceFingerprint, primaryDeviceHash || '']
+    ).catch(() => [[]]);
+    if (devBlockRows.length > 0) {
+      if (matchedLink) {
+        await pool.query('UPDATE care_magic_links SET blocked_attempts = blocked_attempts + 1 WHERE id = ?', [matchedLink.id]).catch(() => {});
+      }
+      await logMagicSecurityEvent({
+        magicLinkId: matchedLink?.id || null,
+        customerId: matchedLink?.customer_id || null,
+        slug: cleanSlug,
+        requestUrl: resolvedUrl,
+        eventType: 'device_blocked',
+        httpStatus: 403,
+        serverCode: 'DEVICE_BLOCKED',
+        attemptedPlatform: resolvedPlatform,
+        boundPlatform: matchedLink?.bound_platform || null,
+        deviceTokenHash: primaryDeviceHash,
+        deviceFingerprint,
+        ip: clientIp,
+        ua,
+        requestHeaders: buildHeadersSummary('403 Forbidden (Device Blocked)'),
+        isFailure: true,
+      });
+      return res.status(403).json({
+        success: false,
+        code: 'DEVICE_BLOCKED',
+        message: 'This device has been blocked from accessing smart maintenance links due to unauthorized access attempts.',
+        data: {
+          slug: cleanSlug,
+          attempted_platform: resolvedPlatform,
+          bound_platform: matchedLink?.bound_platform || 'another device',
+          ip: clientIp,
+          reason: devBlockRows[0]?.reason || 'Device blocked by MaskPro Security',
+        },
+      });
+    }
 
     if (links.length === 0) {
       await logMagicSecurityEvent({

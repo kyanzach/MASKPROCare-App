@@ -470,7 +470,28 @@ export default function AdminPanelScreen() {
             </View>
           </View>
 
-          {/* Magic Link Security & Intrusion Audit Log */}
+          {/* 2nd to Last: Who Uses the App (10 per page) */}
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Who Uses the App (Recent Active Users)</Text>
+            {activeUsers.slice(0, 10).map((u: any) => (
+              <View key={u.telemetry_id} style={styles.activeUserRow}>
+                <View style={{ flex: 1, marginRight: 8 }}>
+                  <Text style={styles.activeUserName}>{u.full_name}</Text>
+                  <Text style={styles.activeUserSub}>
+                    {u.platform?.toUpperCase()} • {u.device_label || u.app_type} • {timeAgo(u.last_seen_at)}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.miniImpBtn}
+                  onPress={() => handleImpersonatePress(u.customer_id, u.full_name)}
+                >
+                  <Text style={styles.miniImpBtnText}>Login as</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+
+          {/* Last Widget: Magic Link Security & Intrusion Audit Log (5 per page) */}
           <View style={styles.sectionCard}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Magic Link Security & Intrusion Log</Text>
@@ -481,23 +502,28 @@ export default function AdminPanelScreen() {
             {magicSecurityLogs.length === 0 ? (
               <Text style={{ color: '#94a3b8', fontSize: 13 }}>No security events yet.</Text>
             ) : (
-              magicSecurityLogs.slice(0, 12).map((log: any) => {
-                const isIntrusion = log.event_type !== 'first_bind' && log.event_type !== 'authorized_access';
+              magicSecurityLogs.slice(0, 5).map((log: any) => {
+                const isIntrusion = log.event_type !== 'first_bind' && log.event_type !== 'authorized_access' && log.event_type !== 'preview_bot_ignored';
                 const isDeviceBlocked = Number(log.is_device_blocked) > 0;
                 const isIpBlocked = Number(log.is_ip_blocked) > 0;
                 return (
                   <View key={log.id} style={[styles.activeUserRow, { flexDirection: 'column', alignItems: 'flex-start', gap: 6 }]}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
                       <Text style={styles.activeUserName}>
-                        {log.customer_name || 'Unknown Target'} ({log.slug})
+                        {log.customer_name || 'Unknown Target'} (/m/{log.slug})
                       </Text>
                       <Text style={{ fontSize: 11, fontWeight: '700', color: isIntrusion ? '#f87171' : '#34d399' }}>
-                        {isIntrusion ? 'Blocked (403)' : '1st Device Lock'}
+                        {isIntrusion ? `HTTP ${log.http_status || 403} Blocked` : `HTTP ${log.http_status || 200} Bound`}
                       </Text>
                     </View>
                     <Text style={styles.activeUserSub}>
                       Attempted: {log.attempted_platform || 'Unknown'} {log.bound_platform ? `• Locked: ${log.bound_platform}` : ''}
                     </Text>
+                    {log.browser_detail ? (
+                      <Text style={styles.activeUserSub}>
+                        {log.browser_detail} • {log.os_detail || ''}
+                      </Text>
+                    ) : null}
                     <Text style={styles.activeUserSub}>
                       IP: {log.ip_address} • {log.location || 'PH'} • {timeAgo(log.created_at)}
                     </Text>
@@ -537,27 +563,6 @@ export default function AdminPanelScreen() {
                 );
               })
             )}
-          </View>
-
-          {/* Who Uses the App */}
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Who Uses the App (Recent Active Users)</Text>
-            {activeUsers.map((u: any) => (
-              <View key={u.telemetry_id} style={styles.activeUserRow}>
-                <View style={{ flex: 1, marginRight: 8 }}>
-                  <Text style={styles.activeUserName}>{u.full_name}</Text>
-                  <Text style={styles.activeUserSub}>
-                    {u.platform?.toUpperCase()} • {u.device_label || u.app_type} • {timeAgo(u.last_seen_at)}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.miniImpBtn}
-                  onPress={() => handleImpersonatePress(u.customer_id, u.full_name)}
-                >
-                  <Text style={styles.miniImpBtnText}>Login as</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
           </View>
         </ScrollView>
       )}

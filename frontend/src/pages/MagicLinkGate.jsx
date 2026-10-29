@@ -50,6 +50,8 @@ export default function MagicLinkGate() {
   const [state, setState] = useState({
     loading: true,
     lockedElsewhere: false,
+    securityBlocked: false,
+    blockType: null,
     errorMessage: '',
     meta: null,
   });
@@ -106,6 +108,17 @@ export default function MagicLinkGate() {
           setState({
             loading: false,
             lockedElsewhere: true,
+            securityBlocked: false,
+            blockType: null,
+            errorMessage: resp.message,
+            meta: resp.data || {},
+          });
+        } else if (resp?.code === 'DEVICE_BLOCKED' || resp?.code === 'IP_BLOCKED') {
+          setState({
+            loading: false,
+            lockedElsewhere: false,
+            securityBlocked: true,
+            blockType: resp.code,
             errorMessage: resp.message,
             meta: resp.data || {},
           });
@@ -113,6 +126,8 @@ export default function MagicLinkGate() {
           setState({
             loading: false,
             lockedElsewhere: false,
+            securityBlocked: false,
+            blockType: null,
             errorMessage: resp?.message || 'This smart link is no longer active. Please sign in with your mobile number.',
             meta: null,
           });
@@ -200,6 +215,76 @@ export default function MagicLinkGate() {
                 Please continue on your <strong>{state.meta?.bound_platform || 'original device'}</strong>, or sign in below using your registered mobile number{' '}
                 {state.meta?.masked_mobile ? <strong>({state.meta.masked_mobile})</strong> : null} to continue here.
               </div>
+            </div>
+
+            <Link
+              to="/login"
+              className="btn-gradient"
+              style={{
+                width: '100%',
+                justifyContent: 'center',
+                padding: '12px 18px',
+                borderRadius: '12px',
+                fontSize: '14px',
+                fontWeight: 700,
+                textDecoration: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}
+            >
+              <i className="fas fa-sign-in-alt" /> Login Here with Mobile Number
+            </Link>
+          </div>
+        ) : state.securityBlocked ? (
+          <div>
+            <div style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '16px',
+              background: '#fef2f2',
+              border: '1px solid #fecaca',
+              color: '#dc2626',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '24px',
+              marginBottom: '16px',
+            }}>
+              <i className="fas fa-ban" />
+            </div>
+
+            <h2 style={{ fontSize: '19px', fontWeight: 800, color: '#991b1b', margin: '0 0 8px' }}>
+              {state.blockType === 'IP_BLOCKED' ? 'Network IP Blocked' : 'Device Blocked by Security'}
+            </h2>
+
+            <p style={{ fontSize: '13.5px', color: '#475569', lineHeight: 1.55, margin: '0 0 16px' }}>
+              Smart link access from <strong>{state.meta?.attempted_platform || getBrowserPlatformLabel()}</strong> has been restricted.
+            </p>
+
+            <div style={{
+              background: '#fef2f2',
+              border: '1px solid #fecaca',
+              borderRadius: '12px',
+              padding: '12px 14px',
+              textAlign: 'left',
+              marginBottom: '20px',
+              fontSize: '12.5px',
+              color: '#7f1d1d',
+              lineHeight: 1.5,
+            }}>
+              <div style={{ fontWeight: 700, color: '#991b1b', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <i className="fas fa-shield-alt" style={{ color: '#dc2626' }} />
+                Security Protection Active
+              </div>
+              <div>
+                {state.meta?.reason || state.errorMessage}
+              </div>
+              {state.meta?.ip && (
+                <div style={{ marginTop: '6px', fontSize: '11.5px', fontFamily: 'monospace', color: '#991b1b' }}>
+                  IP: {state.meta.ip} • Status: HTTP 403 ({state.blockType})
+                </div>
+              )}
             </div>
 
             <Link

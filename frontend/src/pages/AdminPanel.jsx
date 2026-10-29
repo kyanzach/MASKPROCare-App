@@ -43,12 +43,21 @@ export default function AdminPanel() {
   const [impersonating, setImpersonating] = useState(false);
   const [secActionLoading, setSecActionLoading] = useState(null);
   const [secLogFilter, setSecLogFilter] = useState('all');
+  const [secPage, setSecPage] = useState(1);
+  const [secLimit, setSecLimit] = useState(10); // Prefetch 2 pages (5 per page = 10 items) initially
+  const [usersPage, setUsersPage] = useState(1);
+  const [usersLimit, setUsersLimit] = useState(20); // Prefetch 2 pages (10 per page = 20 items) initially
   const [lastSyncedAt, setLastSyncedAt] = useState(new Date());
   const modFilterRef = useRef('pending');
+  const dashParamsRef = useRef({ secLimit: 10, secFilter: 'all', usersLimit: 20 });
 
   useEffect(() => {
     modFilterRef.current = modFilter;
   }, [modFilter]);
+
+  useEffect(() => {
+    dashParamsRef.current = { secLimit, secFilter: secLogFilter, usersLimit };
+  }, [secLimit, secLogFilter, usersLimit]);
 
   const showToast = (text, type = 'success') => {
     setToast({ text, type });
@@ -87,20 +96,24 @@ export default function AdminPanel() {
     })();
   }, []);
 
-  // Real-time background polling every 5s so moderation queue & usage analytics update automatically
+  // Real-time background polling every 5s (skips when browser tab is hidden to save server resources)
   useEffect(() => {
     if (!isAdmin) return;
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       loadDashboard(true);
       loadModerationPosts(modFilterRef.current, true);
     }, 5000);
     return () => clearInterval(interval);
   }, [isAdmin]);
 
-  const loadDashboard = async (silent = false) => {
+  const loadDashboard = async (silent = false, customParams = null) => {
     if (!silent) setDashLoading(true);
     try {
-      const res = await api.get('/admin/dashboard');
+      const p = customParams || dashParamsRef.current;
+      const res = await api.get(
+        `/admin/dashboard?sec_limit=${p.secLimit}&sec_filter=${encodeURIComponent(p.secFilter)}&users_limit=${p.usersLimit}`
+      );
       if (res.data.success) {
         setDashData(res.data.data);
         setLastSyncedAt(new Date());
@@ -109,6 +122,41 @@ export default function AdminPanel() {
       // silent background handling
     } finally {
       if (!silent) setDashLoading(false);
+    }
+  };
+
+  // Smart lazy-prefetching for Magic Link Security Log (5 per page):
+  // When user moves to page 2 (or page N), silently prefetch pages N+1 and N+2 in the background
+  const handleSecPageChange = (nextPage) => {
+    setSecPage(nextPage);
+    const neededLimit = (nextPage + 2) * 5;
+    if (neededLimit > secLimit) {
+      setSecLimit(neededLimit);
+      const updated = { ...dashParamsRef.current, secLimit: neededLimit };
+      dashParamsRef.current = updated;
+      loadDashboard(true, updated);
+    }
+  };
+
+  const handleSecFilterChange = (nextFilter) => {
+    setSecLogFilter(nextFilter);
+    setSecPage(1);
+    const updated = { ...dashParamsRef.current, secFilter: nextFilter, secLimit: 10 };
+    setSecLimit(10);
+    dashParamsRef.current = updated;
+    loadDashboard(true, updated);
+  };
+
+  // Smart lazy-prefetching for Who Uses the App (10 per page):
+  // When user moves to page 2 (or page N), silently prefetch pages N+1 and N+2 in the background
+  const handleUsersPageChange = (nextPage) => {
+    setUsersPage(nextPage);
+    const neededLimit = (nextPage + 2) * 10;
+    if (neededLimit > usersLimit) {
+      setUsersLimit(neededLimit);
+      const updated = { ...dashParamsRef.current, usersLimit: neededLimit };
+      dashParamsRef.current = updated;
+      loadDashboard(true, updated);
     }
   };
 
@@ -663,7 +711,167 @@ export default function AdminPanel() {
             </div>
           </div>
 
-          {/* ─── Magic Link Security & Intrusion Audit Log ───────────────── */}
+          {/* ─── 2nd to Last: Who Uses the App (Active Customers & Device Log — 10 per page + Lazy Prefetch) ─── */}
+          {(() => {
+            const USERS_PER_PAGE = 10;
+            const totalUserRows = Math.max(Number(dashData?.active_users_total || 0), activeUsers.length);
+            const totalUserPages = Math.max(1, Math.ceil(totalUserRows / USERS_PER_PAGE));
+            const safeUsersPage = Math.min(usersPage, totalUserPages);
+            const pagedUsers = activeUsers.slice((safeUsersPage - 1) * USERS_PER_PAGE, safeUsersPage * USERS_PER_PAGE);
+
+            return (
+              <div style={{
+                background: 'white', borderRadius: '18px', overflow: 'hidden',
+                border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.03)',
+                marginBottom: '24px',
+              }}>
+                <div style={{ padding: '18px 22px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <i className="bi bi-activity" style={{ color: '#10b981' }}></i>
+                      Who Uses the App (Active Customers & Device Log)
+                    </h3>
+                    <p style={{ margin: '2px 0 0', fontSize: '12.5px', color: '#64748b' }}>
+                      Recent customers who logged in or accessed MASKPRO Care across Web, Android, and iOS (10 per page)
+                    </p>
+                  </div>
+                  <span style={{
+                    background: '#f8fafc', border: '1px solid #e2e8f0', color: '#475569',
+                    fontSize: '12px', fontWeight: 700, padding: '5px 11px', borderRadius: '20px', whiteSpace: 'nowrap',
+                  }}>
+                    Total Device Sessions: {totalUserRows}
+                  </span>
+                </div>
+
+                {dashLoading && activeUsers.length === 0 ? (
+                  <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Loading activity...</div>
+                ) : activeUsers.length === 0 ? (
+                  <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>No app sessions recorded yet</div>
+                ) : (
+                  <>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13.5px' }}>
+                        <thead>
+                          <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', textAlign: 'left', fontSize: '11.5px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                            <th style={{ padding: '12px 18px' }}>Customer</th>
+                            <th style={{ padding: '12px 14px' }}>Platform</th>
+                            <th style={{ padding: '12px 14px' }}>Device / Auth</th>
+                            <th style={{ padding: '12px 14px', textAlign: 'center' }}>Sessions</th>
+                            <th style={{ padding: '12px 14px' }}>Last Active</th>
+                            <th style={{ padding: '12px 18px', textAlign: 'right' }}>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {pagedUsers.map((u) => {
+                            const badge = getPlatformBadge(u.platform);
+                            return (
+                              <tr key={u.telemetry_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                <td style={{ padding: '12px 18px' }}>
+                                  <div style={{ fontWeight: 700, color: '#0f172a' }}>{u.full_name}</div>
+                                  <div style={{ fontSize: '12px', color: '#64748b', fontFamily: 'monospace' }}>
+                                    {u.mobile_number} • {u.booking_count || 0} bookings
+                                  </div>
+                                </td>
+                                <td style={{ padding: '12px 14px' }}>
+                                  <span style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: '5px',
+                                    background: badge.bg, color: badge.color, border: `1px solid ${badge.border}`,
+                                    padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 700,
+                                    whiteSpace: 'nowrap',
+                                  }}>
+                                    <i className={`bi ${badge.icon}`}></i>
+                                    {badge.label}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '12px 14px', color: '#475569', fontSize: '12.5px' }}>
+                                  <div style={{ fontWeight: 600 }}>{u.device_label || u.app_type}</div>
+                                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>via {u.auth_method || 'session'}</div>
+                                </td>
+                                <td style={{ padding: '12px 14px', textAlign: 'center', fontWeight: 700, color: '#0f172a' }}>
+                                  {u.session_count || 1}
+                                </td>
+                                <td style={{ padding: '12px 14px', color: '#475569', fontSize: '12.5px', whiteSpace: 'nowrap' }}>
+                                  {formatTimeAgo(u.last_seen_at)}
+                                </td>
+                                <td style={{ padding: '12px 18px', textAlign: 'right' }}>
+                                  <button
+                                    onClick={() => handleImpersonate(u.customer_id, u.full_name)}
+                                    style={{
+                                      background: 'rgba(245, 158, 11, 0.15)', color: '#b45309',
+                                      border: '1px solid rgba(245, 158, 11, 0.35)', borderRadius: '8px',
+                                      padding: '5px 12px', fontSize: '12px', fontWeight: 700,
+                                      cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                                    }}
+                                  >
+                                    <i className="bi bi-box-arrow-in-right" style={{ marginRight: '4px' }}></i>
+                                    Login as
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Pagination Bar (10 per page + Lazy Prefetch) */}
+                    <div style={{
+                      padding: '12px 20px', background: '#f8fafc', borderTop: '1px solid #e2e8f0',
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px',
+                    }}>
+                      <div style={{ fontSize: '12px', color: '#64748b' }}>
+                        Showing <strong>{(safeUsersPage - 1) * USERS_PER_PAGE + 1}</strong>–<strong>{Math.min(safeUsersPage * USERS_PER_PAGE, totalUserRows)}</strong> of <strong>{totalUserRows}</strong> active sessions
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <button
+                          disabled={safeUsersPage <= 1}
+                          onClick={() => handleUsersPageChange(safeUsersPage - 1)}
+                          style={{
+                            padding: '5px 11px', borderRadius: '8px', fontSize: '12px', fontWeight: 700,
+                            border: '1px solid #cbd5e1', background: safeUsersPage <= 1 ? '#f1f5f9' : 'white',
+                            color: safeUsersPage <= 1 ? '#94a3b8' : '#0f172a',
+                            cursor: safeUsersPage <= 1 ? 'not-allowed' : 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                          }}
+                        >
+                          Prev
+                        </button>
+                        {Array.from({ length: totalUserPages }, (_, idx) => idx + 1).slice(0, 7).map((pNum) => (
+                          <button
+                            key={pNum}
+                            onClick={() => handleUsersPageChange(pNum)}
+                            style={{
+                              minWidth: '30px', height: '30px', borderRadius: '8px', fontSize: '12px', fontWeight: 700,
+                              border: safeUsersPage === pNum ? '1px solid #0f172a' : '1px solid #cbd5e1',
+                              background: safeUsersPage === pNum ? '#0f172a' : 'white',
+                              color: safeUsersPage === pNum ? 'white' : '#334155',
+                              cursor: 'pointer', fontFamily: 'inherit',
+                            }}
+                          >
+                            {pNum}
+                          </button>
+                        ))}
+                        <button
+                          disabled={safeUsersPage >= totalUserPages}
+                          onClick={() => handleUsersPageChange(safeUsersPage + 1)}
+                          style={{
+                            padding: '5px 11px', borderRadius: '8px', fontSize: '12px', fontWeight: 700,
+                            border: '1px solid #cbd5e1', background: safeUsersPage >= totalUserPages ? '#f1f5f9' : 'white',
+                            color: safeUsersPage >= totalUserPages ? '#94a3b8' : '#0f172a',
+                            cursor: safeUsersPage >= totalUserPages ? 'not-allowed' : 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                          }}
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* ─── Last Widget: Magic Link Security & Intrusion Audit Log (5 per page + Lazy Prefetch) ─── */}
           <style>{`
             @keyframes mpLiveDotBlink {
               0%, 100% { opacity: 1; transform: scale(1); }
@@ -678,7 +886,6 @@ export default function AdminPanel() {
           <div style={{
             background: 'white', borderRadius: '18px', overflow: 'hidden',
             border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.03)',
-            marginBottom: '24px',
           }}>
             <div style={{
               padding: '18px 22px', borderBottom: '1px solid #e2e8f0',
@@ -716,20 +923,20 @@ export default function AdminPanel() {
                 </div>
 
                 <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#64748b' }}>
-                  Tracks 2nd-device link sharing, exact accessed URL, browser/OS fingerprint, IP/Geo-ISP, server HTTP logs & tiered lockouts (10th = Device • 100th = IP)
+                  Tracks 2nd-device link sharing, exact accessed URL, browser/OS fingerprint, IP/Geo-ISP, server HTTP logs & tiered lockouts (5 per page)
                 </p>
 
                 {/* Filter Pills */}
                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '12px' }}>
                   {[
-                    { key: 'all', label: `All Server Events (${magicSecurityLogs.length})` },
-                    { key: 'blocked', label: `Blocked Intrusions (${magicSecurityLogs.filter(l => l.event_type !== 'first_bind' && l.event_type !== 'authorized_access' && l.event_type !== 'preview_bot_ignored').length})` },
-                    { key: 'authorized', label: `Authorized Opens (${magicSecurityLogs.filter(l => l.event_type === 'first_bind' || l.event_type === 'authorized_access').length})` },
-                    { key: 'bot', label: `Preview Bots (${magicSecurityLogs.filter(l => l.event_type === 'preview_bot_ignored').length})` },
+                    { key: 'all', label: `All Server Events (${securityOverview.total_all_events ?? magicSecurityLogs.length})` },
+                    { key: 'blocked', label: `Blocked Intrusions (${securityOverview.total_intrusion_events ?? 0})` },
+                    { key: 'authorized', label: `Authorized Opens (${securityOverview.total_authorized_events ?? 0})` },
+                    { key: 'bot', label: `Preview Bots (${securityOverview.total_bot_events ?? 0})` },
                   ].map((f) => (
                     <button
                       key={f.key}
-                      onClick={() => setSecLogFilter(f.key)}
+                      onClick={() => handleSecFilterChange(f.key)}
                       style={{
                         padding: '5px 11px', borderRadius: '16px', fontSize: '11.5px', fontWeight: 700,
                         cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
@@ -767,6 +974,7 @@ export default function AdminPanel() {
             </div>
 
             {(() => {
+              const SEC_PER_PAGE = 5;
               const filteredLogs = magicSecurityLogs.filter((log) => {
                 if (secLogFilter === 'blocked') {
                   return log.event_type !== 'first_bind' && log.event_type !== 'authorized_access' && log.event_type !== 'preview_bot_ignored';
@@ -780,6 +988,21 @@ export default function AdminPanel() {
                 return true;
               });
 
+              const totalFilteredCount = Math.max(
+                filteredLogs.length,
+                secLogFilter === 'blocked'
+                  ? Number(securityOverview.total_intrusion_events || 0)
+                  : secLogFilter === 'authorized'
+                  ? Number(securityOverview.total_authorized_events || 0)
+                  : secLogFilter === 'bot'
+                  ? Number(securityOverview.total_bot_events || 0)
+                  : Number(securityOverview.total_all_events || 0)
+              );
+
+              const totalSecPages = Math.max(1, Math.ceil(totalFilteredCount / SEC_PER_PAGE));
+              const safeSecPage = Math.min(secPage, totalSecPages);
+              const pagedSecLogs = filteredLogs.slice((safeSecPage - 1) * SEC_PER_PAGE, safeSecPage * SEC_PER_PAGE);
+
               if (filteredLogs.length === 0) {
                 return (
                   <div style={{ padding: '40px 20px', textAlign: 'center', color: '#94a3b8', fontSize: '13.5px' }}>
@@ -789,485 +1012,450 @@ export default function AdminPanel() {
               }
 
               return (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                        <th style={{ padding: '11px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Target Account & Vehicle</th>
-                        <th style={{ padding: '11px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Exact Accessed URL & Server Log</th>
-                        <th style={{ padding: '11px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Security Event</th>
-                        <th style={{ padding: '11px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Device, Browser, OS & Fingerprint</th>
-                        <th style={{ padding: '11px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>IP Address & Geo / ISP</th>
-                        <th style={{ padding: '11px 14px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Attempts</th>
-                        <th style={{ padding: '11px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>When</th>
-                        <th style={{ padding: '11px 16px', textAlign: 'right', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Security Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredLogs.map((log) => {
-                        const isIntrusion = log.event_type !== 'first_bind' && log.event_type !== 'authorized_access' && log.event_type !== 'preview_bot_ignored';
-                        const isBot = log.event_type === 'preview_bot_ignored';
-                        const isDeviceBlocked = Number(log.is_device_blocked) > 0;
-                        const isIpBlocked = Number(log.is_ip_blocked) > 0;
-                        const isLinkRevoked = log.link_status === 'revoked';
-                        const vehicleLabel = [log.vehicle_make, log.vehicle_model].filter(Boolean).join(' ') || 'Vehicle';
-                        const fullUrl = log.request_url || `https://care.maskpro.ph/m/${log.slug}`;
-                        const shortFingerprint = log.device_fingerprint
-                          ? `${String(log.device_fingerprint).slice(0, 10)}...${String(log.device_fingerprint).slice(-6)}`
-                          : 'N/A';
+                <>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                          <th style={{ padding: '11px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Target Account & Vehicle</th>
+                          <th style={{ padding: '11px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Exact Accessed URL & Server Log</th>
+                          <th style={{ padding: '11px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Security Event</th>
+                          <th style={{ padding: '11px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Device, Browser, OS & Fingerprint</th>
+                          <th style={{ padding: '11px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>IP Address & Geo / ISP</th>
+                          <th style={{ padding: '11px 14px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Attempts</th>
+                          <th style={{ padding: '11px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>When</th>
+                          <th style={{ padding: '11px 16px', textAlign: 'right', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Security Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pagedSecLogs.map((log) => {
+                          const isIntrusion = log.event_type !== 'first_bind' && log.event_type !== 'authorized_access' && log.event_type !== 'preview_bot_ignored';
+                          const isBot = log.event_type === 'preview_bot_ignored';
+                          const isDeviceBlocked = Number(log.is_device_blocked) > 0;
+                          const isIpBlocked = Number(log.is_ip_blocked) > 0;
+                          const isLinkRevoked = log.link_status === 'revoked';
+                          const vehicleLabel = [log.vehicle_make, log.vehicle_model].filter(Boolean).join(' ') || 'Vehicle';
+                          const fullUrl = log.request_url || `https://care.maskpro.ph/m/${log.slug}`;
+                          const shortFingerprint = log.device_fingerprint
+                            ? `${String(log.device_fingerprint).slice(0, 10)}...${String(log.device_fingerprint).slice(-6)}`
+                            : 'N/A';
 
-                        let eventBadge = { label: 'Initial Device Lock', bg: '#dcfce7', color: '#15803d', border: '#86efac', icon: 'bi-lock-fill' };
-                        if (log.event_type === 'authorized_access') {
-                          eventBadge = { label: 'Authorized Open', bg: '#e0f2fe', color: '#0369a1', border: '#7dd3fc', icon: 'bi-check-circle-fill' };
-                        } else if (log.event_type === 'preview_bot_ignored') {
-                          eventBadge = { label: 'Preview Bot Ignored', bg: '#f1f5f9', color: '#475569', border: '#cbd5e1', icon: 'bi-robot' };
-                        } else if (log.event_type === 'device_locked_elsewhere') {
-                          eventBadge = { label: 'Blocked: 2nd Device', bg: '#fef2f2', color: '#dc2626', border: '#fecaca', icon: 'bi-phone-flip' };
-                        } else if (log.event_type === 'invalid_token') {
-                          eventBadge = { label: 'Blocked: Invalid Key', bg: '#fef2f2', color: '#dc2626', border: '#fecaca', icon: 'bi-key-fill' };
-                        } else if (log.event_type === 'invalid_slug') {
-                          eventBadge = { label: 'Brute-Force Slug (404)', bg: '#fff7ed', color: '#c2410c', border: '#fed7aa', icon: 'bi-bug-fill' };
-                        } else if (log.event_type === 'revoked_link') {
-                          eventBadge = { label: 'Blocked: Link Revoked', bg: '#f1f5f9', color: '#475569', border: '#cbd5e1', icon: 'bi-slash-circle-fill' };
-                        } else if (log.event_type === 'device_blocked' || log.action_taken === 'auto_device_blocked') {
-                          eventBadge = { label: 'Device Blocked (10+)', bg: '#fef2f2', color: '#991b1b', border: '#fca5a5', icon: 'bi-shield-slash-fill' };
-                        } else if (log.event_type === 'ip_blocked' || log.action_taken === 'auto_ip_blocked') {
-                          eventBadge = { label: 'IP Blocked (100+)', bg: '#450a0a', color: '#ffffff', border: '#7f1d1d', icon: 'bi-cone-striped' };
-                        }
+                          let eventBadge = { label: 'Initial Device Lock', bg: '#dcfce7', color: '#15803d', border: '#86efac', icon: 'bi-lock-fill' };
+                          if (log.event_type === 'authorized_access') {
+                            eventBadge = { label: 'Authorized Open', bg: '#e0f2fe', color: '#0369a1', border: '#7dd3fc', icon: 'bi-check-circle-fill' };
+                          } else if (log.event_type === 'preview_bot_ignored') {
+                            eventBadge = { label: 'Preview Bot Ignored', bg: '#f1f5f9', color: '#475569', border: '#cbd5e1', icon: 'bi-robot' };
+                          } else if (log.event_type === 'device_locked_elsewhere') {
+                            eventBadge = { label: 'Blocked: 2nd Device', bg: '#fef2f2', color: '#dc2626', border: '#fecaca', icon: 'bi-phone-flip' };
+                          } else if (log.event_type === 'invalid_token') {
+                            eventBadge = { label: 'Blocked: Invalid Key', bg: '#fef2f2', color: '#dc2626', border: '#fecaca', icon: 'bi-key-fill' };
+                          } else if (log.event_type === 'invalid_slug') {
+                            eventBadge = { label: 'Brute-Force Slug (404)', bg: '#fff7ed', color: '#c2410c', border: '#fed7aa', icon: 'bi-bug-fill' };
+                          } else if (log.event_type === 'revoked_link') {
+                            eventBadge = { label: 'Blocked: Link Revoked', bg: '#f1f5f9', color: '#475569', border: '#cbd5e1', icon: 'bi-slash-circle-fill' };
+                          } else if (log.event_type === 'device_blocked' || log.action_taken === 'auto_device_blocked') {
+                            eventBadge = { label: 'Device Blocked (10+)', bg: '#fef2f2', color: '#991b1b', border: '#fca5a5', icon: 'bi-shield-slash-fill' };
+                          } else if (log.event_type === 'ip_blocked' || log.action_taken === 'auto_ip_blocked') {
+                            eventBadge = { label: 'IP Blocked (100+)', bg: '#450a0a', color: '#ffffff', border: '#7f1d1d', icon: 'bi-cone-striped' };
+                          }
 
-                        return (
-                          <tr
-                            key={log.id}
-                            style={{
-                              borderBottom: '1px solid #f1f5f9',
-                              background: isIntrusion ? 'rgba(254, 242, 242, 0.38)' : isBot ? '#f8fafc' : 'white',
-                              verticalAlign: 'top',
-                            }}
-                          >
-                            {/* 1. Target Account & Vehicle */}
-                            <td style={{ padding: '14px 16px', minWidth: '175px' }}>
-                              <div style={{ fontWeight: 800, fontSize: '13.5px', color: '#0f172a' }}>
-                                {log.customer_name || 'Unknown / Guessed Link'}
-                              </div>
-                              <div style={{ fontSize: '12px', color: '#475569', marginTop: '2px' }}>
-                                {log.customer_mobile ? (
-                                  <>
-                                    <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{log.customer_mobile}</span>
-                                    {log.customer_id ? ` • ID #${log.customer_id}` : ''}
-                                  </>
-                                ) : 'Unmatched target'}
-                              </div>
-                              <div style={{ fontSize: '11.5px', color: '#2563eb', fontWeight: 700, marginTop: '3px' }}>
-                                <i className="bi bi-car-front-fill" style={{ marginRight: '4px' }}></i>
-                                {vehicleLabel}
-                                {log.vehicle_plate ? ` (${log.vehicle_plate})` : ''}
-                              </div>
-                              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '3px' }}>
-                                Link Status:{' '}
-                                <strong style={{ color: isLinkRevoked ? '#dc2626' : '#15803d' }}>
-                                  {isLinkRevoked ? 'REVOKED' : 'Active'}
-                                </strong>
-                              </div>
-                            </td>
-
-                            {/* 2. Exact Accessed URL & Server Log */}
-                            <td style={{ padding: '14px 14px', minWidth: '250px', maxWidth: '300px' }}>
-                              <div style={{
-                                display: 'flex', alignItems: 'center', gap: '6px',
-                                background: '#f8fafc', border: '1px solid #e2e8f0',
-                                borderRadius: '8px', padding: '5px 8px',
-                              }}>
-                                <code style={{
-                                  fontSize: '11px', color: '#1d4ed8', fontWeight: 700,
-                                  wordBreak: 'break-all', lineHeight: 1.35, flex: 1,
-                                }}>
-                                  {fullUrl}
-                                </code>
-                                <button
-                                  onClick={() => {
-                                    navigator.clipboard?.writeText(fullUrl);
-                                    showToast('Exact accessed URL copied to clipboard');
-                                  }}
-                                  title="Copy exact accessed URL"
-                                  style={{
-                                    border: 'none', background: '#e2e8f0', color: '#334155',
-                                    borderRadius: '6px', padding: '3px 6px', fontSize: '11px',
-                                    cursor: 'pointer', flexShrink: 0,
-                                  }}
-                                >
-                                  <i className="bi bi-clipboard"></i>
-                                </button>
-                              </div>
-
-                              <div style={{
-                                display: 'inline-flex', alignItems: 'center', gap: '5px',
-                                marginTop: '6px', fontSize: '11px', fontWeight: 700,
-                                fontFamily: 'monospace',
-                                color: Number(log.http_status) >= 400 ? '#dc2626' : '#0f172a',
-                              }}>
-                                <span style={{
-                                  background: Number(log.http_status) >= 400 ? '#fee2e2' : '#dcfce7',
-                                  color: Number(log.http_status) >= 400 ? '#991b1b' : '#166534',
-                                  padding: '1px 6px', borderRadius: '4px',
-                                }}>
-                                  HTTP {log.http_status || (isIntrusion ? 403 : 200)}
-                                </span>
-                                <span>{log.server_code || (isIntrusion ? 'DEVICE_LOCKED_ELSEWHERE' : 'OK')}</span>
-                              </div>
-
-                              {log.request_headers && (
-                                <div style={{
-                                  fontSize: '10.5px', color: '#64748b', marginTop: '4px',
-                                  fontFamily: 'monospace', lineHeight: 1.35,
-                                }}>
-                                  {log.request_headers}
-                                </div>
-                              )}
-                            </td>
-
-                            {/* 3. Security Event */}
-                            <td style={{ padding: '14px 14px', minWidth: '155px' }}>
-                              <span style={{
-                                display: 'inline-flex', alignItems: 'center', gap: '5px',
-                                padding: '4px 10px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 700,
-                                background: eventBadge.bg, color: eventBadge.color, border: `1px solid ${eventBadge.border}`,
-                                whiteSpace: 'nowrap',
-                              }}>
-                                <i className={`bi ${eventBadge.icon}`}></i>
-                                {eventBadge.label}
-                              </span>
-                              <div style={{ fontSize: '11px', color: '#475569', fontWeight: 600, marginTop: '5px' }}>
-                                {isIpBlocked
-                                  ? 'Firewall: IP Blocked'
-                                  : isDeviceBlocked
-                                  ? 'Firewall: Device Blocked'
-                                  : log.action_taken === 'bot_ignored'
-                                  ? 'Lock Preserved (202)'
-                                  : log.action_taken === 'allowed'
-                                  ? 'Authorized & Bound (200)'
-                                  : 'Rejected at Gate (403)'}
-                              </div>
-                              <div style={{ fontSize: '10.5px', color: '#94a3b8', marginTop: '2px', fontFamily: 'monospace' }}>
-                                Event #{log.id}
-                              </div>
-                            </td>
-
-                            {/* 4. Device, Browser, OS & Fingerprint */}
-                            <td style={{ padding: '14px 14px', minWidth: '250px', maxWidth: '310px' }}>
-                              <div style={{ fontSize: '12.5px', fontWeight: 800, color: isIntrusion ? '#dc2626' : '#0f172a' }}>
-                                <i className={`bi ${/iPhone|Android|Mobile/i.test(log.attempted_platform || '') ? 'bi-phone-fill' : 'bi-laptop'}`} style={{ marginRight: '5px' }}></i>
-                                Attempted: {log.attempted_platform || 'Unknown Device'}
-                              </div>
-
-                              {log.browser_detail && (
-                                <div style={{ fontSize: '11.5px', color: '#334155', marginTop: '3px' }}>
-                                  <strong>Browser:</strong> {log.browser_detail}
-                                </div>
-                              )}
-
-                              {log.os_detail && (
-                                <div style={{ fontSize: '11.5px', color: '#334155', marginTop: '2px' }}>
-                                  <strong>OS / HW:</strong> {log.os_detail}
-                                </div>
-                              )}
-
-                              {log.bound_platform && (
-                                <div style={{
-                                  fontSize: '11px', color: '#15803d', background: '#f0fdf4',
-                                  border: '1px solid #bbf7d0', borderRadius: '6px',
-                                  padding: '3px 7px', marginTop: '5px', display: 'inline-block',
-                                }}>
-                                  <i className="bi bi-lock-fill" style={{ marginRight: '4px' }}></i>
-                                  Locked Owner: <strong>{log.bound_platform}</strong>
-                                </div>
-                              )}
-
-                              <div style={{ fontSize: '10.5px', color: '#64748b', fontFamily: 'monospace', marginTop: '4px' }}>
-                                Device Hash: {shortFingerprint}
-                              </div>
-
-                              {log.user_agent && (
-                                <div
-                                  style={{
-                                    fontSize: '10px', color: '#64748b', marginTop: '4px',
-                                    background: '#f8fafc', border: '1px solid #e2e8f0',
-                                    borderRadius: '6px', padding: '4px 6px', fontFamily: 'monospace',
-                                    wordBreak: 'break-all', lineHeight: 1.3,
-                                  }}
-                                >
-                                  UA: {log.user_agent}
-                                </div>
-                              )}
-                            </td>
-
-                            {/* 5. IP Address & Geo / ISP */}
-                            <td style={{ padding: '14px 14px', minWidth: '185px' }}>
-                              <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', fontFamily: 'monospace' }}>
-                                {log.ip_address}
-                              </div>
-                              <div style={{ fontSize: '11.5px', color: '#334155', marginTop: '3px', lineHeight: 1.35 }}>
-                                <i className="bi bi-geo-alt-fill" style={{ color: '#ef4444', marginRight: '4px' }}></i>
-                                {log.location || 'Philippines'}
-                              </div>
-                              {log.bound_ip && (
-                                <div style={{ fontSize: '10.5px', color: '#64748b', marginTop: '4px', fontFamily: 'monospace' }}>
-                                  Owner Bound IP: {log.bound_ip}
-                                </div>
-                              )}
-                            </td>
-
-                            {/* 6. Attempts & Brute-Force Thresholds */}
-                            <td style={{ padding: '14px 14px', textAlign: 'center', minWidth: '130px' }}>
-                              {isIntrusion ? (
-                                <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '5px', fontSize: '11.5px', width: '100%' }}>
-                                  <div style={{
-                                    background: log.device_attempt_count >= 10 ? '#fef2f2' : '#f8fafc',
-                                    border: '1px solid #e2e8f0', borderRadius: '6px', padding: '4px 8px',
-                                  }}>
-                                    <div style={{ fontWeight: 800, color: log.device_attempt_count >= 10 ? '#dc2626' : '#0f172a', whiteSpace: 'nowrap' }}>
-                                      Device: {log.device_attempt_count} / 10
-                                    </div>
-                                    <div style={{ height: '4px', background: '#e2e8f0', borderRadius: '3px', marginTop: '3px', overflow: 'hidden' }}>
-                                      <div style={{
-                                        width: `${Math.min(100, (Number(log.device_attempt_count || 1) / 10) * 100)}%`,
-                                        height: '100%',
-                                        background: log.device_attempt_count >= 8 ? '#dc2626' : '#f59e0b',
-                                      }} />
-                                    </div>
-                                  </div>
-
-                                  <div style={{
-                                    background: log.ip_attempt_count >= 100 ? '#fef2f2' : '#f8fafc',
-                                    border: '1px solid #e2e8f0', borderRadius: '6px', padding: '4px 8px',
-                                  }}>
-                                    <div style={{ fontWeight: 700, color: log.ip_attempt_count >= 100 ? '#dc2626' : '#475569', whiteSpace: 'nowrap' }}>
-                                      IP: {log.ip_attempt_count} / 100
-                                    </div>
-                                    <div style={{ height: '4px', background: '#e2e8f0', borderRadius: '3px', marginTop: '3px', overflow: 'hidden' }}>
-                                      <div style={{
-                                        width: `${Math.min(100, Math.max(6, (Number(log.ip_attempt_count || 1) / 100) * 100))}%`,
-                                        height: '100%',
-                                        background: '#dc2626',
-                                      }} />
-                                    </div>
-                                  </div>
-
-                                  <div style={{ fontSize: '10.5px', color: '#64748b' }}>
-                                    Link Total: <strong>{log.blocked_attempts || 0}</strong> blocked
-                                  </div>
-                                </div>
-                              ) : isBot ? (
-                                <span style={{ fontSize: '11.5px', color: '#64748b', fontWeight: 700 }}>
-                                  0 (Crawler)
-                                </span>
-                              ) : (
-                                <div style={{ fontSize: '11.5px' }}>
-                                  <span style={{ color: '#15803d', fontWeight: 800 }}>
-                                    {log.event_type === 'first_bind' ? '1st Open (Bound)' : 'Verified Device'}
-                                  </span>
-                                  <div style={{ fontSize: '10.5px', color: '#64748b', marginTop: '3px' }}>
-                                    Total Opens: <strong>{log.access_count || 1}</strong>
-                                  </div>
-                                </div>
-                              )}
-                            </td>
-
-                            {/* 7. When */}
-                            <td style={{ padding: '14px 14px', fontSize: '12px', color: '#475569', whiteSpace: 'nowrap' }}>
-                              <div style={{ fontWeight: 800, color: '#0f172a' }}>{formatTimeAgo(log.created_at)}</div>
-                              <div style={{ fontSize: '11px', color: '#475569', marginTop: '2px' }}>
-                                {log.created_at ? new Date(log.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
-                              </div>
-                              <div style={{ fontSize: '11px', color: '#64748b', fontFamily: 'monospace' }}>
-                                {log.created_at ? new Date(log.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' }) : ''}
-                              </div>
-                            </td>
-
-                            {/* 8. Security Actions */}
-                            <td style={{ padding: '14px 16px', textAlign: 'right', minWidth: '150px' }}>
-                              <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
-                                {isIntrusion && log.device_fingerprint && (
-                                  <button
-                                    disabled={secActionLoading === `dev:${log.id}`}
-                                    onClick={() => handleSecurityAction({
-                                      action: isDeviceBlocked ? 'unblock_device' : 'block_device',
-                                      log_id: log.id,
-                                      device_fingerprint: log.device_fingerprint,
-                                      device_token_hash: log.device_token_hash,
-                                      device_label: log.attempted_platform,
-                                      ip_address: log.ip_address,
-                                      user_agent: log.user_agent,
-                                    }, `dev:${log.id}`)}
-                                    style={{
-                                      padding: '5px 10px', borderRadius: '8px', fontSize: '11.5px', fontWeight: 700,
-                                      cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-                                      background: isDeviceBlocked ? '#f0fdf4' : '#fff7ed',
-                                      border: `1px solid ${isDeviceBlocked ? '#86efac' : '#fdba74'}`,
-                                      color: isDeviceBlocked ? '#15803d' : '#c2410c',
-                                    }}
-                                  >
-                                    <i className={`bi ${isDeviceBlocked ? 'bi-unlock-fill' : 'bi-phone-vibrate-fill'}`} style={{ marginRight: '4px' }}></i>
-                                    {isDeviceBlocked ? 'Unblock Device' : 'Block Device'}
-                                  </button>
-                                )}
-
-                                {isIntrusion && log.ip_address && (
-                                  <button
-                                    disabled={secActionLoading === `ip:${log.id}`}
-                                    onClick={() => handleSecurityAction({
-                                      action: isIpBlocked ? 'unblock_ip' : 'block_ip',
-                                      log_id: log.id,
-                                      ip_address: log.ip_address,
-                                    }, `ip:${log.id}`)}
-                                    style={{
-                                      padding: '5px 10px', borderRadius: '8px', fontSize: '11.5px', fontWeight: 700,
-                                      cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-                                      background: isIpBlocked ? '#f0fdf4' : '#fef2f2',
-                                      border: `1px solid ${isIpBlocked ? '#86efac' : '#fecaca'}`,
-                                      color: isIpBlocked ? '#15803d' : '#dc2626',
-                                    }}
-                                  >
-                                    <i className={`bi ${isIpBlocked ? 'bi-shield-check' : 'bi-shield-fill-x'}`} style={{ marginRight: '4px' }}></i>
-                                    {isIpBlocked ? 'Unblock IP' : 'Block IP'}
-                                  </button>
-                                )}
-
-                                {log.magic_link_id && (
-                                  <button
-                                    disabled={secActionLoading === `reset:${log.id}`}
-                                    onClick={() => handleSecurityAction({
-                                      action: 'reset_device_lock',
-                                      magic_link_id: log.magic_link_id,
-                                    }, `reset:${log.id}`)}
-                                    title="Clear the bound device so the customer can open this link on their new phone"
-                                    style={{
-                                      padding: '5px 10px', borderRadius: '8px', fontSize: '11.5px', fontWeight: 700,
-                                      cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-                                      background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb',
-                                    }}
-                                  >
-                                    <i className="bi bi-arrow-counterclockwise" style={{ marginRight: '4px' }}></i>
-                                    Reset Lock
-                                  </button>
-                                )}
-
-                                {log.magic_link_id && (
-                                  <button
-                                    disabled={secActionLoading === `rev:${log.id}`}
-                                    onClick={() => handleSecurityAction({
-                                      action: isLinkRevoked ? 'reactivate_link' : 'revoke_link',
-                                      magic_link_id: log.magic_link_id,
-                                    }, `rev:${log.id}`)}
-                                    style={{
-                                      padding: '5px 10px', borderRadius: '8px', fontSize: '11.5px', fontWeight: 700,
-                                      cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-                                      background: isLinkRevoked ? '#f0fdf4' : '#f8fafc',
-                                      border: `1px solid ${isLinkRevoked ? '#86efac' : '#cbd5e1'}`,
-                                      color: isLinkRevoked ? '#15803d' : '#475569',
-                                    }}
-                                  >
-                                    {isLinkRevoked ? 'Restore Link' : 'Revoke Link'}
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              );
-            })()}
-          </div>
-
-          {/* Who Uses the App (Live Active Users & Device Log) */}
-          <div style={{
-            background: 'white', borderRadius: '18px', overflow: 'hidden',
-            border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.03)',
-          }}>
-            <div style={{ padding: '18px 22px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <i className="bi bi-activity" style={{ color: '#10b981' }}></i>
-                  Who Uses the App (Active Customers & Device Log)
-                </h3>
-                <p style={{ margin: '2px 0 0', fontSize: '12.5px', color: '#64748b' }}>
-                  Recent customers who logged in or accessed MASKPRO Care across Web, Android, and iOS
-                </p>
-              </div>
-            </div>
-
-            {dashLoading ? (
-              <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Loading activity...</div>
-            ) : activeUsers.length === 0 ? (
-              <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>No app sessions recorded yet</div>
-            ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13.5px' }}>
-                  <thead>
-                    <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', textAlign: 'left', fontSize: '11.5px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
-                      <th style={{ padding: '12px 18px' }}>Customer</th>
-                      <th style={{ padding: '12px 14px' }}>Platform</th>
-                      <th style={{ padding: '12px 14px' }}>Device / Auth</th>
-                      <th style={{ padding: '12px 14px', textAlign: 'center' }}>Sessions</th>
-                      <th style={{ padding: '12px 14px' }}>Last Active</th>
-                      <th style={{ padding: '12px 18px', textAlign: 'right' }}>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activeUsers.map((u) => {
-                      const badge = getPlatformBadge(u.platform);
-                      return (
-                        <tr key={u.telemetry_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '12px 18px' }}>
-                            <div style={{ fontWeight: 700, color: '#0f172a' }}>{u.full_name}</div>
-                            <div style={{ fontSize: '12px', color: '#64748b', fontFamily: 'monospace' }}>
-                              {u.mobile_number} • {u.booking_count || 0} bookings
-                            </div>
-                          </td>
-                          <td style={{ padding: '12px 14px' }}>
-                            <span style={{
-                              display: 'inline-flex', alignItems: 'center', gap: '5px',
-                              background: badge.bg, color: badge.color, border: `1px solid ${badge.border}`,
-                              padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 700,
-                              whiteSpace: 'nowrap',
-                            }}>
-                              <i className={`bi ${badge.icon}`}></i>
-                              {badge.label}
-                            </span>
-                          </td>
-                          <td style={{ padding: '12px 14px', color: '#475569', fontSize: '12.5px' }}>
-                            <div style={{ fontWeight: 600 }}>{u.device_label || u.app_type}</div>
-                            <div style={{ fontSize: '11px', color: '#94a3b8' }}>via {u.auth_method || 'session'}</div>
-                          </td>
-                          <td style={{ padding: '12px 14px', textAlign: 'center', fontWeight: 700, color: '#0f172a' }}>
-                            {u.session_count || 1}
-                          </td>
-                          <td style={{ padding: '12px 14px', color: '#475569', fontSize: '12.5px', whiteSpace: 'nowrap' }}>
-                            {formatTimeAgo(u.last_seen_at)}
-                          </td>
-                          <td style={{ padding: '12px 18px', textAlign: 'right' }}>
-                            <button
-                              onClick={() => handleImpersonate(u.customer_id, u.full_name)}
+                          return (
+                            <tr
+                              key={log.id}
                               style={{
-                                background: 'rgba(245, 158, 11, 0.15)', color: '#b45309',
-                                border: '1px solid rgba(245, 158, 11, 0.35)', borderRadius: '8px',
-                                padding: '5px 12px', fontSize: '12px', fontWeight: 700,
-                                cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                                borderBottom: '1px solid #f1f5f9',
+                                background: isIntrusion ? 'rgba(254, 242, 242, 0.38)' : isBot ? '#f8fafc' : 'white',
+                                verticalAlign: 'top',
                               }}
                             >
-                              <i className="bi bi-box-arrow-in-right" style={{ marginRight: '4px' }}></i>
-                              Login as
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                              {/* 1. Target Account & Vehicle */}
+                              <td style={{ padding: '14px 16px', minWidth: '175px' }}>
+                                <div style={{ fontWeight: 800, fontSize: '13.5px', color: '#0f172a' }}>
+                                  {log.customer_name || 'Unknown / Guessed Link'}
+                                </div>
+                                <div style={{ fontSize: '12px', color: '#475569', marginTop: '2px' }}>
+                                  {log.customer_mobile ? (
+                                    <>
+                                      <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{log.customer_mobile}</span>
+                                      {log.customer_id ? ` • ID #${log.customer_id}` : ''}
+                                    </>
+                                  ) : 'Unmatched target'}
+                                </div>
+                                <div style={{ fontSize: '11.5px', color: '#2563eb', fontWeight: 700, marginTop: '3px' }}>
+                                  <i className="bi bi-car-front-fill" style={{ marginRight: '4px' }}></i>
+                                  {vehicleLabel}
+                                  {log.vehicle_plate ? ` (${log.vehicle_plate})` : ''}
+                                </div>
+                                <div style={{ fontSize: '11px', color: '#64748b', marginTop: '3px' }}>
+                                  Link Status:{' '}
+                                  <strong style={{ color: isLinkRevoked ? '#dc2626' : '#15803d' }}>
+                                    {isLinkRevoked ? 'REVOKED' : 'Active'}
+                                  </strong>
+                                </div>
+                              </td>
+
+                              {/* 2. Exact Accessed URL & Server Log */}
+                              <td style={{ padding: '14px 14px', minWidth: '250px', maxWidth: '300px' }}>
+                                <div style={{
+                                  display: 'flex', alignItems: 'center', gap: '6px',
+                                  background: '#f8fafc', border: '1px solid #e2e8f0',
+                                  borderRadius: '8px', padding: '5px 8px',
+                                }}>
+                                  <code style={{
+                                    fontSize: '11px', color: '#1d4ed8', fontWeight: 700,
+                                    wordBreak: 'break-all', lineHeight: 1.35, flex: 1,
+                                  }}>
+                                    {fullUrl}
+                                  </code>
+                                  <button
+                                    onClick={() => {
+                                      navigator.clipboard?.writeText(fullUrl);
+                                      showToast('Exact accessed URL copied to clipboard');
+                                    }}
+                                    title="Copy exact accessed URL"
+                                    style={{
+                                      border: 'none', background: '#e2e8f0', color: '#334155',
+                                      borderRadius: '6px', padding: '3px 6px', fontSize: '11px',
+                                      cursor: 'pointer', flexShrink: 0,
+                                    }}
+                                  >
+                                    <i className="bi bi-clipboard"></i>
+                                  </button>
+                                </div>
+
+                                <div style={{
+                                  display: 'inline-flex', alignItems: 'center', gap: '5px',
+                                  marginTop: '6px', fontSize: '11px', fontWeight: 700,
+                                  fontFamily: 'monospace',
+                                  color: Number(log.http_status) >= 400 ? '#dc2626' : '#0f172a',
+                                }}>
+                                  <span style={{
+                                    background: Number(log.http_status) >= 400 ? '#fee2e2' : '#dcfce7',
+                                    color: Number(log.http_status) >= 400 ? '#991b1b' : '#166534',
+                                    padding: '1px 6px', borderRadius: '4px',
+                                  }}>
+                                    HTTP {log.http_status || (isIntrusion ? 403 : 200)}
+                                  </span>
+                                  <span>{log.server_code || (isIntrusion ? 'DEVICE_LOCKED_ELSEWHERE' : 'OK')}</span>
+                                </div>
+
+                                {log.request_headers && (
+                                  <div style={{
+                                    fontSize: '10.5px', color: '#64748b', marginTop: '4px',
+                                    fontFamily: 'monospace', lineHeight: 1.35,
+                                  }}>
+                                    {log.request_headers}
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* 3. Security Event */}
+                              <td style={{ padding: '14px 14px', minWidth: '155px' }}>
+                                <span style={{
+                                  display: 'inline-flex', alignItems: 'center', gap: '5px',
+                                  padding: '4px 10px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 700,
+                                  background: eventBadge.bg, color: eventBadge.color, border: `1px solid ${eventBadge.border}`,
+                                  whiteSpace: 'nowrap',
+                                }}>
+                                  <i className={`bi ${eventBadge.icon}`}></i>
+                                  {eventBadge.label}
+                                </span>
+                                <div style={{ fontSize: '11px', color: '#475569', fontWeight: 600, marginTop: '5px' }}>
+                                  {isIpBlocked
+                                    ? 'Firewall: IP Blocked'
+                                    : isDeviceBlocked
+                                    ? 'Firewall: Device Blocked'
+                                    : log.action_taken === 'bot_ignored'
+                                    ? 'Lock Preserved (202)'
+                                    : log.action_taken === 'allowed'
+                                    ? 'Authorized & Bound (200)'
+                                    : 'Rejected at Gate (403)'}
+                                </div>
+                                <div style={{ fontSize: '10.5px', color: '#94a3b8', marginTop: '2px', fontFamily: 'monospace' }}>
+                                  Event #{log.id}
+                                </div>
+                              </td>
+
+                              {/* 4. Device, Browser, OS & Fingerprint */}
+                              <td style={{ padding: '14px 14px', minWidth: '250px', maxWidth: '310px' }}>
+                                <div style={{ fontSize: '12.5px', fontWeight: 800, color: isIntrusion ? '#dc2626' : '#0f172a' }}>
+                                  <i className={`bi ${/iPhone|Android|Mobile/i.test(log.attempted_platform || '') ? 'bi-phone-fill' : 'bi-laptop'}`} style={{ marginRight: '5px' }}></i>
+                                  Attempted: {log.attempted_platform || 'Unknown Device'}
+                                </div>
+
+                                {log.browser_detail && (
+                                  <div style={{ fontSize: '11.5px', color: '#334155', marginTop: '3px' }}>
+                                    <strong>Browser:</strong> {log.browser_detail}
+                                  </div>
+                                )}
+
+                                {log.os_detail && (
+                                  <div style={{ fontSize: '11.5px', color: '#334155', marginTop: '2px' }}>
+                                    <strong>OS / HW:</strong> {log.os_detail}
+                                  </div>
+                                )}
+
+                                {log.bound_platform && (
+                                  <div style={{
+                                    fontSize: '11px', color: '#15803d', background: '#f0fdf4',
+                                    border: '1px solid #bbf7d0', borderRadius: '6px',
+                                    padding: '3px 7px', marginTop: '5px', display: 'inline-block',
+                                  }}>
+                                    <i className="bi bi-lock-fill" style={{ marginRight: '4px' }}></i>
+                                    Locked Owner: <strong>{log.bound_platform}</strong>
+                                  </div>
+                                )}
+
+                                <div style={{ fontSize: '10.5px', color: '#64748b', fontFamily: 'monospace', marginTop: '4px' }}>
+                                  Device Hash: {shortFingerprint}
+                                </div>
+
+                                {log.user_agent && (
+                                  <div
+                                    style={{
+                                      fontSize: '10px', color: '#64748b', marginTop: '4px',
+                                      background: '#f8fafc', border: '1px solid #e2e8f0',
+                                      borderRadius: '6px', padding: '4px 6px', fontFamily: 'monospace',
+                                      wordBreak: 'break-all', lineHeight: 1.3,
+                                    }}
+                                  >
+                                    UA: {log.user_agent}
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* 5. IP Address & Geo / ISP */}
+                              <td style={{ padding: '14px 14px', minWidth: '185px' }}>
+                                <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', fontFamily: 'monospace' }}>
+                                  {log.ip_address}
+                                </div>
+                                <div style={{ fontSize: '11.5px', color: '#334155', marginTop: '3px', lineHeight: 1.35 }}>
+                                  <i className="bi bi-geo-alt-fill" style={{ color: '#ef4444', marginRight: '4px' }}></i>
+                                  {log.location || 'Philippines'}
+                                </div>
+                                {log.bound_ip && (
+                                  <div style={{ fontSize: '10.5px', color: '#64748b', marginTop: '4px', fontFamily: 'monospace' }}>
+                                    Owner Bound IP: {log.bound_ip}
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* 6. Attempts & Brute-Force Thresholds */}
+                              <td style={{ padding: '14px 14px', textAlign: 'center', minWidth: '130px' }}>
+                                {isIntrusion ? (
+                                  <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '5px', fontSize: '11.5px', width: '100%' }}>
+                                    <div style={{
+                                      background: log.device_attempt_count >= 10 ? '#fef2f2' : '#f8fafc',
+                                      border: '1px solid #e2e8f0', borderRadius: '6px', padding: '4px 8px',
+                                    }}>
+                                      <div style={{ fontWeight: 800, color: log.device_attempt_count >= 10 ? '#dc2626' : '#0f172a', whiteSpace: 'nowrap' }}>
+                                        Device: {log.device_attempt_count} / 10
+                                      </div>
+                                      <div style={{ height: '4px', background: '#e2e8f0', borderRadius: '3px', marginTop: '3px', overflow: 'hidden' }}>
+                                        <div style={{
+                                          width: `${Math.min(100, (Number(log.device_attempt_count || 1) / 10) * 100)}%`,
+                                          height: '100%',
+                                          background: log.device_attempt_count >= 8 ? '#dc2626' : '#f59e0b',
+                                        }} />
+                                      </div>
+                                    </div>
+
+                                    <div style={{
+                                      background: log.ip_attempt_count >= 100 ? '#fef2f2' : '#f8fafc',
+                                      border: '1px solid #e2e8f0', borderRadius: '6px', padding: '4px 8px',
+                                    }}>
+                                      <div style={{ fontWeight: 700, color: log.ip_attempt_count >= 100 ? '#dc2626' : '#475569', whiteSpace: 'nowrap' }}>
+                                        IP: {log.ip_attempt_count} / 100
+                                      </div>
+                                      <div style={{ height: '4px', background: '#e2e8f0', borderRadius: '3px', marginTop: '3px', overflow: 'hidden' }}>
+                                        <div style={{
+                                          width: `${Math.min(100, Math.max(6, (Number(log.ip_attempt_count || 1) / 100) * 100))}%`,
+                                          height: '100%',
+                                          background: '#dc2626',
+                                        }} />
+                                      </div>
+                                    </div>
+
+                                    <div style={{ fontSize: '10.5px', color: '#64748b' }}>
+                                      Link Total: <strong>{log.blocked_attempts || 0}</strong> blocked
+                                    </div>
+                                  </div>
+                                ) : isBot ? (
+                                  <span style={{ fontSize: '11.5px', color: '#64748b', fontWeight: 700 }}>
+                                    0 (Crawler)
+                                  </span>
+                                ) : (
+                                  <div style={{ fontSize: '11.5px' }}>
+                                    <span style={{ color: '#15803d', fontWeight: 800 }}>
+                                      {log.event_type === 'first_bind' ? '1st Open (Bound)' : 'Verified Device'}
+                                    </span>
+                                    <div style={{ fontSize: '10.5px', color: '#64748b', marginTop: '3px' }}>
+                                      Total Opens: <strong>{log.access_count || 1}</strong>
+                                    </div>
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* 7. When */}
+                              <td style={{ padding: '14px 14px', fontSize: '12px', color: '#475569', whiteSpace: 'nowrap' }}>
+                                <div style={{ fontWeight: 800, color: '#0f172a' }}>{formatTimeAgo(log.created_at)}</div>
+                                <div style={{ fontSize: '11px', color: '#475569', marginTop: '2px' }}>
+                                  {log.created_at ? new Date(log.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
+                                </div>
+                                <div style={{ fontSize: '11px', color: '#64748b', fontFamily: 'monospace' }}>
+                                  {log.created_at ? new Date(log.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' }) : ''}
+                                </div>
+                              </td>
+
+                              {/* 8. Security Actions */}
+                              <td style={{ padding: '14px 16px', textAlign: 'right', minWidth: '150px' }}>
+                                <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
+                                  {isIntrusion && log.device_fingerprint && (
+                                    <button
+                                      disabled={secActionLoading === `dev:${log.id}`}
+                                      onClick={() => handleSecurityAction({
+                                        action: isDeviceBlocked ? 'unblock_device' : 'block_device',
+                                        log_id: log.id,
+                                        device_fingerprint: log.device_fingerprint,
+                                        device_token_hash: log.device_token_hash,
+                                        device_label: log.attempted_platform,
+                                        ip_address: log.ip_address,
+                                        user_agent: log.user_agent,
+                                      }, `dev:${log.id}`)}
+                                      style={{
+                                        padding: '5px 10px', borderRadius: '8px', fontSize: '11.5px', fontWeight: 700,
+                                        cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                                        background: isDeviceBlocked ? '#f0fdf4' : '#fff7ed',
+                                        border: `1px solid ${isDeviceBlocked ? '#86efac' : '#fdba74'}`,
+                                        color: isDeviceBlocked ? '#15803d' : '#c2410c',
+                                      }}
+                                    >
+                                      <i className={`bi ${isDeviceBlocked ? 'bi-unlock-fill' : 'bi-phone-vibrate-fill'}`} style={{ marginRight: '4px' }}></i>
+                                      {isDeviceBlocked ? 'Unblock Device' : 'Block Device'}
+                                    </button>
+                                  )}
+
+                                  {isIntrusion && log.ip_address && (
+                                    <button
+                                      disabled={secActionLoading === `ip:${log.id}`}
+                                      onClick={() => handleSecurityAction({
+                                        action: isIpBlocked ? 'unblock_ip' : 'block_ip',
+                                        log_id: log.id,
+                                        ip_address: log.ip_address,
+                                      }, `ip:${log.id}`)}
+                                      style={{
+                                        padding: '5px 10px', borderRadius: '8px', fontSize: '11.5px', fontWeight: 700,
+                                        cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                                        background: isIpBlocked ? '#f0fdf4' : '#fef2f2',
+                                        border: `1px solid ${isIpBlocked ? '#86efac' : '#fecaca'}`,
+                                        color: isIpBlocked ? '#15803d' : '#dc2626',
+                                      }}
+                                    >
+                                      <i className={`bi ${isIpBlocked ? 'bi-shield-check' : 'bi-shield-fill-x'}`} style={{ marginRight: '4px' }}></i>
+                                      {isIpBlocked ? 'Unblock IP' : 'Block IP'}
+                                    </button>
+                                  )}
+
+                                  {log.magic_link_id && (
+                                    <button
+                                      disabled={secActionLoading === `reset:${log.id}`}
+                                      onClick={() => handleSecurityAction({
+                                        action: 'reset_device_lock',
+                                        magic_link_id: log.magic_link_id,
+                                      }, `reset:${log.id}`)}
+                                      title="Clear the bound device so the customer can open this link on their new phone"
+                                      style={{
+                                        padding: '5px 10px', borderRadius: '8px', fontSize: '11.5px', fontWeight: 700,
+                                        cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                                        background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb',
+                                      }}
+                                    >
+                                      <i className="bi bi-arrow-counterclockwise" style={{ marginRight: '4px' }}></i>
+                                      Reset Lock
+                                    </button>
+                                  )}
+
+                                  {log.magic_link_id && (
+                                    <button
+                                      disabled={secActionLoading === `rev:${log.id}`}
+                                      onClick={() => handleSecurityAction({
+                                        action: isLinkRevoked ? 'reactivate_link' : 'revoke_link',
+                                        magic_link_id: log.magic_link_id,
+                                      }, `rev:${log.id}`)}
+                                      style={{
+                                        padding: '5px 10px', borderRadius: '8px', fontSize: '11.5px', fontWeight: 700,
+                                        cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                                        background: isLinkRevoked ? '#f0fdf4' : '#f8fafc',
+                                        border: `1px solid ${isLinkRevoked ? '#86efac' : '#cbd5e1'}`,
+                                        color: isLinkRevoked ? '#15803d' : '#475569',
+                                      }}
+                                    >
+                                      {isLinkRevoked ? 'Restore Link' : 'Revoke Link'}
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination Bar (5 per page + Smart Lazy Prefetch) */}
+                  <div style={{
+                    padding: '12px 20px', background: '#f8fafc', borderTop: '1px solid #e2e8f0',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px',
+                  }}>
+                    <div style={{ fontSize: '12px', color: '#64748b' }}>
+                      Showing <strong>{(safeSecPage - 1) * SEC_PER_PAGE + 1}</strong>–<strong>{Math.min(safeSecPage * SEC_PER_PAGE, totalFilteredCount)}</strong> of <strong>{totalFilteredCount}</strong> security events (5 per page)
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <button
+                        disabled={safeSecPage <= 1}
+                        onClick={() => handleSecPageChange(safeSecPage - 1)}
+                        style={{
+                          padding: '5px 11px', borderRadius: '8px', fontSize: '12px', fontWeight: 700,
+                          border: '1px solid #cbd5e1', background: safeSecPage <= 1 ? '#f1f5f9' : 'white',
+                          color: safeSecPage <= 1 ? '#94a3b8' : '#0f172a',
+                          cursor: safeSecPage <= 1 ? 'not-allowed' : 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                        }}
+                      >
+                        Prev
+                      </button>
+                      {Array.from({ length: totalSecPages }, (_, idx) => idx + 1).slice(0, 7).map((pNum) => (
+                        <button
+                          key={pNum}
+                          onClick={() => handleSecPageChange(pNum)}
+                          style={{
+                            minWidth: '30px', height: '30px', borderRadius: '8px', fontSize: '12px', fontWeight: 700,
+                            border: safeSecPage === pNum ? '1px solid #0f172a' : '1px solid #cbd5e1',
+                            background: safeSecPage === pNum ? '#0f172a' : 'white',
+                            color: safeSecPage === pNum ? 'white' : '#334155',
+                            cursor: 'pointer', fontFamily: 'inherit',
+                          }}
+                        >
+                          {pNum}
+                        </button>
+                      ))}
+                      <button
+                        disabled={safeSecPage >= totalSecPages}
+                        onClick={() => handleSecPageChange(safeSecPage + 1)}
+                        style={{
+                          padding: '5px 11px', borderRadius: '8px', fontSize: '12px', fontWeight: 700,
+                          border: '1px solid #cbd5e1', background: safeSecPage >= totalSecPages ? '#f1f5f9' : 'white',
+                          color: safeSecPage >= totalSecPages ? '#94a3b8' : '#0f172a',
+                          cursor: safeSecPage >= totalSecPages ? 'not-allowed' : 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                        }}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}

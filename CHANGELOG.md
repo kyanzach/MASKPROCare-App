@@ -1,5 +1,12 @@
 # Changelog
 
+## [v1.17.4] — 2026-10-29
+### Added & Changed
+- **Reordered Admin Dashboard Bottom Widgets, Added Smart Lazy-Prefetch Pagination (10/page & 5/page), and Added Dedicated Device/IP Blocked Security Gate UI (`server/routes/admin.js`, `server/routes/auth.js`, `frontend/src/pages/AdminPanel.jsx`, `frontend/src/pages/MagicLinkGate.jsx`, `mobile/app/admin.tsx`)**:
+  - Moved **Who Uses the App (Active Customers & Device Log)** to **2nd to last** and paginated it to **10 per page** with automatic background lazy-prefetching of pages `N+1` and `N+2` when moving to page 2+.
+  - Moved **Magic Link Security & Intrusion Audit Log** to the **very last bottom widget** and paginated it to **5 per page** with automatic background lazy-prefetching of pages `N+1` and `N+2` when moving to page 2+ (saving server resources by querying only 2 pages initially and pausing 5s polling when the browser tab is hidden).
+  - Added a dedicated red **Device Blocked by Security** / **Network IP Blocked** card on `MagicLinkGate.jsx` when `DEVICE_BLOCKED` or `IP_BLOCKED` is returned; clicking the green **`Unblock Device`** button in the Admin Control Center immediately restores the device back to the blue **`Already Active on Another Device`** screen.
+
 ## [v1.17.3] — 2026-10-29
 ### Fixed & Improved
 - **Fixed Magic Link Security Audit Log Collation Mismatch & Added Full Server-Log Forensics + Live Monitoring Blinking Red Dot (`server/routes/admin.js`, `server/routes/auth.js`, `frontend/src/pages/AdminPanel.jsx`, `frontend/src/pages/MagicLinkGate.jsx`)**:
