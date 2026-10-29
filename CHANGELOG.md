@@ -1,5 +1,10 @@
 # Changelog
 
+## [v1.16.4] — 2026-10-29
+### Changed
+- **Reordered Sidebar Navigation Menu (`frontend/src/components/Layout.jsx`)**:
+  - Updated the sidebar navigation menu order to: `1. Dashboard`, `2. My Bookings`, `3. My Vehicles`, `4. My MASKPROCare Cards`, `5. Aftercare`, `6. Community Care`, and `7. Shop`.
+
 ## [v1.16.3] — 2026-10-29
 ### Fixed
 - **Fixed Sidebar Header Admin Button & Notification Bell Overflow on Desktop & Mobile Web (`frontend/src/components/Layout.jsx`, `frontend/src/index.css`)**:

@@ -163,7 +163,6 @@ export default function Layout() {
     { path: '/', icon: 'bi-grid', label: 'Dashboard', exact: true },
     { path: '/bookings', icon: 'bi-calendar-check', label: 'My Bookings' },
     { path: '/vehicles', icon: 'bi-car-front', label: 'My Vehicles' },
-    { path: '/community-care', icon: 'bi-people', label: 'Community Care' },
     { path: '/profile?tab=loyalty', icon: 'bi-credit-card-2-front', label: 'My MASKPROCare Cards' },
   ];
 
@@ -384,6 +383,17 @@ export default function Layout() {
               </NavLink>
             </div>
           ))}
+
+          <div className="nav-item">
+            <NavLink
+              to="/community-care"
+              className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
+              onClick={() => setSidebarOpen(false)}
+            >
+              <i className="bi bi-people"></i>
+              <span>Community Care</span>
+            </NavLink>
+          </div>
 
           <div className="nav-item">
             <NavLink
