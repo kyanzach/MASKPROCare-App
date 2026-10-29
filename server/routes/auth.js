@@ -330,10 +330,10 @@ router.post('/magic-verify', async (req, res) => {
       // Deduplicate rapid double-requests within 10 seconds so 1 click = 1 count
       await pool.query(
         `UPDATE care_magic_links
-         SET last_accessed_at = NOW(),
-             access_count = IF(last_accessed_at IS NULL OR TIMESTAMPDIFF(SECOND, last_accessed_at, NOW()) >= 10, access_count + 1, access_count)
+         SET access_count = access_count + ?,
+             last_accessed_at = NOW()
          WHERE id = ?`,
-        [link.id]
+        [isDuplicateBurst ? 0 : 1, link.id]
       );
     } else {
       // ── CASE 3: OPENED ON ANOTHER DEVICE AFTER ALREADY LOCKED ──

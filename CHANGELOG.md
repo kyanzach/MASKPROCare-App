@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.16.7] — 2026-10-29
+### Fixed
+- **Fixed MySQL Left-to-Right `UPDATE` Evaluation on Subsequent Magic Link Clicks (`server/routes/auth.js`)**:
+  - In `v1.16.6`, placing `SET last_accessed_at = NOW()` before `access_count = IF(... TIMESTAMPDIFF(SECOND, last_accessed_at, NOW()) >= 10 ...)` caused MySQL's left-to-right `SET` evaluation to overwrite `last_accessed_at` with `NOW()` first, making `TIMESTAMPDIFF` always `0` on subsequent clicks while `care_app_telemetry` (`SESSIONS: 3`) incremented properly.
+  - Replaced the inline SQL `TIMESTAMPDIFF` expression with `SET access_count = access_count + ?, last_accessed_at = NOW()` bound to `isDuplicateBurst ? 0 : 1`, and synced the `18:57:18` click (`access_count = 3`) in `care_magic_links`.
+
 ## [v1.16.6] — 2026-10-29
 ### Fixed
 - **Fixed Magic Link Double-Counting on Click (`frontend/src/pages/MagicLinkGate.jsx`, `frontend/src/context/AuthContext.jsx`, `server/routes/auth.js`)**:
