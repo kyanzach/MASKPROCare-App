@@ -246,6 +246,18 @@ export default function AdminPanelScreen() {
     router.replace('/login');
   };
 
+  const handleSecurityAction = async (payload: any) => {
+    try {
+      const res = await client.post('/admin/security/action', payload);
+      if (res.data?.success) {
+        showToast(res.data.message || 'Security action applied');
+        loadDashboard(true);
+      }
+    } catch (err: any) {
+      showToast(err.response?.data?.message || 'Security action failed');
+    }
+  };
+
   const timeAgo = (dateStr?: string) => {
     if (!dateStr) return 'Never';
     try {
@@ -278,6 +290,8 @@ export default function AdminPanelScreen() {
   const kpis = dashData?.kpis || {};
   const platforms = dashData?.platforms || [];
   const authMethods = dashData?.auth_methods || {};
+  const securityOverview = dashData?.security_overview || {};
+  const magicSecurityLogs = dashData?.magic_security_logs || [];
   const activeUsers = dashData?.active_users || [];
 
   return (
@@ -442,8 +456,8 @@ export default function AdminPanelScreen() {
             <Text style={styles.sectionTitle}>Authentication & Login Methods</Text>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
               <View style={styles.authMiniBox}>
-                <Text style={styles.authMiniValue}>{authMethods.magic_link?.links_opened || 0}</Text>
-                <Text style={styles.authMiniLabel}>Magic Links</Text>
+                <Text style={styles.authMiniValue}>{authMethods.magic_link?.total_clicks || 0}</Text>
+                <Text style={styles.authMiniLabel}>Magic Clicks</Text>
               </View>
               <View style={styles.authMiniBox}>
                 <Text style={styles.authMiniValue}>{authMethods.otp?.verified_logins || 0}</Text>
@@ -454,6 +468,75 @@ export default function AdminPanelScreen() {
                 <Text style={styles.authMiniLabel}>AI Logins</Text>
               </View>
             </View>
+          </View>
+
+          {/* Magic Link Security & Intrusion Audit Log */}
+          <View style={styles.sectionCard}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Magic Link Security & Intrusion Log</Text>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#f87171' }}>
+                Blocked: {securityOverview.blocked_attempts || 0}
+              </Text>
+            </View>
+            {magicSecurityLogs.length === 0 ? (
+              <Text style={{ color: '#94a3b8', fontSize: 13 }}>No security events yet.</Text>
+            ) : (
+              magicSecurityLogs.slice(0, 12).map((log: any) => {
+                const isIntrusion = log.event_type !== 'first_bind' && log.event_type !== 'authorized_access';
+                const isDeviceBlocked = Number(log.is_device_blocked) > 0;
+                const isIpBlocked = Number(log.is_ip_blocked) > 0;
+                return (
+                  <View key={log.id} style={[styles.activeUserRow, { flexDirection: 'column', alignItems: 'flex-start', gap: 6 }]}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
+                      <Text style={styles.activeUserName}>
+                        {log.customer_name || 'Unknown Target'} ({log.slug})
+                      </Text>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: isIntrusion ? '#f87171' : '#34d399' }}>
+                        {isIntrusion ? 'Blocked (403)' : '1st Device Lock'}
+                      </Text>
+                    </View>
+                    <Text style={styles.activeUserSub}>
+                      Attempted: {log.attempted_platform || 'Unknown'} {log.bound_platform ? `• Locked: ${log.bound_platform}` : ''}
+                    </Text>
+                    <Text style={styles.activeUserSub}>
+                      IP: {log.ip_address} • {log.location || 'PH'} • {timeAgo(log.created_at)}
+                    </Text>
+                    {isIntrusion && (
+                      <View style={{ flexDirection: 'row', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                        <TouchableOpacity
+                          style={[styles.miniImpBtn, { borderColor: '#f59e0b' }]}
+                          onPress={() => handleSecurityAction({
+                            action: isDeviceBlocked ? 'unblock_device' : 'block_device',
+                            log_id: log.id,
+                            device_fingerprint: log.device_fingerprint,
+                            device_token_hash: log.device_token_hash,
+                            device_label: log.attempted_platform,
+                            ip_address: log.ip_address,
+                            user_agent: log.user_agent,
+                          })}
+                        >
+                          <Text numberOfLines={1} style={styles.miniImpBtnText}>
+                            {isDeviceBlocked ? 'Unblock Device' : `Block Device (${log.device_attempt_count}/10)`}
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.miniImpBtn, { borderColor: '#ef4444' }]}
+                          onPress={() => handleSecurityAction({
+                            action: isIpBlocked ? 'unblock_ip' : 'block_ip',
+                            log_id: log.id,
+                            ip_address: log.ip_address,
+                          })}
+                        >
+                          <Text numberOfLines={1} style={[styles.miniImpBtnText, { color: '#f87171' }]}>
+                            {isIpBlocked ? 'Unblock IP' : `Block IP (${log.ip_attempt_count}/100)`}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                );
+              })
+            )}
           </View>
 
           {/* Who Uses the App */}

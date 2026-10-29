@@ -1,5 +1,15 @@
 # Changelog
 
+## [v1.17.0] — 2026-10-29
+### Added & Improved
+- **Magic Link Security & Intrusion Audit Log + Tiered Brute-Force Shield (`server/routes/auth.js`, `server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`, `mobile/app/admin.tsx`)**:
+  - Created `care_magic_link_security_logs` and `care_blocked_devices` tables to track every Magic Link security event (`first_bind`, `device_locked_elsewhere`, `invalid_token`, `invalid_slug`, `revoked_link`, `device_blocked`, `ip_blocked`) with full forensics: target customer, vehicle, link slug, attempted device vs locked device, raw `User-Agent`, IP address, Geo-IP + ISP location (`ip-api.com`), and 24h device/IP attempt counters.
+  - Implemented elderly-safe **3-Tier Brute-Force Protection**:
+    - **Tier 1 (Attempts 1–9 on a device)**: Soft `403` warning (`Already Active on Another Device`) with option to sign in via mobile number—prevents false-positive lockouts for elderly users or family members.
+    - **Tier 2 (10th failed attempt on the same device in 24h)**: Automatically blocks the offending device (`care_blocked_devices`).
+    - **Tier 3 (100th failed attempt from the same IP in 24h)**: Automatically blocks the offending IP address (`care_blocked_ips`).
+  - Added the **Magic Link Security & Intrusion Audit Log** widget to the Admin Control Center (Web + Native iOS/Android) with 1-click security actions (`Block Device` / `Unblock Device`, `Block IP` / `Unblock IP`, `Reset Lock` to allow customer device re-binding, and `Revoke Link` / `Restore Link`), and backfilled the `18:59:48` iPhone test attempt.
+
 ## [v1.16.7] — 2026-10-29
 ### Fixed
 - **Fixed MySQL Left-to-Right `UPDATE` Evaluation on Subsequent Magic Link Clicks (`server/routes/auth.js`)**:

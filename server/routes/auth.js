@@ -9,6 +9,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+const axios = require('axios');
 const router = express.Router();
 
 const pool = require('../db/connection');
@@ -233,6 +234,142 @@ function isLinkPreviewBot(ua = '') {
   return /WhatsApp|Facebot|facebookexternalhit|Twitterbot|TelegramBot|Slackbot|Discordbot|Viber|SkypeUriPreview|Google-Safety|Google-PageRenderer|Applebot|bot|crawler|spider|Preview/i.test(String(ua || ''));
 }
 
+// ─── Helper: Fast cached Geo-IP + ISP resolver ────────────────────
+const geoCache = new Map();
+async function resolveGeoLocation(ip = '') {
+  const cleanIp = String(ip || '').trim();
+  if (!cleanIp || cleanIp === '127.0.0.1' || cleanIp === '::1' || cleanIp.startsWith('192.168.') || cleanIp.startsWith('10.')) {
+    return 'Local Network (PH)';
+  }
+  if (geoCache.has(cleanIp)) return geoCache.get(cleanIp);
+  try {
+    const resp = await axios.get(`http://ip-api.com/json/${encodeURIComponent(cleanIp)}?fields=status,city,regionName,countryCode,isp`, {
+      timeout: 1500,
+    });
+    const d = resp.data;
+    if (d && d.status === 'success') {
+      const loc = [d.city, d.regionName, d.countryCode].filter(Boolean).join(', ') + (d.isp ? ` (${d.isp})` : '');
+      geoCache.set(cleanIp, loc);
+      return loc;
+    }
+  } catch {
+    // Non-blocking fallback
+  }
+  return 'Philippines';
+}
+
+// ─── Helper: Log Magic Link Security Event + Tiered Brute-Force Shield ───
+// Tier 1 (Attempts 1–9 on device): Soft 403 block (elderly-safe, no ban)
+// Tier 2 (10th failed attempt on same device in 24h): Auto-Block Device (care_blocked_devices)
+// Tier 3 (100th failed attempt on same IP in 24h): Auto-Block IP (care_blocked_ips)
+async function logMagicSecurityEvent({
+  magicLinkId = null,
+  customerId = null,
+  slug = '',
+  eventType = 'device_locked_elsewhere',
+  attemptedPlatform = '',
+  boundPlatform = null,
+  deviceTokenHash = null,
+  deviceFingerprint = '',
+  ip = '',
+  ua = '',
+  isFailure = true,
+}) {
+  try {
+    const location = await resolveGeoLocation(ip);
+    let deviceAttempts = 0;
+    let ipAttempts = 0;
+    let actionTaken = isFailure ? 'blocked_403' : 'allowed';
+
+    if (isFailure) {
+      const [[devCnt]] = await pool.query(
+        `SELECT COUNT(*) AS cnt FROM care_magic_link_security_logs
+         WHERE device_fingerprint = ?
+           AND event_type IN ('device_locked_elsewhere', 'invalid_token', 'invalid_slug', 'revoked_link', 'device_blocked', 'ip_blocked')
+           AND created_at > DATE_SUB(NOW(), INTERVAL 24 HOUR)`,
+        [deviceFingerprint]
+      ).catch(() => [[{ cnt: 0 }]]);
+
+      const [[ipCnt]] = await pool.query(
+        `SELECT COUNT(*) AS cnt FROM care_magic_link_security_logs
+         WHERE ip_address = ?
+           AND event_type IN ('device_locked_elsewhere', 'invalid_token', 'invalid_slug', 'revoked_link', 'device_blocked', 'ip_blocked')
+           AND created_at > DATE_SUB(NOW(), INTERVAL 24 HOUR)`,
+        [ip]
+      ).catch(() => [[{ cnt: 0 }]]);
+
+      deviceAttempts = Number(devCnt?.cnt || 0) + 1;
+      ipAttempts = Number(ipCnt?.cnt || 0) + 1;
+
+      if (ipAttempts >= 100) {
+        actionTaken = 'auto_ip_blocked';
+        await pool.query(
+          `INSERT INTO care_blocked_ips (ip_address, reason, attempts_count, blocked_until, created_at, updated_at)
+           VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 24 HOUR), NOW(), NOW())
+           ON DUPLICATE KEY UPDATE
+             reason = VALUES(reason),
+             attempts_count = ?,
+             blocked_until = DATE_ADD(NOW(), INTERVAL 24 HOUR),
+             updated_at = NOW()`,
+          [ip, `Automated Brute-Force Block: ${ipAttempts} failed Magic Link attempts from IP`, ipAttempts, ipAttempts]
+        ).catch(() => {});
+      } else if (deviceAttempts >= 10) {
+        actionTaken = 'auto_device_blocked';
+        await pool.query(
+          `INSERT INTO care_blocked_devices
+             (device_fingerprint, device_token_hash, device_label, ip_address, user_agent, reason, attempts_count, is_active, blocked_until, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 1, DATE_ADD(NOW(), INTERVAL 24 HOUR), NOW(), NOW())
+           ON DUPLICATE KEY UPDATE
+             device_token_hash = COALESCE(VALUES(device_token_hash), device_token_hash),
+             ip_address = VALUES(ip_address),
+             user_agent = VALUES(user_agent),
+             reason = VALUES(reason),
+             attempts_count = ?,
+             is_active = 1,
+             blocked_until = DATE_ADD(NOW(), INTERVAL 24 HOUR),
+             updated_at = NOW()`,
+          [
+            deviceFingerprint,
+            deviceTokenHash,
+            attemptedPlatform,
+            ip,
+            String(ua).slice(0, 490),
+            `Automated Device Block: ${deviceAttempts} unauthorized Magic Link attempts on ${attemptedPlatform}`,
+            deviceAttempts,
+            deviceAttempts,
+          ]
+        ).catch(() => {});
+      }
+    }
+
+    await pool.query(
+      `INSERT INTO care_magic_link_security_logs
+         (magic_link_id, customer_id, slug, event_type, attempted_platform, bound_platform, device_token_hash, device_fingerprint, ip_address, location, user_agent, device_attempt_count, ip_attempt_count, action_taken, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [
+        magicLinkId,
+        customerId,
+        String(slug || '').slice(0, 120),
+        eventType,
+        String(attemptedPlatform || '').slice(0, 100),
+        boundPlatform ? String(boundPlatform).slice(0, 100) : null,
+        deviceTokenHash,
+        deviceFingerprint,
+        String(ip || '').slice(0, 60),
+        String(location || '').slice(0, 155),
+        String(ua || '').slice(0, 490),
+        deviceAttempts,
+        ipAttempts,
+        actionTaken,
+      ]
+    ).catch(() => {});
+
+    return { deviceAttempts, ipAttempts, actionTaken };
+  } catch {
+    return { deviceAttempts: 1, ipAttempts: 1, actionTaken: 'blocked_403' };
+  }
+}
+
 // ─── POST /api/auth/magic-verify (TOFU Device-Bound Smart Link) ───
 router.post('/magic-verify', async (req, res) => {
   try {
@@ -257,18 +394,92 @@ router.post('/magic-verify', async (req, res) => {
     }
 
     const cleanSlug = String(slug).trim().toLowerCase();
+    const cookies = parseCookies(req.headers.cookie);
+    const cookieDeviceToken = cookies.mp_care_device_token || '';
+    const bodyDeviceToken = device_token && String(device_token).trim().length >= 16 ? String(device_token).trim() : '';
+
+    const candidateTokens = [bodyDeviceToken, cookieDeviceToken].filter(Boolean);
+    const candidateHashes = candidateTokens.map((t) =>
+      crypto.createHash('sha256').update(t).digest('hex')
+    );
+    const primaryDeviceHash = candidateHashes[0] || null;
+
+    const clientIp = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim();
+    const resolvedPlatform = detectPlatformLabel(ua, platform_label);
+    const deviceFingerprint = primaryDeviceHash || crypto.createHash('sha256').update(`${clientIp}|${resolvedPlatform}`).digest('hex');
+
+    // 0a. Check if IP is blocked (100+ attempts or manual Admin IP block)
+    const [ipBlockRows] = await pool.query(
+      'SELECT id, reason FROM care_blocked_ips WHERE ip_address = ? AND (blocked_until IS NULL OR blocked_until > NOW()) LIMIT 1',
+      [clientIp]
+    ).catch(() => [[]]);
+    if (ipBlockRows.length > 0) {
+      await logMagicSecurityEvent({
+        slug: cleanSlug,
+        eventType: 'ip_blocked',
+        attemptedPlatform: resolvedPlatform,
+        deviceTokenHash: primaryDeviceHash,
+        deviceFingerprint,
+        ip: clientIp,
+        ua,
+        isFailure: true,
+      });
+      return res.status(403).json({
+        success: false,
+        code: 'IP_BLOCKED',
+        message: 'Access from this network has been blocked due to excessive security attempts. Please contact MaskPro support.',
+      });
+    }
+
+    // 0b. Check if Device is blocked (10+ attempts or manual Admin Device block)
+    const [devBlockRows] = await pool.query(
+      `SELECT id, reason FROM care_blocked_devices
+       WHERE is_active = 1
+         AND (blocked_until IS NULL OR blocked_until > NOW())
+         AND (device_fingerprint = ? OR (device_token_hash IS NOT NULL AND device_token_hash = ?))
+       LIMIT 1`,
+      [deviceFingerprint, primaryDeviceHash || '']
+    ).catch(() => [[]]);
+    if (devBlockRows.length > 0) {
+      await logMagicSecurityEvent({
+        slug: cleanSlug,
+        eventType: 'device_blocked',
+        attemptedPlatform: resolvedPlatform,
+        deviceTokenHash: primaryDeviceHash,
+        deviceFingerprint,
+        ip: clientIp,
+        ua,
+        isFailure: true,
+      });
+      return res.status(403).json({
+        success: false,
+        code: 'DEVICE_BLOCKED',
+        message: 'This device has been blocked after repeated unauthorized smart link attempts. Please sign in with your mobile number or contact support.',
+      });
+    }
+
     const [links] = await pool.query(
       `SELECT ml.*, c.full_name, c.mobile_number, c.branch_id,
               v.make AS vehicle_make, v.model AS vehicle_model
        FROM care_magic_links ml
        JOIN customers c ON ml.customer_id = c.id
        LEFT JOIN vehicles v ON ml.vehicle_id = v.id
-       WHERE ml.slug = ? AND ml.status = 'active'
+       WHERE ml.slug = ?
        LIMIT 1`,
       [cleanSlug]
     );
 
     if (links.length === 0) {
+      await logMagicSecurityEvent({
+        slug: cleanSlug,
+        eventType: 'invalid_slug',
+        attemptedPlatform: resolvedPlatform,
+        deviceTokenHash: primaryDeviceHash,
+        deviceFingerprint,
+        ip: clientIp,
+        ua,
+        isFailure: true,
+      });
       return res.status(404).json({
         success: false,
         code: 'LINK_NOT_FOUND',
@@ -278,10 +489,45 @@ router.post('/magic-verify', async (req, res) => {
 
     const link = links[0];
 
+    if (link.status !== 'active') {
+      await logMagicSecurityEvent({
+        magicLinkId: link.id,
+        customerId: link.customer_id,
+        slug: link.slug,
+        eventType: 'revoked_link',
+        attemptedPlatform: resolvedPlatform,
+        boundPlatform: link.bound_platform,
+        deviceTokenHash: primaryDeviceHash,
+        deviceFingerprint,
+        ip: clientIp,
+        ua,
+        isFailure: true,
+      });
+      return res.status(403).json({
+        success: false,
+        code: 'LINK_REVOKED',
+        message: 'This smart maintenance link has been deactivated by an administrator. Please sign in with your mobile number.',
+      });
+    }
+
     // If cryptographic key `k` was provided, verify it matches token_hash
     if (k && String(k).trim()) {
       const providedHash = crypto.createHash('sha256').update(String(k).trim()).digest('hex');
       if (providedHash !== link.token_hash) {
+        await pool.query('UPDATE care_magic_links SET blocked_attempts = blocked_attempts + 1 WHERE id = ?', [link.id]);
+        await logMagicSecurityEvent({
+          magicLinkId: link.id,
+          customerId: link.customer_id,
+          slug: link.slug,
+          eventType: 'invalid_token',
+          attemptedPlatform: resolvedPlatform,
+          boundPlatform: link.bound_platform,
+          deviceTokenHash: primaryDeviceHash,
+          deviceFingerprint,
+          ip: clientIp,
+          ua,
+          isFailure: true,
+        });
         return res.status(403).json({
           success: false,
           code: 'INVALID_TOKEN',
@@ -289,18 +535,6 @@ router.post('/magic-verify', async (req, res) => {
         });
       }
     }
-
-    const cookies = parseCookies(req.headers.cookie);
-    const cookieDeviceToken = cookies.mp_care_device_token || '';
-    const bodyDeviceToken = device_token && String(device_token).trim().length >= 16 ? String(device_token).trim() : '';
-
-    const candidateTokens = [bodyDeviceToken, cookieDeviceToken].filter(Boolean);
-    const candidateHashes = candidateTokens.map((t) =>
-      crypto.createHash('sha256').update(t).digest('hex')
-    );
-
-    const clientIp = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim();
-    const resolvedPlatform = detectPlatformLabel(ua, platform_label);
 
     let activeDeviceToken = bodyDeviceToken || cookieDeviceToken;
     let isFirstBind = false;
@@ -325,6 +559,19 @@ router.post('/magic-verify', async (req, res) => {
         [newDeviceHash, resolvedPlatform, String(ua).slice(0, 490), clientIp.slice(0, 60), link.id]
       );
       isFirstBind = true;
+      await logMagicSecurityEvent({
+        magicLinkId: link.id,
+        customerId: link.customer_id,
+        slug: link.slug,
+        eventType: 'first_bind',
+        attemptedPlatform: resolvedPlatform,
+        boundPlatform: resolvedPlatform,
+        deviceTokenHash: newDeviceHash,
+        deviceFingerprint: newDeviceHash,
+        ip: clientIp,
+        ua,
+        isFailure: false,
+      });
     } else if (candidateHashes.includes(link.bound_device_token_hash)) {
       // ── CASE 2: SUBSEQUENT OPEN FROM THE SAME LOCKED DEVICE ──
       // Deduplicate rapid double-requests within 10 seconds so 1 click = 1 count
@@ -343,6 +590,20 @@ router.post('/magic-verify', async (req, res) => {
          WHERE id = ?`,
         [link.id]
       );
+
+      await logMagicSecurityEvent({
+        magicLinkId: link.id,
+        customerId: link.customer_id,
+        slug: link.slug,
+        eventType: 'device_locked_elsewhere',
+        attemptedPlatform: resolvedPlatform,
+        boundPlatform: link.bound_platform,
+        deviceTokenHash: primaryDeviceHash,
+        deviceFingerprint,
+        ip: clientIp,
+        ua,
+        isFailure: true,
+      });
 
       const formattedMobile = standardizeMobile(link.mobile_number || '');
       const maskedMobile = formattedMobile.length >= 10

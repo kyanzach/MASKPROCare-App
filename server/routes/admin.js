@@ -328,9 +328,11 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
       SELECT COUNT(*) AS total_links,
              COALESCE(SUM(CASE WHEN access_count > 0 THEN 1 ELSE 0 END), 0) AS clicked_links,
              COALESCE(SUM(access_count), 0) AS total_clicks,
+             COALESCE(SUM(blocked_attempts), 0) AS blocked_attempts,
+             COALESCE(SUM(CASE WHEN status = 'revoked' THEN 1 ELSE 0 END), 0) AS revoked_links,
              COUNT(DISTINCT CASE WHEN access_count > 0 THEN customer_id END) AS unique_magic_users
       FROM care_magic_links
-    `).catch(() => [[{ total_links: 0, clicked_links: 0, total_clicks: 0, unique_magic_users: 0 }]]);
+    `).catch(() => [[{ total_links: 0, clicked_links: 0, total_clicks: 0, blocked_attempts: 0, revoked_links: 0, unique_magic_users: 0 }]]);
 
     const [[aiLoginStats]] = await pool.query(`
       SELECT GREATEST(
@@ -343,7 +345,61 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
              ) AS verified_logins
     `).catch(() => [[{ total_attempts: 0, verified_logins: 0 }]]);
 
-    // 4. Who Uses the App (Live Active Users & Device Log)
+    // 4. Magic Link Security & Intrusion Audit Logs
+    const [[secCounts]] = await pool.query(`
+      SELECT
+        (SELECT COUNT(*) FROM care_magic_link_security_logs WHERE event_type != 'first_bind') AS total_intrusion_events,
+        (SELECT COUNT(*) FROM care_blocked_devices WHERE is_active = 1 AND (blocked_until IS NULL OR blocked_until > NOW())) AS blocked_devices_count,
+        (SELECT COUNT(*) FROM care_blocked_ips WHERE blocked_until IS NULL OR blocked_until > NOW()) AS blocked_ips_count
+    `).catch(() => [[{ total_intrusion_events: 0, blocked_devices_count: 0, blocked_ips_count: 0 }]]);
+
+    const [magicSecurityLogs] = await pool.query(`
+      SELECT
+        s.id,
+        s.magic_link_id,
+        s.customer_id,
+        s.slug,
+        s.event_type,
+        s.attempted_platform,
+        s.bound_platform,
+        s.device_token_hash,
+        s.device_fingerprint,
+        s.ip_address,
+        s.location,
+        s.user_agent,
+        s.device_attempt_count,
+        s.ip_attempt_count,
+        s.action_taken,
+        s.created_at,
+        c.full_name AS customer_name,
+        c.mobile_number AS customer_mobile,
+        ml.status AS link_status,
+        ml.short_url,
+        ml.bound_ip,
+        ml.bound_at,
+        ml.access_count,
+        ml.blocked_attempts,
+        v.make AS vehicle_make,
+        v.model AS vehicle_model,
+        v.plate_no AS vehicle_plate,
+        (SELECT COUNT(*) FROM care_blocked_devices bd
+         WHERE bd.is_active = 1
+           AND (bd.blocked_until IS NULL OR bd.blocked_until > NOW())
+           AND (bd.device_fingerprint = s.device_fingerprint OR (s.device_token_hash IS NOT NULL AND bd.device_token_hash = s.device_token_hash))
+        ) AS is_device_blocked,
+        (SELECT COUNT(*) FROM care_blocked_ips bi
+         WHERE bi.ip_address = s.ip_address
+           AND (bi.blocked_until IS NULL OR bi.blocked_until > NOW())
+        ) AS is_ip_blocked
+      FROM care_magic_link_security_logs s
+      LEFT JOIN customers c ON c.id = s.customer_id
+      LEFT JOIN care_magic_links ml ON ml.id = s.magic_link_id
+      LEFT JOIN vehicles v ON v.id = ml.vehicle_id
+      ORDER BY s.created_at DESC, s.id DESC
+      LIMIT 50
+    `).catch(() => [[]]);
+
+    // 5. Who Uses the App (Live Active Users & Device Log)
     const [activeUsers] = await pool.query(`
       SELECT 
         t.id AS telemetry_id,
@@ -398,6 +454,8 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
             total_sent: Number(magicStats?.total_links || 0),
             links_opened: Number(magicStats?.clicked_links || 0),
             total_clicks: Number(magicStats?.total_clicks || 0),
+            blocked_attempts: Number(magicStats?.blocked_attempts || 0),
+            revoked_links: Number(magicStats?.revoked_links || 0),
             unique_users: Number(magicStats?.unique_magic_users || 0),
           },
           ai_verification: {
@@ -405,6 +463,14 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
             verified_logins: Number(aiLoginStats?.verified_logins || 0),
           },
         },
+        security_overview: {
+          total_intrusion_events: Number(secCounts?.total_intrusion_events || 0),
+          blocked_attempts: Number(magicStats?.blocked_attempts || 0),
+          blocked_devices_count: Number(secCounts?.blocked_devices_count || 0),
+          blocked_ips_count: Number(secCounts?.blocked_ips_count || 0),
+          revoked_links_count: Number(magicStats?.revoked_links || 0),
+        },
+        magic_security_logs: magicSecurityLogs,
         active_users: activeUsers,
       },
     });
@@ -564,6 +630,141 @@ router.post('/community/moderate', authenticateToken, requireAdmin, async (req, 
   } catch (err) {
     console.error('[Admin] Community moderate error:', err.message);
     return res.status(500).json({ success: false, message: 'Failed to moderate post' });
+  }
+});
+
+// ─── POST /api/admin/security/action ─────────────────────────
+// Admin controls for Magic Link Security & Intrusion Audit Log:
+//   - block_device / unblock_device
+//   - block_ip / unblock_ip
+//   - reset_device_lock (allow customer to bind a new phone)
+//   - revoke_link / reactivate_link
+router.post('/security/action', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const {
+      action,
+      log_id,
+      magic_link_id,
+      device_fingerprint,
+      device_token_hash,
+      device_label,
+      ip_address,
+      user_agent,
+    } = req.body || {};
+
+    if (!action) {
+      return res.status(400).json({ success: false, message: 'action is required' });
+    }
+
+    if (action === 'block_device') {
+      if (!device_fingerprint) {
+        return res.status(400).json({ success: false, message: 'device_fingerprint is required' });
+      }
+      await pool.query(
+        `INSERT INTO care_blocked_devices
+           (device_fingerprint, device_token_hash, device_label, ip_address, user_agent, reason, attempts_count, is_active, blocked_until, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 10, 1, NULL, NOW(), NOW())
+         ON DUPLICATE KEY UPDATE
+           is_active = 1,
+           blocked_until = NULL,
+           reason = VALUES(reason),
+           updated_at = NOW()`,
+        [
+          device_fingerprint,
+          device_token_hash || null,
+          device_label || 'Blocked Device',
+          ip_address || null,
+          String(user_agent || '').slice(0, 490),
+          `Manually blocked by Admin (${req.adminUser.full_name})`,
+        ]
+      );
+      if (log_id) {
+        await pool.query('UPDATE care_magic_link_security_logs SET action_taken = "admin_device_blocked" WHERE id = ?', [log_id]).catch(() => {});
+      }
+      return res.json({ success: true, message: `Device (${device_label || 'Unknown'}) blocked` });
+    }
+
+    if (action === 'unblock_device') {
+      if (!device_fingerprint) {
+        return res.status(400).json({ success: false, message: 'device_fingerprint is required' });
+      }
+      await pool.query(
+        'UPDATE care_blocked_devices SET is_active = 0, updated_at = NOW() WHERE device_fingerprint = ? OR (device_token_hash IS NOT NULL AND device_token_hash = ?)',
+        [device_fingerprint, device_token_hash || '']
+      );
+      if (log_id) {
+        await pool.query('UPDATE care_magic_link_security_logs SET action_taken = "blocked_403" WHERE id = ?', [log_id]).catch(() => {});
+      }
+      return res.json({ success: true, message: 'Device unblocked' });
+    }
+
+    if (action === 'block_ip') {
+      if (!ip_address) {
+        return res.status(400).json({ success: false, message: 'ip_address is required' });
+      }
+      await pool.query(
+        `INSERT INTO care_blocked_ips (ip_address, reason, attempts_count, blocked_until, created_at, updated_at)
+         VALUES (?, ?, 100, NULL, NOW(), NOW())
+         ON DUPLICATE KEY UPDATE
+           reason = VALUES(reason),
+           blocked_until = NULL,
+           updated_at = NOW()`,
+        [ip_address, `Manually blocked by Admin (${req.adminUser.full_name})`]
+      );
+      if (log_id) {
+        await pool.query('UPDATE care_magic_link_security_logs SET action_taken = "admin_ip_blocked" WHERE id = ?', [log_id]).catch(() => {});
+      }
+      return res.json({ success: true, message: `IP ${ip_address} blocked` });
+    }
+
+    if (action === 'unblock_ip') {
+      if (!ip_address) {
+        return res.status(400).json({ success: false, message: 'ip_address is required' });
+      }
+      await pool.query('DELETE FROM care_blocked_ips WHERE ip_address = ?', [ip_address]);
+      if (log_id) {
+        await pool.query('UPDATE care_magic_link_security_logs SET action_taken = "blocked_403" WHERE id = ?', [log_id]).catch(() => {});
+      }
+      return res.json({ success: true, message: `IP ${ip_address} unblocked` });
+    }
+
+    if (action === 'reset_device_lock') {
+      if (!magic_link_id) {
+        return res.status(400).json({ success: false, message: 'magic_link_id is required' });
+      }
+      await pool.query(
+        `UPDATE care_magic_links
+         SET bound_device_token_hash = NULL,
+             bound_platform = NULL,
+             bound_user_agent = NULL,
+             bound_ip = NULL,
+             bound_at = NULL
+         WHERE id = ?`,
+        [magic_link_id]
+      );
+      return res.json({ success: true, message: 'Device lock cleared — the next device to open this link will bind to it' });
+    }
+
+    if (action === 'revoke_link') {
+      if (!magic_link_id) {
+        return res.status(400).json({ success: false, message: 'magic_link_id is required' });
+      }
+      await pool.query("UPDATE care_magic_links SET status = 'revoked' WHERE id = ?", [magic_link_id]);
+      return res.json({ success: true, message: 'Magic link revoked' });
+    }
+
+    if (action === 'reactivate_link') {
+      if (!magic_link_id) {
+        return res.status(400).json({ success: false, message: 'magic_link_id is required' });
+      }
+      await pool.query("UPDATE care_magic_links SET status = 'active' WHERE id = ?", [magic_link_id]);
+      return res.json({ success: true, message: 'Magic link reactivated' });
+    }
+
+    return res.status(400).json({ success: false, message: 'Unknown security action' });
+  } catch (err) {
+    console.error('[Admin] Security action error:', err.message);
+    return res.status(500).json({ success: false, message: 'Failed to execute security action' });
   }
 });
 
