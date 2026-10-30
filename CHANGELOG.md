@@ -1,5 +1,12 @@
 # Changelog
 
+## [v1.17.16] — 2026-10-30
+### Fixed
+- **Fixed False-Positive `Failed (Invalid #)` Status on Future `Pending` PMS Reminders in Maintenance SMS Tracker (`server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`, `mobile/app/admin.tsx`)**:
+  - Filtered the Maintenance Reminder SMS & Magic Link Delivery Tracker (`server/routes/admin.js`) to only include actually dispatched reminders (`pr.sms_status IN ('Sent', 'Failed') AND pr.sms_set_date_time <= NOW()`), excluding future scheduled `Pending` reminders (`2026–2031`) that were previously generated during Unify PMS schedule previews.
+  - Updated the SMS Delivery status badge in `frontend/src/pages/AdminPanel.jsx` and `mobile/app/admin.tsx` to explicitly distinguish `Sent` (`Sent & Delivered`), `Failed` (`Failed (Invalid #)`), and `Pending` (`Scheduled (Pending)`) instead of treating any non-`Sent` status as `Failed`.
+  - Cleaned up the 14 unclicked preview-generated magic links (`karls-suzukispress-01` through `-14` for `Booking #9701`) from `care_magic_links` so the 7:00 AM Cron batch reflects the exact **35** real reminders (**31 Sent / 4 Failed**).
+
 ## [v1.17.15] — 2026-10-30
 ### Added & Fixed
 - **Fixed Mobile Header Admin Badge Overlap (`frontend/src/components/Layout.jsx`)**:

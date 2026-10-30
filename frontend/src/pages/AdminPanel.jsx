@@ -1027,6 +1027,7 @@ export default function AdminPanel() {
                         <tbody>
                           {pagedSmsRows.map((row) => {
                             const isSent = row.sms_status === 'Sent';
+                            const isFailed = row.sms_status === 'Failed';
                             const isOpened = Number(row.access_count || 0) > 0;
                             const isAppOnline = row.app_last_seen_at && (Date.now() - new Date(row.app_last_seen_at).getTime()) <= 5 * 60 * 1000;
                             const isAppActive = Number(row.app_sessions || 0) > 0;
@@ -1056,13 +1057,13 @@ export default function AdminPanel() {
                                   <span style={{
                                     display: 'inline-flex', alignItems: 'center', gap: '5px',
                                     padding: '3px 9px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 700,
-                                    background: isSent ? '#dcfce7' : '#fef2f2',
-                                    color: isSent ? '#15803d' : '#dc2626',
-                                    border: `1px solid ${isSent ? '#86efac' : '#fecaca'}`,
+                                    background: isSent ? '#dcfce7' : isFailed ? '#fef2f2' : '#f1f5f9',
+                                    color: isSent ? '#15803d' : isFailed ? '#dc2626' : '#475569',
+                                    border: `1px solid ${isSent ? '#86efac' : isFailed ? '#fecaca' : '#cbd5e1'}`,
                                     whiteSpace: 'nowrap',
                                   }}>
-                                    <i className={`bi ${isSent ? 'bi-check-circle-fill' : 'bi-x-circle-fill'}`}></i>
-                                    {isSent ? 'Sent & Delivered' : 'Failed (Invalid #)'}
+                                    <i className={`bi ${isSent ? 'bi-check-circle-fill' : isFailed ? 'bi-x-circle-fill' : 'bi-clock-history'}`}></i>
+                                    {isSent ? 'Sent & Delivered' : isFailed ? 'Failed (Invalid #)' : 'Scheduled (Pending)'}
                                   </span>
                                   <div style={{ fontSize: '10.5px', color: '#64748b', marginTop: '4px', fontFamily: 'monospace' }}>
                                     {row.created_at ? new Date(row.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' }) : ''}

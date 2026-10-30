@@ -541,18 +541,19 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
     const smsSearch = String(req.query.sms_search || '').trim();
     const smsSort = String(req.query.sms_sort || 'newest');
 
-    let smsWhereSql = '1=1';
+    const baseDispatchedSql = "(ml.reminder_id IS NULL OR (pr.sms_status IN ('Sent', 'Failed') AND pr.sms_set_date_time <= NOW()))";
+    let smsWhereSql = baseDispatchedSql;
     const smsParams = [];
     if (smsFilter === 'today') {
-      smsWhereSql = 'DATE(ml.created_at) = CURDATE()';
+      smsWhereSql = `${baseDispatchedSql} AND DATE(ml.created_at) = CURDATE()`;
     } else if (smsFilter === 'sent') {
-      smsWhereSql = "COALESCE(pr.sms_status, 'Sent') = 'Sent'";
+      smsWhereSql = `${baseDispatchedSql} AND COALESCE(pr.sms_status, 'Sent') = 'Sent'`;
     } else if (smsFilter === 'failed') {
-      smsWhereSql = "pr.sms_status = 'Failed'";
+      smsWhereSql = `${baseDispatchedSql} AND pr.sms_status = 'Failed'`;
     } else if (smsFilter === 'opened') {
-      smsWhereSql = 'ml.access_count > 0';
+      smsWhereSql = `${baseDispatchedSql} AND ml.access_count > 0`;
     } else if (smsFilter === 'unopened') {
-      smsWhereSql = "ml.access_count = 0 AND COALESCE(pr.sms_status, 'Sent') = 'Sent'";
+      smsWhereSql = `${baseDispatchedSql} AND ml.access_count = 0 AND COALESCE(pr.sms_status, 'Sent') = 'Sent'`;
     }
 
     if (smsSearch) {
@@ -608,6 +609,7 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
         MAX(CASE WHEN DATE(ml.created_at) = CURDATE() THEN ml.created_at END) AS today_cron_finished_at
       FROM care_magic_links ml
       LEFT JOIN sms_periodic_reminders pr ON pr.sms_periodic_reminders_id = ml.reminder_id
+      WHERE (ml.reminder_id IS NULL OR (pr.sms_status IN ('Sent', 'Failed') AND pr.sms_set_date_time <= NOW()))
     `).catch(() => [[{
       total_generated: 0, today_generated: 0, total_sent: 0, today_sent: 0,
       total_failed: 0, today_failed: 0, total_opened: 0, today_opened: 0,

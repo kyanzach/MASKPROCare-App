@@ -682,6 +682,7 @@ export default function AdminPanelScreen() {
                 <>
                   {pagedSms.map((row: any) => {
                     const isSent = row.sms_status === 'Sent';
+                    const isFailed = row.sms_status === 'Failed';
                     const isOpened = Number(row.access_count || 0) > 0;
                     return (
                       <View key={row.id} style={[styles.activeUserRow, { flexDirection: 'column', alignItems: 'flex-start', gap: 4 }]}>
@@ -689,8 +690,8 @@ export default function AdminPanelScreen() {
                           <Text style={styles.activeUserName}>
                             {row.customer_name || 'Unknown'} ({[row.vehicle_make, row.vehicle_model].filter(Boolean).join(' ')})
                           </Text>
-                          <Text style={{ fontSize: 11, fontWeight: '700', color: isSent ? '#34d399' : '#f87171' }}>
-                            {isSent ? 'SMS Sent' : 'Failed'}
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: isSent ? '#34d399' : isFailed ? '#f87171' : '#94a3b8' }}>
+                            {isSent ? 'SMS Sent' : isFailed ? 'Failed' : 'Pending'}
                           </Text>
                         </View>
                         <Text style={styles.activeUserSub}>
