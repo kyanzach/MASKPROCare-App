@@ -696,6 +696,7 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
         tr.blocked_attempts,
         tr.link_status,
         tr.created_at,
+        c.title AS customer_title,
         c.full_name AS customer_name,
         c.mobile_number AS customer_mobile,
         v.make AS vehicle_make,
@@ -704,6 +705,10 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
         tr.sms_status,
         tr.template_code,
         tr.sms_log_detail,
+        (SELECT sh.message FROM sms_history sh
+         WHERE sh.customer_id = tr.customer_id
+           AND ABS(TIMESTAMPDIFF(SECOND, sh.created_at, tr.created_at)) <= 120
+         ORDER BY sh.id DESC LIMIT 1) AS sms_message_sent,
         (SELECT sh.reference_id FROM sms_history sh
          WHERE sh.customer_id = tr.customer_id
            AND ABS(TIMESTAMPDIFF(SECOND, sh.created_at, tr.created_at)) <= 120

@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.17.18] — 2026-10-30
+### Added & Improved
+- **Clickable SMS Delivery Button & Delivered SMS Message Modal (`server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`, `mobile/app/admin.tsx`)**:
+  - Converted the `Sent & Delivered` / `Failed (Invalid #)` badge under `SMS DELIVERY (ITEXMO)` into an interactive button that opens the **Delivered SMS Message Modal**.
+  - Updated `/api/admin/dashboard` (`server/routes/admin.js`) to fetch the exact delivered gateway payload (`sms_history.message`) and `customers.title` (`customer_title`) for each reminder row, displaying the verbatim formatted SMS text sent to the client (including `To: {title} {name}`, `{vmm}`, `{care_link}`, character count, SMS credit parts, and ITEXMO Reference ID) with 1-click **Copy SMS Text** and **Copy Link** actions.
+
 ## [v1.17.17] — 2026-10-30
 ### Fixed & Improved
 - **Preserved Karl Silagan's Primary Magic Link (`-01`) & Added Sanitary Pre-Check `No Magic Link Created` View for Invalid Mobile Numbers (`server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`, `mobile/app/admin.tsx`)**:

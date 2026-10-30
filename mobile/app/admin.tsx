@@ -688,13 +688,51 @@ export default function AdminPanelScreen() {
                     const isOpened = Number(row.access_count || 0) > 0;
                     return (
                       <View key={row.id} style={[styles.activeUserRow, { flexDirection: 'column', alignItems: 'flex-start', gap: 4 }]}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
                           <Text style={styles.activeUserName}>
                             {row.customer_name || 'Unknown'} ({[row.vehicle_make, row.vehicle_model].filter(Boolean).join(' ')})
                           </Text>
-                          <Text style={{ fontSize: 11, fontWeight: '700', color: isSent ? '#34d399' : isFailed ? '#f87171' : '#94a3b8' }}>
-                            {isSent ? 'SMS Sent' : isFailed ? 'Failed' : 'Pending'}
-                          </Text>
+                          <TouchableOpacity
+                            onPress={() => {
+                              const cleanTitle = String(row.customer_title || '').trim();
+                              const cleanName = String(row.customer_name || 'Valued Client').trim();
+                              const toLine = cleanTitle ? `To: ${cleanTitle} ${cleanName}` : `To: ${cleanName}`;
+                              const vmm = [row.vehicle_make, row.vehicle_model].filter(Boolean).join(' ').trim() || 'Vehicle';
+                              const careLink = row.short_url || (row.slug ? `maskpro.link/${row.slug}` : '[No magic link]');
+                              const msgText = (row.sms_message_sent && String(row.sms_message_sent).trim()) || [
+                                toLine,
+                                '',
+                                'Dear Valued Customer,',
+                                '',
+                                'Greetings!',
+                                '',
+                                `Your ${vmm} is due for 6-Month NanoFix Maintenance.`,
+                                '',
+                                "Now it's even easier and faster to book! 1 click to this link will log you in, hassle-free!",
+                                '',
+                                'Book via our MaskPro Care app:',
+                                '',
+                                careLink,
+                                '',
+                                'MaskPro',
+                                'Always Brand New',
+                              ].join('\n');
+                              Alert.alert(
+                                isSent ? 'Delivered SMS Content' : 'SMS Content Preview',
+                                msgText
+                              );
+                            }}
+                            style={{
+                              paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12,
+                              backgroundColor: isSent ? 'rgba(16, 185, 129, 0.16)' : isFailed ? 'rgba(239, 68, 68, 0.16)' : 'rgba(148, 163, 184, 0.16)',
+                              borderWidth: 1,
+                              borderColor: isSent ? 'rgba(52, 211, 153, 0.4)' : isFailed ? 'rgba(248, 113, 113, 0.4)' : 'rgba(148, 163, 184, 0.3)',
+                            }}
+                          >
+                            <Text numberOfLines={1} style={{ fontSize: 11, fontWeight: '700', color: isSent ? '#34d399' : isFailed ? '#f87171' : '#94a3b8' }}>
+                              {isSent ? 'SMS Sent • View' : isFailed ? 'Failed • View' : 'Pending • View'}
+                            </Text>
+                          </TouchableOpacity>
                         </View>
                         <Text style={styles.activeUserSub}>
                           {row.customer_mobile} • {row.slug || row.short_url ? (row.short_url || `maskpro.link/${row.slug}`) : 'No Magic Link (Invalid Mobile #)'}

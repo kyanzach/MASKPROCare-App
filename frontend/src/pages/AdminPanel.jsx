@@ -40,6 +40,7 @@ export default function AdminPanel() {
 
   // Confirmation modal state
   const [confirmModal, setConfirmModal] = useState(null);
+  const [smsPreviewModal, setSmsPreviewModal] = useState(null);
   const [impersonating, setImpersonating] = useState(false);
   const [secActionLoading, setSecActionLoading] = useState(null);
   const [secLogFilter, setSecLogFilter] = useState('all');
@@ -350,6 +351,36 @@ export default function AdminPanel() {
     return { label: 'Web App', icon: 'bi-globe2', bg: '#dbeafe', color: '#1d4ed8', border: '#93c5fd' };
   };
 
+  const getFormattedSmsContent = (row) => {
+    if (!row) return '';
+    if (row.sms_message_sent && String(row.sms_message_sent).trim()) {
+      return String(row.sms_message_sent).trim();
+    }
+    const cleanTitle = String(row.customer_title || '').trim();
+    const cleanName = String(row.customer_name || 'Valued Client').trim();
+    const toLine = cleanTitle ? `To: ${cleanTitle} ${cleanName}` : `To: ${cleanName}`;
+    const vmm = [row.vehicle_make, row.vehicle_model].filter(Boolean).join(' ').trim() || 'Vehicle';
+    const careLink = row.short_url || (row.slug ? `maskpro.link/${row.slug}` : '[No magic link — invalid/missing mobile #]');
+    return [
+      toLine,
+      '',
+      'Dear Valued Customer,',
+      '',
+      'Greetings!',
+      '',
+      `Your ${vmm} is due for 6-Month NanoFix Maintenance.`,
+      '',
+      "Now it's even easier and faster to book! 1 click to this link will log you in, hassle-free!",
+      '',
+      'Book via our MaskPro Care app:',
+      '',
+      careLink,
+      '',
+      'MaskPro',
+      'Always Brand New',
+    ].join('\n');
+  };
+
   if (isAdmin === null) {
     return (
       <div style={{ textAlign: 'center', padding: '80px 20px' }}>
@@ -438,6 +469,192 @@ export default function AdminPanel() {
           </div>
         </div>
       )}
+
+      {/* Delivered SMS Content Modal */}
+      {smsPreviewModal && (() => {
+        const smsText = getFormattedSmsContent(smsPreviewModal);
+        const charCount = smsText.length;
+        const creditParts = smsPreviewModal.sms_credits || (charCount <= 160 ? 1 : Math.ceil(charCount / 153));
+        const isSentModal = smsPreviewModal.sms_status === 'Sent';
+        const isFailedModal = smsPreviewModal.sms_status === 'Failed';
+        const shortLinkText = smsPreviewModal.short_url || (smsPreviewModal.slug ? `maskpro.link/${smsPreviewModal.slug}` : null);
+        return (
+          <div
+            style={{
+              position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.58)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              zIndex: 9999, backdropFilter: 'blur(4px)', padding: '16px',
+            }}
+            onClick={() => setSmsPreviewModal(null)}
+          >
+            <div
+              style={{
+                background: 'white', borderRadius: '20px', width: '100%', maxWidth: '500px',
+                boxShadow: '0 28px 70px rgba(0,0,0,0.32)', overflow: 'hidden',
+                border: '1px solid #e2e8f0',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div style={{
+                padding: '16px 20px', borderBottom: '1px solid #e2e8f0',
+                background: 'linear-gradient(135deg, #eff6ff 0%, #ffffff 100%)',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    width: '38px', height: '38px', borderRadius: '11px',
+                    background: isSentModal ? '#dcfce7' : isFailedModal ? '#fef2f2' : '#dbeafe',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <i
+                      className={`bi ${isSentModal ? 'bi-chat-check-fill' : isFailedModal ? 'bi-chat-square-dots-fill' : 'bi-chat-text-fill'}`}
+                      style={{ fontSize: '18px', color: isSentModal ? '#15803d' : isFailedModal ? '#dc2626' : '#1d4ed8' }}
+                    ></i>
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '15.5px', fontWeight: 800, color: '#0f172a' }}>
+                      Delivered SMS Message
+                    </h3>
+                    <div style={{ fontSize: '11.5px', color: '#64748b', marginTop: '1px' }}>
+                      Sender ID: <strong style={{ color: '#0f172a' }}>MASKPRO</strong> • {smsPreviewModal.sms_message_sent ? 'Exact Gateway Payload' : 'Formatted Reminder Text'}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSmsPreviewModal(null)}
+                  style={{
+                    border: 'none', background: '#f1f5f9', color: '#475569',
+                    width: '30px', height: '30px', borderRadius: '8px', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px',
+                  }}
+                >
+                  <i className="bi bi-x-lg"></i>
+                </button>
+              </div>
+
+              {/* Recipient & Delivery Meta */}
+              <div style={{ padding: '14px 20px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: '12.5px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                  <div>
+                    <span style={{ color: '#64748b' }}>To: </span>
+                    <strong style={{ color: '#0f172a' }}>
+                      {[smsPreviewModal.customer_title, smsPreviewModal.customer_name].filter(Boolean).join(' ') || 'Unknown'}
+                    </strong>
+                    <span style={{ color: '#64748b', fontFamily: 'monospace', marginLeft: '6px' }}>
+                      ({smsPreviewModal.customer_mobile || 'No mobile'})
+                    </span>
+                  </div>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                    padding: '2px 9px', borderRadius: '20px', fontSize: '11px', fontWeight: 700,
+                    background: isSentModal ? '#dcfce7' : isFailedModal ? '#fef2f2' : '#f1f5f9',
+                    color: isSentModal ? '#15803d' : isFailedModal ? '#dc2626' : '#475569',
+                    border: `1px solid ${isSentModal ? '#86efac' : isFailedModal ? '#fecaca' : '#cbd5e1'}`,
+                    whiteSpace: 'nowrap',
+                  }}>
+                    <i className={`bi ${isSentModal ? 'bi-check-circle-fill' : isFailedModal ? 'bi-x-circle-fill' : 'bi-clock-history'}`}></i>
+                    {isSentModal ? 'Sent & Delivered' : isFailedModal ? 'Failed (Invalid #)' : 'Scheduled'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginTop: '6px', fontSize: '11.5px', color: '#475569' }}>
+                  <span>
+                    <i className="bi bi-car-front-fill" style={{ color: '#1d4ed8', marginRight: '4px' }}></i>
+                    <strong>{[smsPreviewModal.vehicle_make, smsPreviewModal.vehicle_model].filter(Boolean).join(' ') || 'Vehicle'}</strong>
+                    {' '}• Booking #{smsPreviewModal.booking_id || '—'} • Reminder #{smsPreviewModal.reminder_id || '—'}
+                  </span>
+                  <span style={{ fontFamily: 'monospace', color: '#64748b' }}>
+                    {smsPreviewModal.created_at ? new Date(smsPreviewModal.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' }) : ''}
+                  </span>
+                </div>
+              </div>
+
+              {/* SMS Bubble Content */}
+              <div style={{ padding: '18px 20px' }}>
+                <div style={{
+                  background: '#0f172a', color: '#f8fafc', borderRadius: '16px',
+                  padding: '16px 18px', fontSize: '13.5px', lineHeight: 1.55,
+                  fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+                  whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                  border: '1px solid #1e293b', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
+                }}>
+                  {smsText}
+                </div>
+
+                {/* Character & Gateway Reference Footer */}
+                <div style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  flexWrap: 'wrap', gap: '8px', marginTop: '10px', fontSize: '11.5px', color: '#64748b',
+                }}>
+                  <span>
+                    <strong>{charCount}</strong> chars • <strong>{creditParts}</strong> SMS credit{creditParts === 1 ? '' : 's'}
+                  </span>
+                  {smsPreviewModal.itexmo_ref_id ? (
+                    <span style={{ fontFamily: 'monospace', color: '#475569' }}>
+                      ITEXMO Ref: {smsPreviewModal.itexmo_ref_id}
+                    </span>
+                  ) : !isSentModal && smsPreviewModal.sms_log_detail ? (
+                    <span style={{ color: '#dc2626', fontWeight: 600 }}>
+                      {smsPreviewModal.sms_log_detail.replace(/^.*Reminder ID:\s*\d*:\s*/i, '')}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div style={{
+                padding: '12px 20px 16px', borderTop: '1px solid #f1f5f9',
+                display: 'flex', justifyContent: 'flex-end', gap: '8px', flexWrap: 'wrap',
+              }}>
+                {shortLinkText && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(`https://${shortLinkText}`);
+                      showToast('Magic link copied');
+                    }}
+                    style={{
+                      padding: '8px 13px', borderRadius: '9px', border: '1px solid #cbd5e1',
+                      background: 'white', color: '#1d4ed8', fontSize: '12.5px', fontWeight: 700,
+                      cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                      display: 'inline-flex', alignItems: 'center', gap: '6px',
+                    }}
+                  >
+                    <i className="bi bi-link-45deg"></i> Copy Link
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(smsText);
+                    showToast('Full SMS message copied');
+                  }}
+                  style={{
+                    padding: '8px 14px', borderRadius: '9px', border: 'none',
+                    background: '#2563eb', color: 'white', fontSize: '12.5px', fontWeight: 700,
+                    cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                  }}
+                >
+                  <i className="bi bi-clipboard-check"></i> Copy SMS Text
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSmsPreviewModal(null)}
+                  style={{
+                    padding: '8px 14px', borderRadius: '9px', border: '1px solid #e2e8f0',
+                    background: '#f8fafc', color: '#475569', fontSize: '12.5px', fontWeight: 700,
+                    cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Toast Notification */}
       {toast && (
@@ -1055,17 +1272,24 @@ export default function AdminPanel() {
 
                                 {/* 3. SMS Delivery */}
                                 <td style={{ padding: '12px 12px' }}>
-                                  <span style={{
-                                    display: 'inline-flex', alignItems: 'center', gap: '5px',
-                                    padding: '3px 9px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 700,
-                                    background: isSent ? '#dcfce7' : isFailed ? '#fef2f2' : '#f1f5f9',
-                                    color: isSent ? '#15803d' : isFailed ? '#dc2626' : '#475569',
-                                    border: `1px solid ${isSent ? '#86efac' : isFailed ? '#fecaca' : '#cbd5e1'}`,
-                                    whiteSpace: 'nowrap',
-                                  }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => setSmsPreviewModal(row)}
+                                    title="Click to view actual formatted SMS content"
+                                    style={{
+                                      display: 'inline-flex', alignItems: 'center', gap: '5px',
+                                      padding: '4px 10px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 700,
+                                      background: isSent ? '#dcfce7' : isFailed ? '#fef2f2' : '#f1f5f9',
+                                      color: isSent ? '#15803d' : isFailed ? '#dc2626' : '#475569',
+                                      border: `1px solid ${isSent ? '#86efac' : isFailed ? '#fecaca' : '#cbd5e1'}`,
+                                      whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: 'inherit',
+                                      boxShadow: '0 1px 2px rgba(15, 23, 42, 0.05)',
+                                    }}
+                                  >
                                     <i className={`bi ${isSent ? 'bi-check-circle-fill' : isFailed ? 'bi-x-circle-fill' : 'bi-clock-history'}`}></i>
-                                    {isSent ? 'Sent & Delivered' : isFailed ? 'Failed (Invalid #)' : 'Scheduled (Pending)'}
-                                  </span>
+                                    <span>{isSent ? 'Sent & Delivered' : isFailed ? 'Failed (Invalid #)' : 'Scheduled (Pending)'}</span>
+                                    <i className="bi bi-chat-text-fill" style={{ fontSize: '10.5px', opacity: 0.75, marginLeft: '2px' }}></i>
+                                  </button>
                                   <div style={{ fontSize: '10.5px', color: '#64748b', marginTop: '4px', fontFamily: 'monospace' }}>
                                     {row.created_at ? new Date(row.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' }) : ''}
                                   </div>
