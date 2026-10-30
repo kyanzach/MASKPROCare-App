@@ -1,5 +1,14 @@
 # Changelog
 
+## [v1.17.14] — 2026-10-30
+### Fixed & Improved
+- **Moved Profile Logout Card to the Very Bottom (`frontend/src/pages/Profile.jsx`)**:
+  - Moved the **Logout** card out of the left column of `.profile-grid` and placed it at the very bottom (`gridColumn: '1 / -1'`) after `Profile Overview` so it always renders at the bottom of the Profile page on both mobile and desktop screens.
+- **Aligned Web Login UI with iOS & Android, Stacked Support Toll-Free Number Below, and Formatted Terms & Privacy onto 2nd Line (`frontend/src/pages/Login.jsx`, `frontend/src/index.css`, `mobile/app/login.tsx`)**:
+  - Updated `.login-help-section` on Web (`frontend/src/pages/Login.jsx`, `frontend/src/index.css`) to stack `"Need help? Contact our support team at"` on line 1 and the clickable `<i class="fas fa-phone"></i> +63-1800-1-550-0037` (`tel:+63180015500037`) on line 2 below it, fixing the mobile horizontal overflow caused by `white-space: nowrap`.
+  - Placed `"Terms of Service and Privacy Policy"` cleanly on the 2nd line below `"By continuing, you agree to our"` across Web (`frontend/src/pages/Login.jsx`), iOS, and Android (`mobile/app/login.tsx`).
+  - Unified Web Login visual styling (`frontend/src/index.css`) with the iOS & Android dark navy background (`linear-gradient(160deg, #0a1628 0%, #1e3a8a 40%, #1e3a5f 70%, #0f172a 100%)`), dark slate title (`#0f172a`), and royal blue primary button (`#2563eb`).
+
 ## [v1.17.13] — 2026-10-30
 ### Fixed
 - **Fixed Support Phone Icon Alignment & 1-Tap Dialer Shortcut on Login Screen (`mobile/app/login.tsx`, `frontend/src/pages/Login.jsx`)**:

@@ -755,27 +755,6 @@ export default function Profile() {
                 )}
               </div>
             </div>
-
-            {/* Logout Card */}
-            <div className="card-modern">
-              <div className="card-modern-body">
-                <button
-                  onClick={handleLogout}
-                  style={{
-                    width: '100%', padding: '14px', background: 'transparent',
-                    color: '#dc2626', border: '2px solid rgba(239, 68, 68, 0.3)',
-                    borderRadius: '12px', fontSize: '15px', fontWeight: 600,
-                    cursor: 'pointer', transition: 'all 0.3s ease',
-                    fontFamily: 'var(--font-family)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                  }}
-                  onMouseEnter={e => { e.target.style.background = '#fef2f2'; }}
-                  onMouseLeave={e => { e.target.style.background = 'transparent'; }}
-                >
-                  <i className="fas fa-sign-out-alt"></i> Logout
-                </button>
-              </div>
-            </div>
           </div>
 
           {/* Right Column - Edit Profile */}
@@ -837,6 +816,27 @@ export default function Profile() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Logout Card — Always at the very bottom */}
+          <div className="card-modern" style={{ gridColumn: '1 / -1' }}>
+            <div className="card-modern-body">
+              <button
+                onClick={handleLogout}
+                style={{
+                  width: '100%', padding: '14px', background: 'transparent',
+                  color: '#dc2626', border: '2px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: '12px', fontSize: '15px', fontWeight: 600,
+                  cursor: 'pointer', transition: 'all 0.3s ease',
+                  fontFamily: 'var(--font-family)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                }}
+                onMouseEnter={e => { e.target.style.background = '#fef2f2'; }}
+                onMouseLeave={e => { e.target.style.background = 'transparent'; }}
+              >
+                <i className="fas fa-sign-out-alt"></i> Logout
+              </button>
             </div>
           </div>
         </div>

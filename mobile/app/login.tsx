@@ -414,7 +414,7 @@ export default function LoginScreen() {
           {/* Footer Terms & Security Badge */}
           <View style={styles.cardFooter}>
             <Text style={styles.termsText}>
-              By continuing, you agree to our{' '}
+              By continuing, you agree to our{'\n'}
               <Text
                 style={styles.termsLink}
                 onPress={() => {

@@ -329,9 +329,10 @@ export default function Login() {
           {/* Footer */}
           <div className="login-footer">
             <p className="login-footer-text">
-              By continuing, you agree to our{' '}
-              <a className="login-footer-link">Terms of Service</a> and{' '}
-              <a className="login-footer-link">Privacy Policy</a>
+              By continuing, you agree to our
+              <br />
+              <a className="login-footer-link" href="/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a> and{' '}
+              <a className="login-footer-link" href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
             </p>
             <div className="login-security-badge" onClick={() => {
               const s = secretTapRef.current;
@@ -349,21 +350,14 @@ export default function Login() {
 
         {/* Help Section */}
         <div className="login-help-section">
-          <p>
-            Need help? Contact our support team at{' '}
-            <a
-              href="tel:+63180015500037"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '5px',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              <i className="fas fa-phone"></i>
-              <span>+63-1800-1-550-0037</span>
-            </a>
-          </p>
+          <p>Need help? Contact our support team at</p>
+          <a
+            href="tel:+63180015500037"
+            className="login-help-phone-link"
+          >
+            <i className="fas fa-phone"></i>
+            <span>+63-1800-1-550-0037</span>
+          </a>
         </div>
 
         {/* AI Helper Login Modal */}
