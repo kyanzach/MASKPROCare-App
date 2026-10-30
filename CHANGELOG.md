@@ -1,5 +1,16 @@
 # Changelog
 
+## [v1.17.15] — 2026-10-30
+### Added & Fixed
+- **Fixed Mobile Header Admin Badge Overlap (`frontend/src/components/Layout.jsx`)**:
+  - Adjusted mobile `.top-header` spacing, responsive brand typography (`clamp(16px, 4.3vw, 19px)`), and compact `Admin` badge + notification bell sizing so the `Admin` pill never overlaps `MASKPROCare` on narrow mobile screens.
+- **Accurate Live Online Presence vs Historical App Users (`server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`, `mobile/app/admin.tsx`)**:
+  - Clarified why `Active App Users: 2` was showing (`Ryan Paco #1924` across 4 devices + `Estrella R Lawas #1` on Android from March 13, 2026).
+  - Added real-time `live_online_users` (`last_seen_at <= 5 minutes`), `active_today_users`, and per-device `Online Now` / `Idle (Today)` / `Offline` status pills + IP addresses in the **Active App Users** KPI card and **Who Uses the App** table.
+- **Added Maintenance Reminder SMS & Magic Link Delivery Tracker Widget (`server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`, `mobile/app/admin.tsx`)**:
+  - Confirmed the **7:00 AM Cron (`2026-10-30 07:00:15 – 07:01:08`)** generated **35** 6-Month Maintenance Reminder magic links (`maskpro.link/...`): **31 Sent & Delivered** via ITEXMO and **4 Failed** due to invalid phone numbers in customer records.
+  - Added a dedicated paginated widget (**8 per page + smart lazy prefetch**) with filter pills (`Today's 7AM Batch`, `All Reminders`, `Sent`, `Opened`, `Not Opened Yet`, `Failed`), instant multi-field search, and 5-way sorting showing Customer & Mobile, Vehicle & Booking, ITEXMO Delivery Status & Ref ID, Short Link & Open Count, Live App Activity, and Bound Device/Browser/IP/Location.
+
 ## [v1.17.14] — 2026-10-30
 ### Fixed & Improved
 - **Moved Profile Logout Card to the Very Bottom (`frontend/src/pages/Profile.jsx`)**:

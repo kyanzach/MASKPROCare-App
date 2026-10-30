@@ -306,8 +306,16 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
       }
     }
 
-    const [[distinctActiveUsersRow]] = await pool.query('SELECT COUNT(DISTINCT customer_id) AS total FROM care_app_telemetry');
+    const [[distinctActiveUsersRow]] = await pool.query(`
+      SELECT
+        COUNT(DISTINCT customer_id) AS total,
+        COUNT(DISTINCT CASE WHEN TIMESTAMPDIFF(MINUTE, last_seen_at, NOW()) <= 5 THEN customer_id END) AS live_online_now,
+        COUNT(DISTINCT CASE WHEN DATE(last_seen_at) = CURDATE() THEN customer_id END) AS active_today
+      FROM care_app_telemetry
+    `);
     const activeAppUsers = Number(distinctActiveUsersRow?.total || 0);
+    const liveOnlineUsers = Number(distinctActiveUsersRow?.live_online_now || 0);
+    const activeTodayUsers = Number(distinctActiveUsersRow?.active_today || 0);
 
     // Sub-breakdown by app_type (desktop_web, mobile_web, native_android, native_ios)
     const [appTypeRows] = await pool.query(`
@@ -509,10 +517,17 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
         t.app_type,
         t.device_label,
         t.auth_method,
+        t.ip_address,
         t.session_count,
         t.api_hits,
         t.first_seen_at,
         t.last_seen_at,
+        TIMESTAMPDIFF(SECOND, t.last_seen_at, NOW()) AS seconds_since_last_seen,
+        CASE
+          WHEN TIMESTAMPDIFF(MINUTE, t.last_seen_at, NOW()) <= 5 THEN 'online'
+          WHEN DATE(t.last_seen_at) = CURDATE() THEN 'today'
+          ELSE 'offline'
+        END AS presence_status,
         (SELECT COUNT(*) FROM bookings b WHERE b.customer_id = c.id) AS booking_count
       FROM care_app_telemetry t
       JOIN customers c ON c.id = t.customer_id
@@ -520,12 +535,145 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
       LIMIT ?
     `, [usersLimit]).catch(() => [[]]);
 
+    // 6. Maintenance Reminder SMS & Magic Link Delivery Tracker (Paginated + Search + Filter + Sort)
+    const smsLimit = Math.min(200, Math.max(15, parseInt(req.query.sms_limit, 10) || 20));
+    const smsFilter = String(req.query.sms_filter || 'all');
+    const smsSearch = String(req.query.sms_search || '').trim();
+    const smsSort = String(req.query.sms_sort || 'newest');
+
+    let smsWhereSql = '1=1';
+    const smsParams = [];
+    if (smsFilter === 'today') {
+      smsWhereSql = 'DATE(ml.created_at) = CURDATE()';
+    } else if (smsFilter === 'sent') {
+      smsWhereSql = "COALESCE(pr.sms_status, 'Sent') = 'Sent'";
+    } else if (smsFilter === 'failed') {
+      smsWhereSql = "pr.sms_status = 'Failed'";
+    } else if (smsFilter === 'opened') {
+      smsWhereSql = 'ml.access_count > 0';
+    } else if (smsFilter === 'unopened') {
+      smsWhereSql = "ml.access_count = 0 AND COALESCE(pr.sms_status, 'Sent') = 'Sent'";
+    }
+
+    if (smsSearch) {
+      const likeVal = `%${smsSearch}%`;
+      const cleanIdVal = `%${smsSearch.replace(/^#/, '')}%`;
+      smsWhereSql += ` AND (
+        c.full_name LIKE ?
+        OR c.mobile_number LIKE ?
+        OR CAST(ml.customer_id AS CHAR) LIKE ?
+        OR CAST(ml.booking_id AS CHAR) LIKE ?
+        OR CAST(ml.reminder_id AS CHAR) LIKE ?
+        OR v.make LIKE ?
+        OR v.model LIKE ?
+        OR CONCAT_WS(' ', v.make, v.model) LIKE ?
+        OR v.plate_no LIKE ?
+        OR ml.slug LIKE ?
+        OR ml.short_url LIKE ?
+        OR ml.bound_platform LIKE ?
+        OR ml.bound_ip LIKE ?
+        OR pr.sms_status LIKE ?
+        OR pr.error_log LIKE ?
+      )`;
+      smsParams.push(
+        likeVal, likeVal, cleanIdVal, cleanIdVal, cleanIdVal,
+        likeVal, likeVal, likeVal, likeVal,
+        likeVal, likeVal, likeVal, likeVal, likeVal, likeVal
+      );
+    }
+
+    let smsOrderBySql = 'ml.created_at DESC, ml.id DESC';
+    if (smsSort === 'opened_first') {
+      smsOrderBySql = 'ml.access_count DESC, ml.last_accessed_at DESC, ml.id DESC';
+    } else if (smsSort === 'failed_first') {
+      smsOrderBySql = "CASE WHEN pr.sms_status = 'Failed' THEN 0 ELSE 1 END ASC, ml.id DESC";
+    } else if (smsSort === 'customer_az') {
+      smsOrderBySql = "COALESCE(c.full_name, 'ZZZZ') ASC, ml.id DESC";
+    } else if (smsSort === 'oldest') {
+      smsOrderBySql = 'ml.created_at ASC, ml.id ASC';
+    }
+
+    const [[smsReminderSummary]] = await pool.query(`
+      SELECT
+        COUNT(*) AS total_generated,
+        COALESCE(SUM(CASE WHEN DATE(ml.created_at) = CURDATE() THEN 1 ELSE 0 END), 0) AS today_generated,
+        COALESCE(SUM(CASE WHEN COALESCE(pr.sms_status, 'Sent') = 'Sent' THEN 1 ELSE 0 END), 0) AS total_sent,
+        COALESCE(SUM(CASE WHEN DATE(ml.created_at) = CURDATE() AND COALESCE(pr.sms_status, 'Sent') = 'Sent' THEN 1 ELSE 0 END), 0) AS today_sent,
+        COALESCE(SUM(CASE WHEN pr.sms_status = 'Failed' THEN 1 ELSE 0 END), 0) AS total_failed,
+        COALESCE(SUM(CASE WHEN DATE(ml.created_at) = CURDATE() AND pr.sms_status = 'Failed' THEN 1 ELSE 0 END), 0) AS today_failed,
+        COALESCE(SUM(CASE WHEN ml.access_count > 0 THEN 1 ELSE 0 END), 0) AS total_opened,
+        COALESCE(SUM(CASE WHEN DATE(ml.created_at) = CURDATE() AND ml.access_count > 0 THEN 1 ELSE 0 END), 0) AS today_opened,
+        COALESCE(SUM(CASE WHEN ml.access_count = 0 AND COALESCE(pr.sms_status, 'Sent') = 'Sent' THEN 1 ELSE 0 END), 0) AS total_unopened,
+        MIN(CASE WHEN DATE(ml.created_at) = CURDATE() THEN ml.created_at END) AS today_cron_started_at,
+        MAX(CASE WHEN DATE(ml.created_at) = CURDATE() THEN ml.created_at END) AS today_cron_finished_at
+      FROM care_magic_links ml
+      LEFT JOIN sms_periodic_reminders pr ON pr.sms_periodic_reminders_id = ml.reminder_id
+    `).catch(() => [[{
+      total_generated: 0, today_generated: 0, total_sent: 0, today_sent: 0,
+      total_failed: 0, today_failed: 0, total_opened: 0, today_opened: 0,
+      total_unopened: 0, today_cron_started_at: null, today_cron_finished_at: null,
+    }]]);
+
+    const [smsReminderLogs] = await pool.query(`
+      SELECT
+        ml.id,
+        ml.slug,
+        ml.short_url,
+        ml.customer_id,
+        ml.vehicle_id,
+        ml.booking_id,
+        ml.reminder_id,
+        ml.bound_platform,
+        ml.bound_user_agent,
+        ml.bound_ip,
+        ml.bound_at,
+        ml.last_accessed_at,
+        ml.access_count,
+        ml.blocked_attempts,
+        ml.status AS link_status,
+        ml.created_at,
+        c.full_name AS customer_name,
+        c.mobile_number AS customer_mobile,
+        v.make AS vehicle_make,
+        v.model AS vehicle_model,
+        v.plate_no AS vehicle_plate,
+        COALESCE(pr.sms_status, 'Sent') AS sms_status,
+        COALESCE(pr.sms_this_template_code, 'maintenance_reminder') AS template_code,
+        pr.error_log AS sms_log_detail,
+        (SELECT sh.reference_id FROM sms_history sh
+         WHERE sh.customer_id = ml.customer_id
+           AND ABS(TIMESTAMPDIFF(SECOND, sh.created_at, ml.created_at)) <= 120
+         ORDER BY sh.id DESC LIMIT 1) AS itexmo_ref_id,
+        (SELECT sh.credits_used FROM sms_history sh
+         WHERE sh.customer_id = ml.customer_id
+           AND ABS(TIMESTAMPDIFF(SECOND, sh.created_at, ml.created_at)) <= 120
+         ORDER BY sh.id DESC LIMIT 1) AS sms_credits,
+        (SELECT MAX(t.last_seen_at) FROM care_app_telemetry t WHERE t.customer_id = ml.customer_id) AS app_last_seen_at,
+        (SELECT COALESCE(SUM(t.session_count), 0) FROM care_app_telemetry t WHERE t.customer_id = ml.customer_id) AS app_sessions,
+        (SELECT COALESCE(SUM(t.api_hits), 0) FROM care_app_telemetry t WHERE t.customer_id = ml.customer_id) AS app_api_hits,
+        (SELECT s.location FROM care_magic_link_security_logs s WHERE s.magic_link_id = ml.id AND s.location IS NOT NULL ORDER BY s.id DESC LIMIT 1) AS bound_location,
+        (SELECT s.browser_detail FROM care_magic_link_security_logs s WHERE s.magic_link_id = ml.id AND s.event_type IN ('first_bind', 'authorized_access') ORDER BY s.id DESC LIMIT 1) AS bound_browser,
+        (SELECT s.os_detail FROM care_magic_link_security_logs s WHERE s.magic_link_id = ml.id AND s.event_type IN ('first_bind', 'authorized_access') ORDER BY s.id DESC LIMIT 1) AS bound_os
+      FROM care_magic_links ml
+      LEFT JOIN customers c ON c.id = ml.customer_id
+      LEFT JOIN vehicles v ON v.id = ml.vehicle_id
+      LEFT JOIN sms_periodic_reminders pr ON pr.sms_periodic_reminders_id = ml.reminder_id
+      WHERE ${smsWhereSql}
+      ORDER BY ${smsOrderBySql}
+      LIMIT ?
+    `, [...smsParams, smsLimit]).catch((err) => {
+      console.error('[Admin] smsReminderLogs query error:', err.message);
+      return [[]];
+    });
+
     return res.json({
       success: true,
       data: {
         kpis: {
           total_customers: Number(custCount?.total || 0),
           active_app_users: activeAppUsers,
+          live_online_users: liveOnlineUsers,
+          active_today_users: activeTodayUsers,
           web_users: Number(platformMap.web.unique_users || 0),
           android_users: Number(platformMap.android.unique_users || 0),
           ios_users: Number(platformMap.ios.unique_users || 0),
@@ -572,6 +720,20 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
           revoked_links_count: Number(magicStats?.revoked_links || 0),
         },
         magic_security_logs: magicSecurityLogs,
+        sms_reminder_summary: {
+          total_generated: Number(smsReminderSummary?.total_generated || 0),
+          today_generated: Number(smsReminderSummary?.today_generated || 0),
+          total_sent: Number(smsReminderSummary?.total_sent || 0),
+          today_sent: Number(smsReminderSummary?.today_sent || 0),
+          total_failed: Number(smsReminderSummary?.total_failed || 0),
+          today_failed: Number(smsReminderSummary?.today_failed || 0),
+          total_opened: Number(smsReminderSummary?.total_opened || 0),
+          today_opened: Number(smsReminderSummary?.today_opened || 0),
+          total_unopened: Number(smsReminderSummary?.total_unopened || 0),
+          today_cron_started_at: smsReminderSummary?.today_cron_started_at || null,
+          today_cron_finished_at: smsReminderSummary?.today_cron_finished_at || null,
+        },
+        sms_reminder_logs: smsReminderLogs,
         active_users: activeUsers,
         active_users_total: Number(secCounts?.total_active_users_rows || activeUsers.length),
       },

@@ -47,19 +47,32 @@ export default function AdminPanel() {
   const [secSort, setSecSort] = useState('newest');
   const [secPage, setSecPage] = useState(1);
   const [secLimit, setSecLimit] = useState(10); // Prefetch 2 pages (5 per page = 10 items) initially
+  const [smsFilter, setSmsFilter] = useState('today');
+  const [smsSearch, setSmsSearch] = useState('');
+  const [smsSort, setSmsSort] = useState('newest');
+  const [smsPage, setSmsPage] = useState(1);
+  const [smsLimit, setSmsLimit] = useState(40); // Prefetch 5 pages (8 per page = 40 items) initially
   const [usersPage, setUsersPage] = useState(1);
   const [usersLimit, setUsersLimit] = useState(20); // Prefetch 2 pages (10 per page = 20 items) initially
   const [lastSyncedAt, setLastSyncedAt] = useState(new Date());
   const modFilterRef = useRef('pending');
-  const dashParamsRef = useRef({ secLimit: 10, secFilter: 'all', secSearch: '', secSort: 'newest', usersLimit: 20 });
+  const dashParamsRef = useRef({
+    secLimit: 10, secFilter: 'all', secSearch: '', secSort: 'newest',
+    smsLimit: 40, smsFilter: 'today', smsSearch: '', smsSort: 'newest',
+    usersLimit: 20,
+  });
 
   useEffect(() => {
     modFilterRef.current = modFilter;
   }, [modFilter]);
 
   useEffect(() => {
-    dashParamsRef.current = { secLimit, secFilter: secLogFilter, secSearch, secSort, usersLimit };
-  }, [secLimit, secLogFilter, secSearch, secSort, usersLimit]);
+    dashParamsRef.current = {
+      secLimit, secFilter: secLogFilter, secSearch, secSort,
+      smsLimit, smsFilter, smsSearch, smsSort,
+      usersLimit,
+    };
+  }, [secLimit, secLogFilter, secSearch, secSort, smsLimit, smsFilter, smsSearch, smsSort, usersLimit]);
 
   const showToast = (text, type = 'success') => {
     setToast({ text, type });
@@ -114,7 +127,7 @@ export default function AdminPanel() {
     try {
       const p = customParams || dashParamsRef.current;
       const res = await api.get(
-        `/admin/dashboard?sec_limit=${p.secLimit}&sec_filter=${encodeURIComponent(p.secFilter)}&sec_search=${encodeURIComponent(p.secSearch || '')}&sec_sort=${encodeURIComponent(p.secSort || 'newest')}&users_limit=${p.usersLimit}`
+        `/admin/dashboard?sec_limit=${p.secLimit}&sec_filter=${encodeURIComponent(p.secFilter)}&sec_search=${encodeURIComponent(p.secSearch || '')}&sec_sort=${encodeURIComponent(p.secSort || 'newest')}&sms_limit=${p.smsLimit || 40}&sms_filter=${encodeURIComponent(p.smsFilter || 'today')}&sms_search=${encodeURIComponent(p.smsSearch || '')}&sms_sort=${encodeURIComponent(p.smsSort || 'newest')}&users_limit=${p.usersLimit}`
       );
       if (res.data.success) {
         setDashData(res.data.data);
@@ -125,6 +138,44 @@ export default function AdminPanel() {
     } finally {
       if (!silent) setDashLoading(false);
     }
+  };
+
+  // Handlers for Maintenance Reminder SMS & Magic Link Delivery Tracker (8 per page):
+  const handleSmsPageChange = (nextPage) => {
+    setSmsPage(nextPage);
+    const neededLimit = (nextPage + 2) * 8;
+    if (neededLimit > smsLimit) {
+      setSmsLimit(neededLimit);
+      const updated = { ...dashParamsRef.current, smsLimit: neededLimit };
+      dashParamsRef.current = updated;
+      loadDashboard(true, updated);
+    }
+  };
+
+  const handleSmsFilterChange = (nextFilter) => {
+    setSmsFilter(nextFilter);
+    setSmsPage(1);
+    const updated = { ...dashParamsRef.current, smsFilter: nextFilter, smsLimit: Math.max(smsLimit, 40) };
+    dashParamsRef.current = updated;
+    loadDashboard(true, updated);
+  };
+
+  const handleSmsSearchChange = (val) => {
+    setSmsSearch(val);
+    setSmsPage(1);
+    const needed = val.trim() ? Math.max(smsLimit, 80) : 40;
+    setSmsLimit(needed);
+    const updated = { ...dashParamsRef.current, smsSearch: val, smsLimit: needed };
+    dashParamsRef.current = updated;
+    loadDashboard(true, updated);
+  };
+
+  const handleSmsSortChange = (nextSort) => {
+    setSmsSort(nextSort);
+    setSmsPage(1);
+    const updated = { ...dashParamsRef.current, smsSort: nextSort };
+    dashParamsRef.current = updated;
+    loadDashboard(true, updated);
   };
 
   // Smart lazy-prefetching for Magic Link Security Log (5 per page):
@@ -333,6 +384,8 @@ export default function AdminPanel() {
   const authMethods = dashData?.auth_methods || {};
   const securityOverview = dashData?.security_overview || {};
   const magicSecurityLogs = dashData?.magic_security_logs || [];
+  const smsReminderSummary = dashData?.sms_reminder_summary || {};
+  const smsReminderLogs = dashData?.sms_reminder_logs || [];
   const activeUsers = dashData?.active_users || [];
 
   return (
@@ -522,11 +575,25 @@ export default function AdminPanel() {
                 <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Active App Users</span>
                 <i className="bi bi-phone-fill" style={{ color: '#10b981', fontSize: '18px' }}></i>
               </div>
-              <div style={{ fontSize: '26px', fontWeight: 800, color: '#0f172a' }}>
-                {(kpis.active_app_users || 0).toLocaleString()}
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '26px', fontWeight: 800, color: '#0f172a' }}>
+                  {(kpis.active_app_users || 0).toLocaleString()}
+                </span>
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '5px',
+                  fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '20px',
+                  background: (kpis.live_online_users || 0) > 0 ? '#dcfce7' : '#f1f5f9',
+                  color: (kpis.live_online_users || 0) > 0 ? '#15803d' : '#64748b',
+                }}>
+                  <span style={{
+                    width: '6px', height: '6px', borderRadius: '50%',
+                    background: (kpis.live_online_users || 0) > 0 ? '#16a34a' : '#94a3b8',
+                  }} />
+                  {kpis.live_online_users || 0} Online Now
+                </span>
               </div>
-              <div style={{ fontSize: '11.5px', color: '#10b981', fontWeight: 600, marginTop: '4px' }}>
-                {(kpis.total_sessions || 0).toLocaleString()} total sessions
+              <div style={{ fontSize: '11.5px', color: '#64748b', fontWeight: 600, marginTop: '4px' }}>
+                {kpis.active_today_users || 0} active today • {(kpis.total_sessions || 0).toLocaleString()} sessions
               </div>
             </div>
 
@@ -723,6 +790,479 @@ export default function AdminPanel() {
             </div>
           </div>
 
+          {/* ─── NEW WIDGET: Maintenance Reminder SMS & Magic Link Delivery Tracker (8 per page + Lazy Prefetch) ─── */}
+          {(() => {
+            const SMS_PER_PAGE = 8;
+            const smsQuery = smsSearch.trim().toLowerCase();
+            const smsQueryId = smsQuery.replace(/^#/, '');
+
+            const filteredSmsRows = smsReminderLogs
+              .filter((r) => {
+                if (smsFilter === 'today') {
+                  if (!r.created_at) return false;
+                  const rowDate = new Date(r.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+                  const todayDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+                  if (rowDate !== todayDate) return false;
+                } else if (smsFilter === 'sent' && r.sms_status !== 'Sent') {
+                  return false;
+                } else if (smsFilter === 'failed' && r.sms_status !== 'Failed') {
+                  return false;
+                } else if (smsFilter === 'opened' && Number(r.access_count || 0) <= 0) {
+                  return false;
+                } else if (smsFilter === 'unopened' && (Number(r.access_count || 0) > 0 || r.sms_status !== 'Sent')) {
+                  return false;
+                }
+
+                if (!smsQuery) return true;
+                const blob = [
+                  r.customer_name,
+                  r.customer_mobile,
+                  r.customer_id ? `#${r.customer_id} ${r.customer_id}` : '',
+                  r.booking_id ? `#${r.booking_id} ${r.booking_id}` : '',
+                  r.reminder_id ? `#${r.reminder_id} ${r.reminder_id}` : '',
+                  r.vehicle_make,
+                  r.vehicle_model,
+                  r.vehicle_plate,
+                  r.slug,
+                  r.short_url,
+                  r.bound_platform,
+                  r.bound_ip,
+                  r.bound_location,
+                  r.sms_status,
+                  r.itexmo_ref_id,
+                  r.sms_log_detail,
+                ]
+                  .filter(Boolean)
+                  .join(' ')
+                  .toLowerCase();
+
+                return blob.includes(smsQuery) || (smsQueryId && blob.includes(smsQueryId));
+              })
+              .sort((a, b) => {
+                if (smsSort === 'opened_first') {
+                  return Number(b.access_count || 0) - Number(a.access_count || 0);
+                }
+                if (smsSort === 'failed_first') {
+                  if (a.sms_status === 'Failed' && b.sms_status !== 'Failed') return -1;
+                  if (b.sms_status === 'Failed' && a.sms_status !== 'Failed') return 1;
+                }
+                if (smsSort === 'customer_az') {
+                  return String(a.customer_name || 'ZZZZ').localeCompare(String(b.customer_name || 'ZZZZ'));
+                }
+                if (smsSort === 'oldest') {
+                  return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
+                }
+                return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+              });
+
+            const totalSmsFiltered = smsQuery
+              ? filteredSmsRows.length
+              : Math.max(
+                  filteredSmsRows.length,
+                  smsFilter === 'today'
+                    ? Number(smsReminderSummary.today_generated || 0)
+                    : smsFilter === 'sent'
+                    ? Number(smsReminderSummary.total_sent || 0)
+                    : smsFilter === 'failed'
+                    ? Number(smsReminderSummary.total_failed || 0)
+                    : smsFilter === 'opened'
+                    ? Number(smsReminderSummary.total_opened || 0)
+                    : smsFilter === 'unopened'
+                    ? Number(smsReminderSummary.total_unopened || 0)
+                    : Number(smsReminderSummary.total_generated || 0)
+                );
+
+            const totalSmsPages = Math.max(1, Math.ceil(totalSmsFiltered / SMS_PER_PAGE));
+            const safeSmsPage = Math.min(smsPage, totalSmsPages);
+            const pagedSmsRows = filteredSmsRows.slice((safeSmsPage - 1) * SMS_PER_PAGE, safeSmsPage * SMS_PER_PAGE);
+
+            return (
+              <div style={{
+                background: 'white', borderRadius: '18px', overflow: 'hidden',
+                border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.03)',
+                marginBottom: '24px',
+              }}>
+                {/* Header & Summary Badges */}
+                <div style={{
+                  padding: '18px 22px', borderBottom: '1px solid #e2e8f0',
+                  background: 'linear-gradient(135deg, #eff6ff 0%, #ffffff 100%)',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <i className="bi bi-chat-dots-fill" style={{ color: '#2563eb' }}></i>
+                          Maintenance Reminder SMS & Magic Link Delivery Tracker
+                        </h3>
+                        <span style={{
+                          background: '#dbeafe', border: '1px solid #93c5fd', color: '#1d4ed8',
+                          fontSize: '11px', fontWeight: 800, padding: '3px 10px', borderRadius: '20px', whiteSpace: 'nowrap',
+                        }}>
+                          7:00 AM Cron • Today: {smsReminderSummary.today_sent || 0} Sent / {smsReminderSummary.today_failed || 0} Failed
+                        </span>
+                      </div>
+                      <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#64748b' }}>
+                        Tracks every 6-Month Maintenance Reminder SMS sent with <code style={{ color: '#1d4ed8', fontWeight: 700 }}>maskpro.link</code> — gateway status, link opens, active app status, bound device & IP (8 per page)
+                      </p>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      <span style={{
+                        background: '#dcfce7', border: '1px solid #86efac', color: '#15803d',
+                        fontSize: '12px', fontWeight: 700, padding: '5px 11px', borderRadius: '20px', whiteSpace: 'nowrap',
+                      }}>
+                        Delivered: {smsReminderSummary.total_sent || 0}
+                      </span>
+                      <span style={{
+                        background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8',
+                        fontSize: '12px', fontWeight: 700, padding: '5px 11px', borderRadius: '20px', whiteSpace: 'nowrap',
+                      }}>
+                        Opened Link: {smsReminderSummary.total_opened || 0}
+                      </span>
+                      <span style={{
+                        background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626',
+                        fontSize: '12px', fontWeight: 700, padding: '5px 11px', borderRadius: '20px', whiteSpace: 'nowrap',
+                      }}>
+                        Failed Number: {smsReminderSummary.total_failed || 0}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Filter Pills + Search & Sort */}
+                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginTop: '12px' }}>
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      {[
+                        { key: 'today', label: `Today's 7AM Batch (${smsReminderSummary.today_generated || 0})` },
+                        { key: 'all', label: `All Reminders (${smsReminderSummary.total_generated || 0})` },
+                        { key: 'sent', label: `Sent (${smsReminderSummary.total_sent || 0})` },
+                        { key: 'opened', label: `Opened (${smsReminderSummary.total_opened || 0})` },
+                        { key: 'unopened', label: `Not Opened Yet (${smsReminderSummary.total_unopened || 0})` },
+                        { key: 'failed', label: `Failed (${smsReminderSummary.total_failed || 0})` },
+                      ].map((f) => (
+                        <button
+                          key={f.key}
+                          onClick={() => handleSmsFilterChange(f.key)}
+                          style={{
+                            padding: '5px 11px', borderRadius: '16px', fontSize: '11.5px', fontWeight: 700,
+                            cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                            border: smsFilter === f.key ? '1px solid #2563eb' : '1px solid #e2e8f0',
+                            background: smsFilter === f.key ? '#2563eb' : 'white',
+                            color: smsFilter === f.key ? 'white' : '#475569',
+                          }}
+                        >
+                          {f.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div style={{
+                      position: 'relative', display: 'flex', alignItems: 'center',
+                      minWidth: '260px', flex: '1 1 260px', maxWidth: '380px',
+                    }}>
+                      <i className="bi bi-search" style={{
+                        position: 'absolute', left: '11px', fontSize: '12.5px', color: '#64748b', pointerEvents: 'none',
+                      }}></i>
+                      <input
+                        type="text"
+                        value={smsSearch}
+                        onChange={(e) => handleSmsSearchChange(e.target.value)}
+                        placeholder="Search customer, mobile, vehicle, slug, device, IP..."
+                        style={{
+                          width: '100%', padding: '6px 28px 6px 32px', borderRadius: '10px',
+                          border: '1px solid #cbd5e1', fontSize: '12px', fontWeight: 500,
+                          color: '#0f172a', background: 'white', fontFamily: 'inherit', outline: 'none',
+                        }}
+                      />
+                      {smsSearch && (
+                        <button
+                          type="button"
+                          onClick={() => handleSmsSearchChange('')}
+                          style={{
+                            position: 'absolute', right: '7px', border: 'none', background: 'transparent',
+                            color: '#64748b', cursor: 'pointer', fontSize: '13px', padding: '2px 4px',
+                          }}
+                        >
+                          <i className="bi bi-x-circle-fill"></i>
+                        </button>
+                      )}
+                    </div>
+
+                    <select
+                      value={smsSort}
+                      onChange={(e) => handleSmsSortChange(e.target.value)}
+                      style={{
+                        padding: '6px 10px', borderRadius: '10px', border: '1px solid #cbd5e1',
+                        fontSize: '12px', fontWeight: 700, color: '#0f172a', background: 'white',
+                        fontFamily: 'inherit', cursor: 'pointer', outline: 'none',
+                      }}
+                    >
+                      <option value="newest">Sort: Newest Sent</option>
+                      <option value="opened_first">Sort: Opened First</option>
+                      <option value="failed_first">Sort: Failed First</option>
+                      <option value="customer_az">Sort: Customer Name (A–Z)</option>
+                      <option value="oldest">Sort: Oldest First</option>
+                    </select>
+                  </div>
+                </div>
+
+                {filteredSmsRows.length === 0 ? (
+                  <div style={{ padding: '40px 20px', textAlign: 'center', color: '#94a3b8', fontSize: '13.5px' }}>
+                    No maintenance reminder SMS records match this filter.
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                        <thead>
+                          <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                            <th style={{ padding: '11px 16px' }}>Customer & Mobile</th>
+                            <th style={{ padding: '11px 12px' }}>Vehicle & Booking</th>
+                            <th style={{ padding: '11px 12px' }}>SMS Delivery (ITEXMO)</th>
+                            <th style={{ padding: '11px 12px' }}>Magic Link & Open Status</th>
+                            <th style={{ padding: '11px 12px' }}>App Activity</th>
+                            <th style={{ padding: '11px 12px' }}>Device & IP Used</th>
+                            <th style={{ padding: '11px 16px', textAlign: 'right' }}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {pagedSmsRows.map((row) => {
+                            const isSent = row.sms_status === 'Sent';
+                            const isOpened = Number(row.access_count || 0) > 0;
+                            const isAppOnline = row.app_last_seen_at && (Date.now() - new Date(row.app_last_seen_at).getTime()) <= 5 * 60 * 1000;
+                            const isAppActive = Number(row.app_sessions || 0) > 0;
+                            return (
+                              <tr key={row.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                {/* 1. Customer & Mobile */}
+                                <td style={{ padding: '12px 16px' }}>
+                                  <div style={{ fontWeight: 700, color: '#0f172a' }}>{row.customer_name || 'Unknown'}</div>
+                                  <div style={{ fontSize: '11.5px', color: '#64748b', fontFamily: 'monospace' }}>
+                                    {row.customer_mobile || 'No mobile'} • ID #{row.customer_id}
+                                  </div>
+                                </td>
+
+                                {/* 2. Vehicle & Booking */}
+                                <td style={{ padding: '12px 12px' }}>
+                                  <div style={{ fontWeight: 700, color: '#1d4ed8', fontSize: '12.5px' }}>
+                                    <i className="bi bi-car-front-fill" style={{ marginRight: '5px' }}></i>
+                                    {[row.vehicle_make, row.vehicle_model].filter(Boolean).join(' ') || 'Vehicle'}
+                                  </div>
+                                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                                    Booking #{row.booking_id || '—'} • Reminder #{row.reminder_id || '—'}
+                                  </div>
+                                </td>
+
+                                {/* 3. SMS Delivery */}
+                                <td style={{ padding: '12px 12px' }}>
+                                  <span style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: '5px',
+                                    padding: '3px 9px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 700,
+                                    background: isSent ? '#dcfce7' : '#fef2f2',
+                                    color: isSent ? '#15803d' : '#dc2626',
+                                    border: `1px solid ${isSent ? '#86efac' : '#fecaca'}`,
+                                    whiteSpace: 'nowrap',
+                                  }}>
+                                    <i className={`bi ${isSent ? 'bi-check-circle-fill' : 'bi-x-circle-fill'}`}></i>
+                                    {isSent ? 'Sent & Delivered' : 'Failed (Invalid #)'}
+                                  </span>
+                                  <div style={{ fontSize: '10.5px', color: '#64748b', marginTop: '4px', fontFamily: 'monospace' }}>
+                                    {row.created_at ? new Date(row.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' }) : ''}
+                                  </div>
+                                  {row.itexmo_ref_id ? (
+                                    <div style={{ fontSize: '10px', color: '#94a3b8', fontFamily: 'monospace' }}>
+                                      Ref: {row.itexmo_ref_id.slice(0, 14)}... ({row.sms_credits || 2} cr)
+                                    </div>
+                                  ) : !isSent && row.sms_log_detail ? (
+                                    <div style={{ fontSize: '10.5px', color: '#dc2626', marginTop: '2px', maxWidth: '210px' }}>
+                                      {row.sms_log_detail.replace(/^.*ITEXMO Error:\s*/i, 'ITEXMO: ')}
+                                    </div>
+                                  ) : null}
+                                </td>
+
+                                {/* 4. Magic Link & Open Status */}
+                                <td style={{ padding: '12px 12px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <code style={{
+                                      fontSize: '11px', color: '#1d4ed8', background: '#f8fafc',
+                                      border: '1px solid #e2e8f0', borderRadius: '6px', padding: '2px 6px', fontWeight: 700,
+                                    }}>
+                                      {row.short_url || `maskpro.link/${row.slug}`}
+                                    </code>
+                                    <button
+                                      onClick={() => {
+                                        navigator.clipboard?.writeText(`https://${row.short_url || `maskpro.link/${row.slug}`}`);
+                                        showToast('Short magic link copied');
+                                      }}
+                                      title="Copy short link"
+                                      style={{
+                                        border: 'none', background: '#e2e8f0', color: '#334155',
+                                        borderRadius: '5px', padding: '2px 5px', fontSize: '10.5px', cursor: 'pointer',
+                                      }}
+                                    >
+                                      <i className="bi bi-clipboard"></i>
+                                    </button>
+                                  </div>
+                                  <div style={{ marginTop: '5px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                    <span style={{
+                                      display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                      fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '14px',
+                                      background: isOpened ? '#dbeafe' : '#f1f5f9',
+                                      color: isOpened ? '#1d4ed8' : '#64748b',
+                                    }}>
+                                      <i className={`bi ${isOpened ? 'bi-envelope-open-fill' : 'bi-hourglass-split'}`}></i>
+                                      {isOpened ? `Opened (${row.access_count}x)` : 'Not Opened Yet'}
+                                    </span>
+                                    {Number(row.blocked_attempts || 0) > 0 && (
+                                      <span style={{
+                                        fontSize: '10.5px', fontWeight: 700, color: '#dc2626',
+                                        background: '#fef2f2', padding: '2px 6px', borderRadius: '10px',
+                                      }}>
+                                        {row.blocked_attempts} blocked
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+
+                                {/* 5. App Activity Status */}
+                                <td style={{ padding: '12px 12px' }}>
+                                  {isAppOnline ? (
+                                    <span style={{
+                                      display: 'inline-flex', alignItems: 'center', gap: '5px',
+                                      background: '#dcfce7', color: '#15803d', border: '1px solid #86efac',
+                                      padding: '3px 9px', borderRadius: '20px', fontSize: '11px', fontWeight: 800,
+                                      whiteSpace: 'nowrap',
+                                    }}>
+                                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#16a34a' }} />
+                                      Online Now
+                                    </span>
+                                  ) : isAppActive ? (
+                                    <div>
+                                      <span style={{
+                                        display: 'inline-flex', alignItems: 'center', gap: '5px',
+                                        background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe',
+                                        padding: '3px 9px', borderRadius: '20px', fontSize: '11px', fontWeight: 700,
+                                        whiteSpace: 'nowrap',
+                                      }}>
+                                        Used App ({row.app_sessions} sess)
+                                      </span>
+                                      <div style={{ fontSize: '10.5px', color: '#64748b', marginTop: '3px' }}>
+                                        Last seen: {formatTimeAgo(row.app_last_seen_at)}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <span style={{ fontSize: '11.5px', color: '#94a3b8', fontWeight: 600 }}>
+                                      Awaiting 1st Click
+                                    </span>
+                                  )}
+                                </td>
+
+                                {/* 6. Device & IP Used */}
+                                <td style={{ padding: '12px 12px' }}>
+                                  {row.bound_platform || row.bound_ip ? (
+                                    <div>
+                                      <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '12px' }}>
+                                        <i className="bi bi-phone-fill" style={{ color: '#10b981', marginRight: '4px' }}></i>
+                                        {row.bound_platform || 'Bound Device'}
+                                      </div>
+                                      {row.bound_browser && (
+                                        <div style={{ fontSize: '10.5px', color: '#475569' }}>
+                                          {row.bound_browser}
+                                        </div>
+                                      )}
+                                      <div style={{ fontSize: '11px', color: '#334155', fontFamily: 'monospace', marginTop: '2px' }}>
+                                        IP: {row.bound_ip || '—'}
+                                      </div>
+                                      {row.bound_location && (
+                                        <div style={{ fontSize: '10.5px', color: '#64748b' }}>
+                                          {row.bound_location}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span style={{ fontSize: '11.5px', color: '#94a3b8' }}>
+                                      — Not bound yet
+                                    </span>
+                                  )}
+                                </td>
+
+                                {/* 7. Actions */}
+                                <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                                  <button
+                                    onClick={() => handleImpersonate(row.customer_id, row.customer_name)}
+                                    style={{
+                                      background: 'rgba(245, 158, 11, 0.15)', color: '#b45309',
+                                      border: '1px solid rgba(245, 158, 11, 0.35)', borderRadius: '8px',
+                                      padding: '5px 10px', fontSize: '11.5px', fontWeight: 700,
+                                      cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                                    }}
+                                  >
+                                    <i className="bi bi-box-arrow-in-right" style={{ marginRight: '4px' }}></i>
+                                    Login as
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Pagination Bar (8 per page) */}
+                    <div style={{
+                      padding: '12px 20px', background: '#f8fafc', borderTop: '1px solid #e2e8f0',
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px',
+                    }}>
+                      <div style={{ fontSize: '12px', color: '#64748b' }}>
+                        Showing <strong>{(safeSmsPage - 1) * SMS_PER_PAGE + 1}</strong>–<strong>{Math.min(safeSmsPage * SMS_PER_PAGE, totalSmsFiltered)}</strong> of <strong>{totalSmsFiltered}</strong> maintenance reminder SMS (8 per page)
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <button
+                          disabled={safeSmsPage <= 1}
+                          onClick={() => handleSmsPageChange(safeSmsPage - 1)}
+                          style={{
+                            padding: '5px 11px', borderRadius: '8px', fontSize: '12px', fontWeight: 700,
+                            border: '1px solid #cbd5e1', background: safeSmsPage <= 1 ? '#f1f5f9' : 'white',
+                            color: safeSmsPage <= 1 ? '#94a3b8' : '#0f172a',
+                            cursor: safeSmsPage <= 1 ? 'not-allowed' : 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                          }}
+                        >
+                          Prev
+                        </button>
+                        {Array.from({ length: totalSmsPages }, (_, idx) => idx + 1).slice(0, 7).map((pNum) => (
+                          <button
+                            key={pNum}
+                            onClick={() => handleSmsPageChange(pNum)}
+                            style={{
+                              minWidth: '30px', height: '30px', borderRadius: '8px', fontSize: '12px', fontWeight: 700,
+                              border: safeSmsPage === pNum ? '1px solid #2563eb' : '1px solid #cbd5e1',
+                              background: safeSmsPage === pNum ? '#2563eb' : 'white',
+                              color: safeSmsPage === pNum ? 'white' : '#334155',
+                              cursor: 'pointer', fontFamily: 'inherit',
+                            }}
+                          >
+                            {pNum}
+                          </button>
+                        ))}
+                        <button
+                          disabled={safeSmsPage >= totalSmsPages}
+                          onClick={() => handleSmsPageChange(safeSmsPage + 1)}
+                          style={{
+                            padding: '5px 11px', borderRadius: '8px', fontSize: '12px', fontWeight: 700,
+                            border: '1px solid #cbd5e1', background: safeSmsPage >= totalSmsPages ? '#f1f5f9' : 'white',
+                            color: safeSmsPage >= totalSmsPages ? '#94a3b8' : '#0f172a',
+                            cursor: safeSmsPage >= totalSmsPages ? 'not-allowed' : 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                          }}
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
+
           {/* ─── 2nd to Last: Who Uses the App (Active Customers & Device Log — 10 per page + Lazy Prefetch) ─── */}
           {(() => {
             const USERS_PER_PAGE = 10;
@@ -744,15 +1284,30 @@ export default function AdminPanel() {
                       Who Uses the App (Active Customers & Device Log)
                     </h3>
                     <p style={{ margin: '2px 0 0', fontSize: '12.5px', color: '#64748b' }}>
-                      Recent customers who logged in or accessed MASKPRO Care across Web, Android, and iOS (10 per page)
+                      Live presence (Online Now = active in last 5m) & historical device sessions across Web, Android, and iOS (10 per page)
                     </p>
                   </div>
-                  <span style={{
-                    background: '#f8fafc', border: '1px solid #e2e8f0', color: '#475569',
-                    fontSize: '12px', fontWeight: 700, padding: '5px 11px', borderRadius: '20px', whiteSpace: 'nowrap',
-                  }}>
-                    Total Device Sessions: {totalUserRows}
-                  </span>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <span style={{
+                      background: (kpis.live_online_users || 0) > 0 ? '#dcfce7' : '#f1f5f9',
+                      border: `1px solid ${(kpis.live_online_users || 0) > 0 ? '#86efac' : '#cbd5e1'}`,
+                      color: (kpis.live_online_users || 0) > 0 ? '#15803d' : '#64748b',
+                      fontSize: '12px', fontWeight: 700, padding: '5px 11px', borderRadius: '20px', whiteSpace: 'nowrap',
+                      display: 'inline-flex', alignItems: 'center', gap: '6px',
+                    }}>
+                      <span style={{
+                        width: '7px', height: '7px', borderRadius: '50%',
+                        background: (kpis.live_online_users || 0) > 0 ? '#16a34a' : '#94a3b8',
+                      }} />
+                      Online Right Now: {kpis.live_online_users || 0}
+                    </span>
+                    <span style={{
+                      background: '#f8fafc', border: '1px solid #e2e8f0', color: '#475569',
+                      fontSize: '12px', fontWeight: 700, padding: '5px 11px', borderRadius: '20px', whiteSpace: 'nowrap',
+                    }}>
+                      Historical Device Rows: {totalUserRows}
+                    </span>
+                  </div>
                 </div>
 
                 {dashLoading && activeUsers.length === 0 ? (
@@ -766,8 +1321,9 @@ export default function AdminPanel() {
                         <thead>
                           <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', textAlign: 'left', fontSize: '11.5px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
                             <th style={{ padding: '12px 18px' }}>Customer</th>
+                            <th style={{ padding: '12px 14px' }}>Live Status</th>
                             <th style={{ padding: '12px 14px' }}>Platform</th>
-                            <th style={{ padding: '12px 14px' }}>Device / Auth</th>
+                            <th style={{ padding: '12px 14px' }}>Device / Auth / IP</th>
                             <th style={{ padding: '12px 14px', textAlign: 'center' }}>Sessions</th>
                             <th style={{ padding: '12px 14px' }}>Last Active</th>
                             <th style={{ padding: '12px 18px', textAlign: 'right' }}>Action</th>
@@ -776,6 +1332,8 @@ export default function AdminPanel() {
                         <tbody>
                           {pagedUsers.map((u) => {
                             const badge = getPlatformBadge(u.platform);
+                            const isOnlineNow = u.presence_status === 'online' || (u.last_seen_at && (Date.now() - new Date(u.last_seen_at).getTime()) <= 5 * 60 * 1000);
+                            const isToday = u.presence_status === 'today';
                             return (
                               <tr key={u.telemetry_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                                 <td style={{ padding: '12px 18px' }}>
@@ -783,6 +1341,22 @@ export default function AdminPanel() {
                                   <div style={{ fontSize: '12px', color: '#64748b', fontFamily: 'monospace' }}>
                                     {u.mobile_number} • {u.booking_count || 0} bookings
                                   </div>
+                                </td>
+                                <td style={{ padding: '12px 14px' }}>
+                                  <span style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: '5px',
+                                    background: isOnlineNow ? '#dcfce7' : isToday ? '#eff6ff' : '#f1f5f9',
+                                    color: isOnlineNow ? '#15803d' : isToday ? '#1d4ed8' : '#64748b',
+                                    border: `1px solid ${isOnlineNow ? '#86efac' : isToday ? '#bfdbfe' : '#cbd5e1'}`,
+                                    padding: '4px 10px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 700,
+                                    whiteSpace: 'nowrap',
+                                  }}>
+                                    <span style={{
+                                      width: '6px', height: '6px', borderRadius: '50%',
+                                      background: isOnlineNow ? '#16a34a' : isToday ? '#2563eb' : '#94a3b8',
+                                    }} />
+                                    {isOnlineNow ? 'Online Now' : isToday ? 'Idle (Today)' : 'Offline'}
+                                  </span>
                                 </td>
                                 <td style={{ padding: '12px 14px' }}>
                                   <span style={{
@@ -797,13 +1371,18 @@ export default function AdminPanel() {
                                 </td>
                                 <td style={{ padding: '12px 14px', color: '#475569', fontSize: '12.5px' }}>
                                   <div style={{ fontWeight: 600 }}>{u.device_label || u.app_type}</div>
-                                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>via {u.auth_method || 'session'}</div>
+                                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                                    via {u.auth_method || 'session'}{u.ip_address ? ` • IP: ${u.ip_address}` : ''}
+                                  </div>
                                 </td>
                                 <td style={{ padding: '12px 14px', textAlign: 'center', fontWeight: 700, color: '#0f172a' }}>
                                   {u.session_count || 1}
                                 </td>
                                 <td style={{ padding: '12px 14px', color: '#475569', fontSize: '12.5px', whiteSpace: 'nowrap' }}>
-                                  {formatTimeAgo(u.last_seen_at)}
+                                  <div style={{ fontWeight: 700, color: '#0f172a' }}>{formatTimeAgo(u.last_seen_at)}</div>
+                                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                                    {u.last_seen_at ? new Date(u.last_seen_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''}
+                                  </div>
                                 </td>
                                 <td style={{ padding: '12px 18px', textAlign: 'right' }}>
                                   <button

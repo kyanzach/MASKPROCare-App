@@ -177,14 +177,14 @@ export default function Layout() {
 
   // Bell icon component (reused in sidebar + mobile header)
   const BellIcon = ({ style, placement = 'mobile' }) => (
-    <div data-notif-container="true" style={{ position: 'relative', ...style }}>
+    <div data-notif-container="true" style={{ position: 'relative', flexShrink: 0, ...style }}>
       <button
         onClick={toggleNotifDropdown}
         style={{
           background: notifOpen ? 'rgba(59,130,246,0.1)' : 'transparent',
-          border: 'none', borderRadius: '12px', padding: '10px',
+          border: 'none', borderRadius: '12px', padding: placement === 'mobile' ? '7px' : '10px',
           cursor: 'pointer', position: 'relative', transition: 'all 0.2s',
-          color: '#64748b', fontSize: '20px',
+          color: '#64748b', fontSize: placement === 'mobile' ? '18px' : '20px',
         }}
       >
         <i className="bi bi-bell"></i>
@@ -457,8 +457,8 @@ export default function Layout() {
       <div className="main-content">
         {/* Mobile Header */}
         <div className="top-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-            <button className="menu-toggle" onClick={() => setSidebarOpen(true)} title="Open menu" aria-label="Open menu">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+            <button className="menu-toggle" onClick={() => setSidebarOpen(true)} title="Open menu" aria-label="Open menu" style={{ padding: '8px 11px', flexShrink: 0 }}>
               <i className="bi bi-list"></i>
             </button>
             <div
@@ -467,36 +467,38 @@ export default function Layout() {
               role="button"
               tabIndex={0}
               title="Back to Dashboard"
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}
+              style={{ display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer', userSelect: 'none', minWidth: 0 }}
             >
-              <img src="/maskpro_logo.png" alt="MaskPro" style={{ width: '32px', height: '32px', borderRadius: '8px', flexShrink: 0 }} />
-              <h1 style={{ margin: 0, fontSize: '20px', lineHeight: 1 }}>MASKPRO<span style={{ WebkitTextFillColor: '#06b6d4' }}>Care</span></h1>
+              <img src="/maskpro_logo.png" alt="MaskPro" style={{ width: '30px', height: '30px', borderRadius: '8px', flexShrink: 0 }} />
+              <h1 style={{ margin: 0, fontSize: 'clamp(16px, 4.3vw, 19px)', lineHeight: 1.1, whiteSpace: 'nowrap' }}>
+                MASKPRO<span style={{ WebkitTextFillColor: '#06b6d4' }}>Care</span>
+              </h1>
             </div>
           </div>
-          <div className="top-header-right" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, marginLeft: 'auto' }}>
+          <div className="top-header-right" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0, marginLeft: '6px' }}>
             {/* Admin Shield Button (strictly Admin-only, matching Android & iOS) */}
             {isAdmin && (
               <button
                 onClick={() => navigate('/admin')}
                 title="Admin Panel"
                 style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '5px',
+                  display: 'inline-flex', alignItems: 'center', gap: '4px',
                   background: 'rgba(245, 158, 11, 0.14)', border: '1px solid rgba(245, 158, 11, 0.35)',
-                  color: '#d97706', padding: '6px 12px', borderRadius: '10px',
-                  fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
-                  whiteSpace: 'nowrap',
+                  color: '#d97706', padding: '5px 9px', borderRadius: '9px',
+                  fontSize: '11.5px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                  whiteSpace: 'nowrap', flexShrink: 0,
                 }}
               >
-                <i className="bi bi-shield-lock-fill" style={{ fontSize: '13px' }}></i>
+                <i className="bi bi-shield-lock-fill" style={{ fontSize: '11.5px' }}></i>
                 <span>Admin</span>
               </button>
             )}
             {/* Bell in mobile header */}
             <BellIcon placement="mobile" />
             {profilePhoto ? (
-              <img src={profilePhoto} alt="" onClick={() => navigate('/profile')} style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', cursor: 'pointer', border: '2px solid #e0e7ff' }} />
+              <img src={profilePhoto} alt="" onClick={() => navigate('/profile')} style={{ width: '34px', height: '34px', borderRadius: '50%', objectFit: 'cover', cursor: 'pointer', border: '2px solid #e0e7ff', flexShrink: 0 }} />
             ) : (
-              <div className="sidebar-avatar" style={{ width: '36px', height: '36px', fontSize: '14px', cursor: 'pointer' }}
+              <div className="sidebar-avatar" style={{ width: '34px', height: '34px', fontSize: '13px', cursor: 'pointer', flexShrink: 0 }}
                    onClick={() => navigate('/profile')}>
                 {initials}
               </div>
