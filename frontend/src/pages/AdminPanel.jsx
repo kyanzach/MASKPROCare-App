@@ -798,22 +798,23 @@ export default function AdminPanel() {
 
             const filteredSmsRows = smsReminderLogs
               .filter((r) => {
-                if (smsFilter === 'today') {
-                  if (!r.created_at) return false;
-                  const rowDate = new Date(r.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
-                  const todayDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
-                  if (rowDate !== todayDate) return false;
-                } else if (smsFilter === 'sent' && r.sms_status !== 'Sent') {
-                  return false;
-                } else if (smsFilter === 'failed' && r.sms_status !== 'Failed') {
-                  return false;
-                } else if (smsFilter === 'opened' && Number(r.access_count || 0) <= 0) {
-                  return false;
-                } else if (smsFilter === 'unopened' && (Number(r.access_count || 0) > 0 || r.sms_status !== 'Sent')) {
-                  return false;
+                if (!smsQuery) {
+                  if (smsFilter === 'today') {
+                    if (!r.created_at) return false;
+                    const rowDate = new Date(r.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+                    const todayDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+                    if (rowDate !== todayDate) return false;
+                  } else if (smsFilter === 'sent' && r.sms_status !== 'Sent') {
+                    return false;
+                  } else if (smsFilter === 'failed' && r.sms_status !== 'Failed') {
+                    return false;
+                  } else if (smsFilter === 'opened' && Number(r.access_count || 0) <= 0) {
+                    return false;
+                  } else if (smsFilter === 'unopened' && (Number(r.access_count || 0) > 0 || r.sms_status !== 'Sent')) {
+                    return false;
+                  }
+                  return true;
                 }
-
-                if (!smsQuery) return true;
                 const blob = [
                   r.customer_name,
                   r.customer_mobile,
@@ -1081,46 +1082,65 @@ export default function AdminPanel() {
 
                                 {/* 4. Magic Link & Open Status */}
                                 <td style={{ padding: '12px 12px' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <code style={{
-                                      fontSize: '11px', color: '#1d4ed8', background: '#f8fafc',
-                                      border: '1px solid #e2e8f0', borderRadius: '6px', padding: '2px 6px', fontWeight: 700,
-                                    }}>
-                                      {row.short_url || `maskpro.link/${row.slug}`}
-                                    </code>
-                                    <button
-                                      onClick={() => {
-                                        navigator.clipboard?.writeText(`https://${row.short_url || `maskpro.link/${row.slug}`}`);
-                                        showToast('Short magic link copied');
-                                      }}
-                                      title="Copy short link"
-                                      style={{
-                                        border: 'none', background: '#e2e8f0', color: '#334155',
-                                        borderRadius: '5px', padding: '2px 5px', fontSize: '10.5px', cursor: 'pointer',
-                                      }}
-                                    >
-                                      <i className="bi bi-clipboard"></i>
-                                    </button>
-                                  </div>
-                                  <div style={{ marginTop: '5px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                    <span style={{
-                                      display: 'inline-flex', alignItems: 'center', gap: '4px',
-                                      fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '14px',
-                                      background: isOpened ? '#dbeafe' : '#f1f5f9',
-                                      color: isOpened ? '#1d4ed8' : '#64748b',
-                                    }}>
-                                      <i className={`bi ${isOpened ? 'bi-envelope-open-fill' : 'bi-hourglass-split'}`}></i>
-                                      {isOpened ? `Opened (${row.access_count}x)` : 'Not Opened Yet'}
-                                    </span>
-                                    {Number(row.blocked_attempts || 0) > 0 && (
+                                  {row.slug || row.short_url ? (
+                                    <>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <code style={{
+                                          fontSize: '11px', color: '#1d4ed8', background: '#f8fafc',
+                                          border: '1px solid #e2e8f0', borderRadius: '6px', padding: '2px 6px', fontWeight: 700,
+                                        }}>
+                                          {row.short_url || `maskpro.link/${row.slug}`}
+                                        </code>
+                                        <button
+                                          onClick={() => {
+                                            navigator.clipboard?.writeText(`https://${row.short_url || `maskpro.link/${row.slug}`}`);
+                                            showToast('Short magic link copied');
+                                          }}
+                                          title="Copy short link"
+                                          style={{
+                                            border: 'none', background: '#e2e8f0', color: '#334155',
+                                            borderRadius: '5px', padding: '2px 5px', fontSize: '10.5px', cursor: 'pointer',
+                                          }}
+                                        >
+                                          <i className="bi bi-clipboard"></i>
+                                        </button>
+                                      </div>
+                                      <div style={{ marginTop: '5px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                        <span style={{
+                                          display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                          fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '14px',
+                                          background: isOpened ? '#dbeafe' : '#f1f5f9',
+                                          color: isOpened ? '#1d4ed8' : '#64748b',
+                                        }}>
+                                          <i className={`bi ${isOpened ? 'bi-envelope-open-fill' : 'bi-hourglass-split'}`}></i>
+                                          {isOpened ? `Opened (${row.access_count}x)` : 'Not Opened Yet'}
+                                        </span>
+                                        {Number(row.blocked_attempts || 0) > 0 && (
+                                          <span style={{
+                                            fontSize: '10.5px', fontWeight: 700, color: '#dc2626',
+                                            background: '#fef2f2', padding: '2px 6px', borderRadius: '10px',
+                                          }}>
+                                            {row.blocked_attempts} blocked
+                                          </span>
+                                        )}
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div>
                                       <span style={{
-                                        fontSize: '10.5px', fontWeight: 700, color: '#dc2626',
-                                        background: '#fef2f2', padding: '2px 6px', borderRadius: '10px',
+                                        display: 'inline-flex', alignItems: 'center', gap: '5px',
+                                        fontSize: '11px', fontWeight: 700, padding: '3px 9px', borderRadius: '14px',
+                                        background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca',
+                                        whiteSpace: 'nowrap',
                                       }}>
-                                        {row.blocked_attempts} blocked
+                                        <i className="bi bi-slash-circle-fill"></i>
+                                        No Magic Link Created
                                       </span>
-                                    )}
-                                  </div>
+                                      <div style={{ fontSize: '10.5px', color: '#64748b', marginTop: '4px' }}>
+                                        Skipped: Invalid / Missing Mobile #
+                                      </div>
+                                    </div>
+                                  )}
                                 </td>
 
                                 {/* 5. App Activity Status */}

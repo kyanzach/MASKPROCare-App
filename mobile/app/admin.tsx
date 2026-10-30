@@ -638,10 +638,12 @@ export default function AdminPanelScreen() {
               const SMS_PER_PAGE = 8;
               const qSms = smsSearch.trim().toLowerCase();
               const filteredSms = smsReminderLogs.filter((r: any) => {
-                if (smsFilter === 'sent' && r.sms_status !== 'Sent') return false;
-                if (smsFilter === 'failed' && r.sms_status !== 'Failed') return false;
-                if (smsFilter === 'opened' && Number(r.access_count || 0) <= 0) return false;
-                if (!qSms) return true;
+                if (!qSms) {
+                  if (smsFilter === 'sent' && r.sms_status !== 'Sent') return false;
+                  if (smsFilter === 'failed' && r.sms_status !== 'Failed') return false;
+                  if (smsFilter === 'opened' && Number(r.access_count || 0) <= 0) return false;
+                  return true;
+                }
                 const blob = [
                   r.customer_name,
                   r.customer_mobile,
@@ -695,10 +697,12 @@ export default function AdminPanelScreen() {
                           </Text>
                         </View>
                         <Text style={styles.activeUserSub}>
-                          {row.customer_mobile} • {row.short_url || `maskpro.link/${row.slug}`}
+                          {row.customer_mobile} • {row.slug || row.short_url ? (row.short_url || `maskpro.link/${row.slug}`) : 'No Magic Link (Invalid Mobile #)'}
                         </Text>
                         <Text style={styles.activeUserSub}>
-                          {isOpened ? `Opened (${row.access_count}x)` : 'Not Opened Yet'}
+                          {row.slug || row.short_url
+                            ? (isOpened ? `Opened (${row.access_count}x)` : 'Not Opened Yet')
+                            : 'Skipped by Sanitary Pre-Check'}
                           {row.bound_platform ? ` • Device: ${row.bound_platform}` : ''}
                           {row.bound_ip ? ` • IP: ${row.bound_ip}` : ''}
                         </Text>

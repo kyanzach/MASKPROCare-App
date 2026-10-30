@@ -1,5 +1,12 @@
 # Changelog
 
+## [v1.17.17] — 2026-10-30
+### Fixed & Improved
+- **Preserved Karl Silagan's Primary Magic Link (`-01`) & Added Sanitary Pre-Check `No Magic Link Created` View for Invalid Mobile Numbers (`server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`, `mobile/app/admin.tsx`)**:
+  - Restored Karl Silagan's single primary magic link (`maskpro.link/karls-suzukispress-01`, `ID #4494`, `Booking #9701`) while keeping the 13 duplicate links (`-02` to `-14`) removed so his record remains searchable and intact.
+  - Removed wasted magic links for invalid/missing mobile number accounts (`Raiza Maway` `"No mobile number, find and update it please."` and `Ariel Uriarte` `91770441932` + duplicate `-02`) and updated `server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`, and `mobile/app/admin.tsx` to display failed invalid-mobile reminders with a **`No Magic Link Created` / `Skipped: Invalid / Missing Mobile #`** badge instead of generating useless `maskpro.link` URLs.
+  - Updated search in `AdminPanel.jsx` and `mobile/app/admin.tsx` to search across all reminder records regardless of the active filter tab.
+
 ## [v1.17.16] — 2026-10-30
 ### Fixed
 - **Fixed False-Positive `Failed (Invalid #)` Status on Future `Pending` PMS Reminders in Maintenance SMS Tracker (`server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`, `mobile/app/admin.tsx`)**:

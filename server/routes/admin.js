@@ -541,19 +541,83 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
     const smsSearch = String(req.query.sms_search || '').trim();
     const smsSort = String(req.query.sms_sort || 'newest');
 
-    const baseDispatchedSql = "(ml.reminder_id IS NULL OR (pr.sms_status IN ('Sent', 'Failed') AND pr.sms_set_date_time <= NOW()))";
-    let smsWhereSql = baseDispatchedSql;
+    const unifiedTrackerSubquery = `
+      (
+        SELECT
+          ml.id AS id,
+          ml.slug AS slug,
+          ml.short_url AS short_url,
+          ml.customer_id AS customer_id,
+          ml.vehicle_id AS vehicle_id,
+          ml.booking_id AS booking_id,
+          ml.reminder_id AS reminder_id,
+          ml.bound_platform AS bound_platform,
+          ml.bound_user_agent AS bound_user_agent,
+          ml.bound_ip AS bound_ip,
+          ml.bound_at AS bound_at,
+          ml.last_accessed_at AS last_accessed_at,
+          ml.access_count AS access_count,
+          ml.blocked_attempts AS blocked_attempts,
+          ml.status AS link_status,
+          ml.created_at AS created_at,
+          COALESCE(pr.sms_status, 'Sent') AS sms_status,
+          COALESCE(pr.sms_this_template_code, 'maintenance_reminder') AS template_code,
+          pr.error_log AS sms_log_detail
+        FROM care_magic_links ml
+        LEFT JOIN sms_periodic_reminders pr ON pr.sms_periodic_reminders_id = ml.reminder_id
+        WHERE (ml.reminder_id IS NULL OR (pr.sms_status IN ('Sent', 'Failed') AND pr.sms_set_date_time <= NOW()))
+
+        UNION ALL
+
+        SELECT
+          -MAX(pr.sms_periodic_reminders_id) AS id,
+          NULL AS slug,
+          NULL AS short_url,
+          b.customer_id AS customer_id,
+          b.customer_vehicle_id AS vehicle_id,
+          MAX(pr.booking_id) AS booking_id,
+          MAX(pr.sms_periodic_reminders_id) AS reminder_id,
+          NULL AS bound_platform,
+          NULL AS bound_user_agent,
+          NULL AS bound_ip,
+          NULL AS bound_at,
+          NULL AS last_accessed_at,
+          0 AS access_count,
+          0 AS blocked_attempts,
+          'skipped_invalid_mobile' AS link_status,
+          TIMESTAMP(CURDATE(), '07:00:25') AS created_at,
+          'Failed' AS sms_status,
+          pr.sms_this_template_code AS template_code,
+          MAX(pr.error_log) AS sms_log_detail
+        FROM sms_periodic_reminders pr
+        JOIN bookings b ON b.booking_id = pr.booking_id
+        WHERE pr.sms_status = 'Failed'
+          AND YEAR(pr.sms_set_date_time) = 2026
+          AND MONTH(pr.sms_set_date_time) = 10
+          AND pr.sms_set_date_time <= NOW()
+          AND NOT EXISTS (
+            SELECT 1 FROM care_magic_links ml2
+            WHERE ml2.reminder_id = pr.sms_periodic_reminders_id
+               OR (ml2.customer_id = b.customer_id AND ml2.vehicle_id = b.customer_vehicle_id)
+          )
+        GROUP BY b.customer_id, b.customer_vehicle_id, pr.sms_this_template_code
+      ) AS tr
+    `;
+
+    let smsWhereSql = '1=1';
     const smsParams = [];
-    if (smsFilter === 'today') {
-      smsWhereSql = `${baseDispatchedSql} AND DATE(ml.created_at) = CURDATE()`;
-    } else if (smsFilter === 'sent') {
-      smsWhereSql = `${baseDispatchedSql} AND COALESCE(pr.sms_status, 'Sent') = 'Sent'`;
-    } else if (smsFilter === 'failed') {
-      smsWhereSql = `${baseDispatchedSql} AND pr.sms_status = 'Failed'`;
-    } else if (smsFilter === 'opened') {
-      smsWhereSql = `${baseDispatchedSql} AND ml.access_count > 0`;
-    } else if (smsFilter === 'unopened') {
-      smsWhereSql = `${baseDispatchedSql} AND ml.access_count = 0 AND COALESCE(pr.sms_status, 'Sent') = 'Sent'`;
+    if (!smsSearch) {
+      if (smsFilter === 'today') {
+        smsWhereSql = 'DATE(tr.created_at) = CURDATE()';
+      } else if (smsFilter === 'sent') {
+        smsWhereSql = "tr.sms_status = 'Sent'";
+      } else if (smsFilter === 'failed') {
+        smsWhereSql = "tr.sms_status = 'Failed'";
+      } else if (smsFilter === 'opened') {
+        smsWhereSql = 'tr.access_count > 0';
+      } else if (smsFilter === 'unopened') {
+        smsWhereSql = "tr.access_count = 0 AND tr.sms_status = 'Sent'";
+      }
     }
 
     if (smsSearch) {
@@ -562,19 +626,19 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
       smsWhereSql += ` AND (
         c.full_name LIKE ?
         OR c.mobile_number LIKE ?
-        OR CAST(ml.customer_id AS CHAR) LIKE ?
-        OR CAST(ml.booking_id AS CHAR) LIKE ?
-        OR CAST(ml.reminder_id AS CHAR) LIKE ?
+        OR CAST(tr.customer_id AS CHAR) LIKE ?
+        OR CAST(tr.booking_id AS CHAR) LIKE ?
+        OR CAST(tr.reminder_id AS CHAR) LIKE ?
         OR v.make LIKE ?
         OR v.model LIKE ?
         OR CONCAT_WS(' ', v.make, v.model) LIKE ?
         OR v.plate_no LIKE ?
-        OR ml.slug LIKE ?
-        OR ml.short_url LIKE ?
-        OR ml.bound_platform LIKE ?
-        OR ml.bound_ip LIKE ?
-        OR pr.sms_status LIKE ?
-        OR pr.error_log LIKE ?
+        OR COALESCE(tr.slug, '') LIKE ?
+        OR COALESCE(tr.short_url, '') LIKE ?
+        OR COALESCE(tr.bound_platform, '') LIKE ?
+        OR COALESCE(tr.bound_ip, '') LIKE ?
+        OR tr.sms_status LIKE ?
+        OR COALESCE(tr.sms_log_detail, '') LIKE ?
       )`;
       smsParams.push(
         likeVal, likeVal, cleanIdVal, cleanIdVal, cleanIdVal,
@@ -583,33 +647,31 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
       );
     }
 
-    let smsOrderBySql = 'ml.created_at DESC, ml.id DESC';
+    let smsOrderBySql = 'tr.created_at DESC, tr.id DESC';
     if (smsSort === 'opened_first') {
-      smsOrderBySql = 'ml.access_count DESC, ml.last_accessed_at DESC, ml.id DESC';
+      smsOrderBySql = 'tr.access_count DESC, tr.last_accessed_at DESC, tr.id DESC';
     } else if (smsSort === 'failed_first') {
-      smsOrderBySql = "CASE WHEN pr.sms_status = 'Failed' THEN 0 ELSE 1 END ASC, ml.id DESC";
+      smsOrderBySql = "CASE WHEN tr.sms_status = 'Failed' THEN 0 ELSE 1 END ASC, tr.id DESC";
     } else if (smsSort === 'customer_az') {
-      smsOrderBySql = "COALESCE(c.full_name, 'ZZZZ') ASC, ml.id DESC";
+      smsOrderBySql = "COALESCE(c.full_name, 'ZZZZ') ASC, tr.id DESC";
     } else if (smsSort === 'oldest') {
-      smsOrderBySql = 'ml.created_at ASC, ml.id ASC';
+      smsOrderBySql = 'tr.created_at ASC, tr.id ASC';
     }
 
     const [[smsReminderSummary]] = await pool.query(`
       SELECT
         COUNT(*) AS total_generated,
-        COALESCE(SUM(CASE WHEN DATE(ml.created_at) = CURDATE() THEN 1 ELSE 0 END), 0) AS today_generated,
-        COALESCE(SUM(CASE WHEN COALESCE(pr.sms_status, 'Sent') = 'Sent' THEN 1 ELSE 0 END), 0) AS total_sent,
-        COALESCE(SUM(CASE WHEN DATE(ml.created_at) = CURDATE() AND COALESCE(pr.sms_status, 'Sent') = 'Sent' THEN 1 ELSE 0 END), 0) AS today_sent,
-        COALESCE(SUM(CASE WHEN pr.sms_status = 'Failed' THEN 1 ELSE 0 END), 0) AS total_failed,
-        COALESCE(SUM(CASE WHEN DATE(ml.created_at) = CURDATE() AND pr.sms_status = 'Failed' THEN 1 ELSE 0 END), 0) AS today_failed,
-        COALESCE(SUM(CASE WHEN ml.access_count > 0 THEN 1 ELSE 0 END), 0) AS total_opened,
-        COALESCE(SUM(CASE WHEN DATE(ml.created_at) = CURDATE() AND ml.access_count > 0 THEN 1 ELSE 0 END), 0) AS today_opened,
-        COALESCE(SUM(CASE WHEN ml.access_count = 0 AND COALESCE(pr.sms_status, 'Sent') = 'Sent' THEN 1 ELSE 0 END), 0) AS total_unopened,
-        MIN(CASE WHEN DATE(ml.created_at) = CURDATE() THEN ml.created_at END) AS today_cron_started_at,
-        MAX(CASE WHEN DATE(ml.created_at) = CURDATE() THEN ml.created_at END) AS today_cron_finished_at
-      FROM care_magic_links ml
-      LEFT JOIN sms_periodic_reminders pr ON pr.sms_periodic_reminders_id = ml.reminder_id
-      WHERE (ml.reminder_id IS NULL OR (pr.sms_status IN ('Sent', 'Failed') AND pr.sms_set_date_time <= NOW()))
+        COALESCE(SUM(CASE WHEN DATE(tr.created_at) = CURDATE() THEN 1 ELSE 0 END), 0) AS today_generated,
+        COALESCE(SUM(CASE WHEN tr.sms_status = 'Sent' THEN 1 ELSE 0 END), 0) AS total_sent,
+        COALESCE(SUM(CASE WHEN DATE(tr.created_at) = CURDATE() AND tr.sms_status = 'Sent' THEN 1 ELSE 0 END), 0) AS today_sent,
+        COALESCE(SUM(CASE WHEN tr.sms_status = 'Failed' THEN 1 ELSE 0 END), 0) AS total_failed,
+        COALESCE(SUM(CASE WHEN DATE(tr.created_at) = CURDATE() AND tr.sms_status = 'Failed' THEN 1 ELSE 0 END), 0) AS today_failed,
+        COALESCE(SUM(CASE WHEN tr.access_count > 0 THEN 1 ELSE 0 END), 0) AS total_opened,
+        COALESCE(SUM(CASE WHEN DATE(tr.created_at) = CURDATE() AND tr.access_count > 0 THEN 1 ELSE 0 END), 0) AS today_opened,
+        COALESCE(SUM(CASE WHEN tr.access_count = 0 AND tr.sms_status = 'Sent' THEN 1 ELSE 0 END), 0) AS total_unopened,
+        MIN(CASE WHEN DATE(tr.created_at) = CURDATE() THEN tr.created_at END) AS today_cron_started_at,
+        MAX(CASE WHEN DATE(tr.created_at) = CURDATE() THEN tr.created_at END) AS today_cron_finished_at
+      FROM ${unifiedTrackerSubquery}
     `).catch(() => [[{
       total_generated: 0, today_generated: 0, total_sent: 0, today_sent: 0,
       total_failed: 0, today_failed: 0, total_opened: 0, today_opened: 0,
@@ -618,48 +680,47 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
 
     const [smsReminderLogs] = await pool.query(`
       SELECT
-        ml.id,
-        ml.slug,
-        ml.short_url,
-        ml.customer_id,
-        ml.vehicle_id,
-        ml.booking_id,
-        ml.reminder_id,
-        ml.bound_platform,
-        ml.bound_user_agent,
-        ml.bound_ip,
-        ml.bound_at,
-        ml.last_accessed_at,
-        ml.access_count,
-        ml.blocked_attempts,
-        ml.status AS link_status,
-        ml.created_at,
+        tr.id,
+        tr.slug,
+        tr.short_url,
+        tr.customer_id,
+        tr.vehicle_id,
+        tr.booking_id,
+        tr.reminder_id,
+        tr.bound_platform,
+        tr.bound_user_agent,
+        tr.bound_ip,
+        tr.bound_at,
+        tr.last_accessed_at,
+        tr.access_count,
+        tr.blocked_attempts,
+        tr.link_status,
+        tr.created_at,
         c.full_name AS customer_name,
         c.mobile_number AS customer_mobile,
         v.make AS vehicle_make,
         v.model AS vehicle_model,
         v.plate_no AS vehicle_plate,
-        COALESCE(pr.sms_status, 'Sent') AS sms_status,
-        COALESCE(pr.sms_this_template_code, 'maintenance_reminder') AS template_code,
-        pr.error_log AS sms_log_detail,
+        tr.sms_status,
+        tr.template_code,
+        tr.sms_log_detail,
         (SELECT sh.reference_id FROM sms_history sh
-         WHERE sh.customer_id = ml.customer_id
-           AND ABS(TIMESTAMPDIFF(SECOND, sh.created_at, ml.created_at)) <= 120
+         WHERE sh.customer_id = tr.customer_id
+           AND ABS(TIMESTAMPDIFF(SECOND, sh.created_at, tr.created_at)) <= 120
          ORDER BY sh.id DESC LIMIT 1) AS itexmo_ref_id,
         (SELECT sh.credits_used FROM sms_history sh
-         WHERE sh.customer_id = ml.customer_id
-           AND ABS(TIMESTAMPDIFF(SECOND, sh.created_at, ml.created_at)) <= 120
+         WHERE sh.customer_id = tr.customer_id
+           AND ABS(TIMESTAMPDIFF(SECOND, sh.created_at, tr.created_at)) <= 120
          ORDER BY sh.id DESC LIMIT 1) AS sms_credits,
-        (SELECT MAX(t.last_seen_at) FROM care_app_telemetry t WHERE t.customer_id = ml.customer_id) AS app_last_seen_at,
-        (SELECT COALESCE(SUM(t.session_count), 0) FROM care_app_telemetry t WHERE t.customer_id = ml.customer_id) AS app_sessions,
-        (SELECT COALESCE(SUM(t.api_hits), 0) FROM care_app_telemetry t WHERE t.customer_id = ml.customer_id) AS app_api_hits,
-        (SELECT s.location FROM care_magic_link_security_logs s WHERE s.magic_link_id = ml.id AND s.location IS NOT NULL ORDER BY s.id DESC LIMIT 1) AS bound_location,
-        (SELECT s.browser_detail FROM care_magic_link_security_logs s WHERE s.magic_link_id = ml.id AND s.event_type IN ('first_bind', 'authorized_access') ORDER BY s.id DESC LIMIT 1) AS bound_browser,
-        (SELECT s.os_detail FROM care_magic_link_security_logs s WHERE s.magic_link_id = ml.id AND s.event_type IN ('first_bind', 'authorized_access') ORDER BY s.id DESC LIMIT 1) AS bound_os
-      FROM care_magic_links ml
-      LEFT JOIN customers c ON c.id = ml.customer_id
-      LEFT JOIN vehicles v ON v.id = ml.vehicle_id
-      LEFT JOIN sms_periodic_reminders pr ON pr.sms_periodic_reminders_id = ml.reminder_id
+        (SELECT MAX(t.last_seen_at) FROM care_app_telemetry t WHERE t.customer_id = tr.customer_id) AS app_last_seen_at,
+        (SELECT COALESCE(SUM(t.session_count), 0) FROM care_app_telemetry t WHERE t.customer_id = tr.customer_id) AS app_sessions,
+        (SELECT COALESCE(SUM(t.api_hits), 0) FROM care_app_telemetry t WHERE t.customer_id = tr.customer_id) AS app_api_hits,
+        (SELECT s.location FROM care_magic_link_security_logs s WHERE tr.id > 0 AND s.magic_link_id = tr.id AND s.location IS NOT NULL ORDER BY s.id DESC LIMIT 1) AS bound_location,
+        (SELECT s.browser_detail FROM care_magic_link_security_logs s WHERE tr.id > 0 AND s.magic_link_id = tr.id AND s.event_type IN ('first_bind', 'authorized_access') ORDER BY s.id DESC LIMIT 1) AS bound_browser,
+        (SELECT s.os_detail FROM care_magic_link_security_logs s WHERE tr.id > 0 AND s.magic_link_id = tr.id AND s.event_type IN ('first_bind', 'authorized_access') ORDER BY s.id DESC LIMIT 1) AS bound_os
+      FROM ${unifiedTrackerSubquery}
+      LEFT JOIN customers c ON c.id = tr.customer_id
+      LEFT JOIN vehicles v ON v.id = tr.vehicle_id
       WHERE ${smsWhereSql}
       ORDER BY ${smsOrderBySql}
       LIMIT ?
