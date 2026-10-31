@@ -61,7 +61,7 @@ export default function AdminPanelScreen() {
   const secLimitRef = useRef<number>(15);
   const secSearchRef = useRef<string>('');
   const secSortRef = useRef<string>('newest');
-  const smsLimitRef = useRef<number>(40);
+  const smsLimitRef = useRef<number>(250);
   const smsFilterRef = useRef<string>('today');
   const smsSearchRef = useRef<string>('');
 
@@ -580,7 +580,9 @@ export default function AdminPanelScreen() {
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
               <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Maintenance Reminder SMS Tracker</Text>
               <Text style={{ fontSize: 11, fontWeight: '700', color: '#34d399' }}>
-                7AM: {smsReminderSummary.today_sent || 0} Sent / {smsReminderSummary.today_failed || 0} Failed
+                {smsFilter === 'today'
+                  ? `Today: ${smsReminderSummary.today_sent || 0} Sent / ${smsReminderSummary.today_failed || 0} Failed`
+                  : `All: ${smsReminderSummary.total_sent || 0} Sent / ${smsReminderSummary.total_failed || 0} Failed`}
               </Text>
             </View>
 
@@ -637,8 +639,14 @@ export default function AdminPanelScreen() {
             {(() => {
               const SMS_PER_PAGE = 8;
               const qSms = smsSearch.trim().toLowerCase();
+              const todayDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
               const filteredSms = smsReminderLogs.filter((r: any) => {
                 if (!qSms) {
+                  if (smsFilter === 'today') {
+                    if (!r.created_at) return false;
+                    const rowDate = new Date(r.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+                    if (rowDate !== todayDate) return false;
+                  }
                   if (smsFilter === 'sent' && r.sms_status !== 'Sent') return false;
                   if (smsFilter === 'failed' && r.sms_status !== 'Failed') return false;
                   if (smsFilter === 'opened' && Number(r.access_count || 0) <= 0) return false;

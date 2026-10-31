@@ -52,14 +52,14 @@ export default function AdminPanel() {
   const [smsSearch, setSmsSearch] = useState('');
   const [smsSort, setSmsSort] = useState('newest');
   const [smsPage, setSmsPage] = useState(1);
-  const [smsLimit, setSmsLimit] = useState(40); // Prefetch 5 pages (8 per page = 40 items) initially
+  const [smsLimit, setSmsLimit] = useState(250); // Prefetch full tracker dataset (8 per page)
   const [usersPage, setUsersPage] = useState(1);
   const [usersLimit, setUsersLimit] = useState(20); // Prefetch 2 pages (10 per page = 20 items) initially
   const [lastSyncedAt, setLastSyncedAt] = useState(new Date());
   const modFilterRef = useRef('pending');
   const dashParamsRef = useRef({
     secLimit: 10, secFilter: 'all', secSearch: '', secSort: 'newest',
-    smsLimit: 40, smsFilter: 'today', smsSearch: '', smsSort: 'newest',
+    smsLimit: 250, smsFilter: 'today', smsSearch: '', smsSort: 'newest',
     usersLimit: 20,
   });
 
@@ -144,7 +144,7 @@ export default function AdminPanel() {
   // Handlers for Maintenance Reminder SMS & Magic Link Delivery Tracker (8 per page):
   const handleSmsPageChange = (nextPage) => {
     setSmsPage(nextPage);
-    const neededLimit = (nextPage + 2) * 8;
+    const neededLimit = Math.max(250, (nextPage + 2) * 8);
     if (neededLimit > smsLimit) {
       setSmsLimit(neededLimit);
       const updated = { ...dashParamsRef.current, smsLimit: neededLimit };
@@ -156,7 +156,9 @@ export default function AdminPanel() {
   const handleSmsFilterChange = (nextFilter) => {
     setSmsFilter(nextFilter);
     setSmsPage(1);
-    const updated = { ...dashParamsRef.current, smsFilter: nextFilter, smsLimit: Math.max(smsLimit, 40) };
+    const neededLimit = Math.max(smsLimit, 250);
+    setSmsLimit(neededLimit);
+    const updated = { ...dashParamsRef.current, smsFilter: nextFilter, smsLimit: neededLimit };
     dashParamsRef.current = updated;
     loadDashboard(true, updated);
   };
@@ -164,7 +166,7 @@ export default function AdminPanel() {
   const handleSmsSearchChange = (val) => {
     setSmsSearch(val);
     setSmsPage(1);
-    const needed = val.trim() ? Math.max(smsLimit, 80) : 40;
+    const needed = Math.max(smsLimit, 250);
     setSmsLimit(needed);
     const updated = { ...dashParamsRef.current, smsSearch: val, smsLimit: needed };
     dashParamsRef.current = updated;
@@ -174,7 +176,18 @@ export default function AdminPanel() {
   const handleSmsSortChange = (nextSort) => {
     setSmsSort(nextSort);
     setSmsPage(1);
-    const updated = { ...dashParamsRef.current, smsSort: nextSort };
+    // If sorting by Failed First while in a Sent-only filter (or vice versa), auto-expand to All Reminders so the sorted category is visible
+    let effectiveFilter = smsFilter;
+    if (nextSort === 'failed_first' && ['sent', 'opened', 'unopened'].includes(smsFilter)) {
+      effectiveFilter = 'all';
+      setSmsFilter('all');
+    } else if ((nextSort === 'sent_first' || nextSort === 'opened_first') && smsFilter === 'failed') {
+      effectiveFilter = 'all';
+      setSmsFilter('all');
+    }
+    const needed = Math.max(smsLimit, 250);
+    setSmsLimit(needed);
+    const updated = { ...dashParamsRef.current, smsSort: nextSort, smsFilter: effectiveFilter, smsLimit: needed };
     dashParamsRef.current = updated;
     loadDashboard(true, updated);
   };
@@ -1012,60 +1025,78 @@ export default function AdminPanel() {
             const SMS_PER_PAGE = 8;
             const smsQuery = smsSearch.trim().toLowerCase();
             const smsQueryId = smsQuery.replace(/^#/, '');
+            const todayDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+
+            const matchesSearchRow = (r) => {
+              if (!smsQuery) return true;
+              const blob = [
+                r.customer_name,
+                r.customer_mobile,
+                r.customer_id ? `#${r.customer_id} ${r.customer_id}` : '',
+                r.booking_id ? `#${r.booking_id} ${r.booking_id}` : '',
+                r.reminder_id ? `#${r.reminder_id} ${r.reminder_id}` : '',
+                r.vehicle_make,
+                r.vehicle_model,
+                r.vehicle_plate,
+                r.slug,
+                r.short_url,
+                r.bound_platform,
+                r.bound_ip,
+                r.bound_location,
+                r.sms_status,
+                r.itexmo_ref_id,
+                r.sms_log_detail,
+              ]
+                .filter(Boolean)
+                .join(' ')
+                .toLowerCase();
+              return blob.includes(smsQuery) || Boolean(smsQueryId && blob.includes(smsQueryId));
+            };
+
+            const isRowToday = (r) => {
+              if (!r.created_at) return false;
+              const rowDate = new Date(r.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+              return rowDate === todayDate;
+            };
 
             const filteredSmsRows = smsReminderLogs
               .filter((r) => {
-                if (!smsQuery) {
-                  if (smsFilter === 'today') {
-                    if (!r.created_at) return false;
-                    const rowDate = new Date(r.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
-                    const todayDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
-                    if (rowDate !== todayDate) return false;
-                  } else if (smsFilter === 'sent' && r.sms_status !== 'Sent') {
-                    return false;
-                  } else if (smsFilter === 'failed' && r.sms_status !== 'Failed') {
-                    return false;
-                  } else if (smsFilter === 'opened' && Number(r.access_count || 0) <= 0) {
-                    return false;
-                  } else if (smsFilter === 'unopened' && (Number(r.access_count || 0) > 0 || r.sms_status !== 'Sent')) {
-                    return false;
-                  }
+                if (!matchesSearchRow(r)) return false;
+                if (smsQuery) {
+                  // When searching, still honor explicit status filter pills ('sent', 'failed', 'opened', 'unopened')
+                  if (smsFilter === 'sent' && r.sms_status !== 'Sent') return false;
+                  if (smsFilter === 'failed' && r.sms_status !== 'Failed') return false;
+                  if (smsFilter === 'opened' && Number(r.access_count || 0) <= 0) return false;
+                  if (smsFilter === 'unopened' && (Number(r.access_count || 0) > 0 || r.sms_status !== 'Sent')) return false;
                   return true;
                 }
-                const blob = [
-                  r.customer_name,
-                  r.customer_mobile,
-                  r.customer_id ? `#${r.customer_id} ${r.customer_id}` : '',
-                  r.booking_id ? `#${r.booking_id} ${r.booking_id}` : '',
-                  r.reminder_id ? `#${r.reminder_id} ${r.reminder_id}` : '',
-                  r.vehicle_make,
-                  r.vehicle_model,
-                  r.vehicle_plate,
-                  r.slug,
-                  r.short_url,
-                  r.bound_platform,
-                  r.bound_ip,
-                  r.bound_location,
-                  r.sms_status,
-                  r.itexmo_ref_id,
-                  r.sms_log_detail,
-                ]
-                  .filter(Boolean)
-                  .join(' ')
-                  .toLowerCase();
-
-                return blob.includes(smsQuery) || (smsQueryId && blob.includes(smsQueryId));
+                if (smsFilter === 'today') return isRowToday(r);
+                if (smsFilter === 'sent') return r.sms_status === 'Sent';
+                if (smsFilter === 'failed') return r.sms_status === 'Failed';
+                if (smsFilter === 'opened') return Number(r.access_count || 0) > 0;
+                if (smsFilter === 'unopened') return Number(r.access_count || 0) <= 0 && r.sms_status === 'Sent';
+                return true;
               })
               .sort((a, b) => {
                 if (smsSort === 'opened_first') {
-                  return Number(b.access_count || 0) - Number(a.access_count || 0);
+                  const diff = Number(b.access_count || 0) - Number(a.access_count || 0);
+                  if (diff !== 0) return diff;
+                  return new Date(b.last_accessed_at || b.created_at || 0).getTime() - new Date(a.last_accessed_at || a.created_at || 0).getTime();
                 }
                 if (smsSort === 'failed_first') {
-                  if (a.sms_status === 'Failed' && b.sms_status !== 'Failed') return -1;
-                  if (b.sms_status === 'Failed' && a.sms_status !== 'Failed') return 1;
+                  const aFailed = a.sms_status === 'Failed' ? 0 : 1;
+                  const bFailed = b.sms_status === 'Failed' ? 0 : 1;
+                  if (aFailed !== bFailed) return aFailed - bFailed;
+                  return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+                }
+                if (smsSort === 'sent_first') {
+                  const aSent = a.sms_status === 'Sent' ? 0 : 1;
+                  const bSent = b.sms_status === 'Sent' ? 0 : 1;
+                  if (aSent !== bSent) return aSent - bSent;
+                  return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
                 }
                 if (smsSort === 'customer_az') {
-                  return String(a.customer_name || 'ZZZZ').localeCompare(String(b.customer_name || 'ZZZZ'));
+                  return String(a.customer_name || 'ZZZZ').trim().localeCompare(String(b.customer_name || 'ZZZZ').trim());
                 }
                 if (smsSort === 'oldest') {
                   return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
@@ -1089,6 +1120,49 @@ export default function AdminPanel() {
                     ? Number(smsReminderSummary.total_unopened || 0)
                     : Number(smsReminderSummary.total_generated || 0)
                 );
+
+            // Dynamic top summary badge figures bound to the active filter & search state
+            const filteredSentCount = filteredSmsRows.filter((r) => r.sms_status === 'Sent').length;
+            const filteredOpenedCount = filteredSmsRows.filter((r) => Number(r.access_count || 0) > 0).length;
+            const filteredFailedCount = filteredSmsRows.filter((r) => r.sms_status === 'Failed').length;
+
+            const badgeDeliveredCount = smsQuery
+              ? filteredSentCount
+              : smsFilter === 'today'
+              ? Number(smsReminderSummary.today_sent ?? filteredSentCount)
+              : smsFilter === 'all'
+              ? Number(smsReminderSummary.total_sent ?? filteredSentCount)
+              : filteredSentCount;
+
+            const badgeOpenedCount = smsQuery
+              ? filteredOpenedCount
+              : smsFilter === 'today'
+              ? Number(smsReminderSummary.today_opened ?? filteredOpenedCount)
+              : smsFilter === 'all'
+              ? Number(smsReminderSummary.total_opened ?? filteredOpenedCount)
+              : filteredOpenedCount;
+
+            const badgeFailedCount = smsQuery
+              ? filteredFailedCount
+              : smsFilter === 'today'
+              ? Number(smsReminderSummary.today_failed ?? filteredFailedCount)
+              : smsFilter === 'all'
+              ? Number(smsReminderSummary.total_failed ?? filteredFailedCount)
+              : filteredFailedCount;
+
+            const headerScopeText = smsQuery
+              ? `Search Match (${filteredSmsRows.length}) • ${badgeDeliveredCount} Sent / ${badgeFailedCount} Failed`
+              : smsFilter === 'today'
+              ? `7:00 AM Cron • Today: ${smsReminderSummary.today_sent || 0} Sent / ${smsReminderSummary.today_failed || 0} Failed`
+              : smsFilter === 'all'
+              ? `All Reminders (${smsReminderSummary.total_generated || totalSmsFiltered}) • ${smsReminderSummary.total_sent || 0} Sent / ${smsReminderSummary.total_failed || 0} Failed`
+              : smsFilter === 'sent'
+              ? `Sent Reminders (${smsReminderSummary.total_sent || totalSmsFiltered}) • ${smsReminderSummary.total_opened || 0} Opened`
+              : smsFilter === 'opened'
+              ? `Opened Links (${smsReminderSummary.total_opened || totalSmsFiltered}) • Active Click-Throughs`
+              : smsFilter === 'unopened'
+              ? `Not Opened Yet (${smsReminderSummary.total_unopened || totalSmsFiltered}) • Awaiting 1st Click`
+              : `Failed Reminders (${smsReminderSummary.total_failed || totalSmsFiltered}) • Invalid / Missing Mobile #`;
 
             const totalSmsPages = Math.max(1, Math.ceil(totalSmsFiltered / SMS_PER_PAGE));
             const safeSmsPage = Math.min(smsPage, totalSmsPages);
@@ -1116,7 +1190,7 @@ export default function AdminPanel() {
                           background: '#dbeafe', border: '1px solid #93c5fd', color: '#1d4ed8',
                           fontSize: '11px', fontWeight: 800, padding: '3px 10px', borderRadius: '20px', whiteSpace: 'nowrap',
                         }}>
-                          7:00 AM Cron • Today: {smsReminderSummary.today_sent || 0} Sent / {smsReminderSummary.today_failed || 0} Failed
+                          {headerScopeText}
                         </span>
                       </div>
                       <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#64748b' }}>
@@ -1125,24 +1199,42 @@ export default function AdminPanel() {
                     </div>
 
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                      <span style={{
-                        background: '#dcfce7', border: '1px solid #86efac', color: '#15803d',
-                        fontSize: '12px', fontWeight: 700, padding: '5px 11px', borderRadius: '20px', whiteSpace: 'nowrap',
-                      }}>
-                        Delivered: {smsReminderSummary.total_sent || 0}
-                      </span>
-                      <span style={{
-                        background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8',
-                        fontSize: '12px', fontWeight: 700, padding: '5px 11px', borderRadius: '20px', whiteSpace: 'nowrap',
-                      }}>
-                        Opened Link: {smsReminderSummary.total_opened || 0}
-                      </span>
-                      <span style={{
-                        background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626',
-                        fontSize: '12px', fontWeight: 700, padding: '5px 11px', borderRadius: '20px', whiteSpace: 'nowrap',
-                      }}>
-                        Failed Number: {smsReminderSummary.total_failed || 0}
-                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleSmsFilterChange(smsFilter === 'sent' ? 'all' : 'sent')}
+                        title="Click to filter by Delivered SMS"
+                        style={{
+                          background: '#dcfce7', border: smsFilter === 'sent' ? '2px solid #15803d' : '1px solid #86efac', color: '#15803d',
+                          fontSize: '12px', fontWeight: 700, padding: '5px 11px', borderRadius: '20px', whiteSpace: 'nowrap',
+                          cursor: 'pointer', fontFamily: 'inherit',
+                        }}
+                      >
+                        Delivered: {badgeDeliveredCount}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSmsFilterChange(smsFilter === 'opened' ? 'all' : 'opened')}
+                        title="Click to filter by Opened Magic Links"
+                        style={{
+                          background: '#eff6ff', border: smsFilter === 'opened' ? '2px solid #1d4ed8' : '1px solid #bfdbfe', color: '#1d4ed8',
+                          fontSize: '12px', fontWeight: 700, padding: '5px 11px', borderRadius: '20px', whiteSpace: 'nowrap',
+                          cursor: 'pointer', fontFamily: 'inherit',
+                        }}
+                      >
+                        Opened Link: {badgeOpenedCount}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSmsFilterChange(smsFilter === 'failed' ? 'all' : 'failed')}
+                        title="Click to filter by Failed SMS Reminders"
+                        style={{
+                          background: '#fef2f2', border: smsFilter === 'failed' ? '2px solid #dc2626' : '1px solid #fecaca', color: '#dc2626',
+                          fontSize: '12px', fontWeight: 700, padding: '5px 11px', borderRadius: '20px', whiteSpace: 'nowrap',
+                          cursor: 'pointer', fontFamily: 'inherit',
+                        }}
+                      >
+                        Failed Number: {badgeFailedCount}
+                      </button>
                     </div>
                   </div>
 
@@ -1215,6 +1307,7 @@ export default function AdminPanel() {
                       }}
                     >
                       <option value="newest">Sort: Newest Sent</option>
+                      <option value="sent_first">Sort: Sent & Delivered First</option>
                       <option value="opened_first">Sort: Opened First</option>
                       <option value="failed_first">Sort: Failed First</option>
                       <option value="customer_az">Sort: Customer Name (A–Z)</option>

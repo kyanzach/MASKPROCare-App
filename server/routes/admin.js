@@ -536,7 +536,7 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
     `, [usersLimit]).catch(() => [[]]);
 
     // 6. Maintenance Reminder SMS & Magic Link Delivery Tracker (Paginated + Search + Filter + Sort)
-    const smsLimit = Math.min(200, Math.max(15, parseInt(req.query.sms_limit, 10) || 20));
+    const smsLimit = Math.min(500, Math.max(15, parseInt(req.query.sms_limit, 10) || 200));
     const smsFilter = String(req.query.sms_filter || 'all');
     const smsSearch = String(req.query.sms_search || '').trim();
     const smsSort = String(req.query.sms_sort || 'newest');
@@ -585,22 +585,24 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
           0 AS access_count,
           0 AS blocked_attempts,
           'skipped_invalid_mobile' AS link_status,
-          TIMESTAMP(CURDATE(), '07:00:25') AS created_at,
+          CASE
+            WHEN YEAR(MAX(pr.sms_set_date_time)) = YEAR(CURDATE()) AND MONTH(MAX(pr.sms_set_date_time)) = MONTH(CURDATE())
+            THEN TIMESTAMP(CURDATE(), '07:00:25')
+            ELSE MAX(pr.sms_set_date_time)
+          END AS created_at,
           'Failed' AS sms_status,
           pr.sms_this_template_code AS template_code,
           MAX(pr.error_log) AS sms_log_detail
         FROM sms_periodic_reminders pr
         JOIN bookings b ON b.booking_id = pr.booking_id
         WHERE pr.sms_status = 'Failed'
-          AND YEAR(pr.sms_set_date_time) = 2026
-          AND MONTH(pr.sms_set_date_time) = 10
           AND pr.sms_set_date_time <= NOW()
           AND NOT EXISTS (
             SELECT 1 FROM care_magic_links ml2
             WHERE ml2.reminder_id = pr.sms_periodic_reminders_id
                OR (ml2.customer_id = b.customer_id AND ml2.vehicle_id = b.customer_vehicle_id)
           )
-        GROUP BY b.customer_id, b.customer_vehicle_id, pr.sms_this_template_code
+        GROUP BY b.customer_id, b.customer_vehicle_id, YEAR(pr.sms_set_date_time), MONTH(pr.sms_set_date_time), pr.sms_this_template_code
       ) AS tr
     `;
 
@@ -649,11 +651,13 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
 
     let smsOrderBySql = 'tr.created_at DESC, tr.id DESC';
     if (smsSort === 'opened_first') {
-      smsOrderBySql = 'tr.access_count DESC, tr.last_accessed_at DESC, tr.id DESC';
+      smsOrderBySql = 'tr.access_count DESC, tr.last_accessed_at DESC, tr.created_at DESC, tr.id DESC';
     } else if (smsSort === 'failed_first') {
-      smsOrderBySql = "CASE WHEN tr.sms_status = 'Failed' THEN 0 ELSE 1 END ASC, tr.id DESC";
+      smsOrderBySql = "CASE WHEN tr.sms_status = 'Failed' THEN 0 ELSE 1 END ASC, tr.created_at DESC, tr.id DESC";
+    } else if (smsSort === 'sent_first') {
+      smsOrderBySql = "CASE WHEN tr.sms_status = 'Sent' THEN 0 ELSE 1 END ASC, tr.created_at DESC, tr.id DESC";
     } else if (smsSort === 'customer_az') {
-      smsOrderBySql = "COALESCE(c.full_name, 'ZZZZ') ASC, tr.id DESC";
+      smsOrderBySql = "COALESCE(NULLIF(TRIM(c.full_name), ''), 'ZZZZ') ASC, tr.created_at DESC, tr.id DESC";
     } else if (smsSort === 'oldest') {
       smsOrderBySql = 'tr.created_at ASC, tr.id ASC';
     }
@@ -669,13 +673,29 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
         COALESCE(SUM(CASE WHEN tr.access_count > 0 THEN 1 ELSE 0 END), 0) AS total_opened,
         COALESCE(SUM(CASE WHEN DATE(tr.created_at) = CURDATE() AND tr.access_count > 0 THEN 1 ELSE 0 END), 0) AS today_opened,
         COALESCE(SUM(CASE WHEN tr.access_count = 0 AND tr.sms_status = 'Sent' THEN 1 ELSE 0 END), 0) AS total_unopened,
+        COALESCE(SUM(CASE WHEN DATE(tr.created_at) = CURDATE() AND tr.access_count = 0 AND tr.sms_status = 'Sent' THEN 1 ELSE 0 END), 0) AS today_unopened,
         MIN(CASE WHEN DATE(tr.created_at) = CURDATE() THEN tr.created_at END) AS today_cron_started_at,
         MAX(CASE WHEN DATE(tr.created_at) = CURDATE() THEN tr.created_at END) AS today_cron_finished_at
       FROM ${unifiedTrackerSubquery}
     `).catch(() => [[{
       total_generated: 0, today_generated: 0, total_sent: 0, today_sent: 0,
       total_failed: 0, today_failed: 0, total_opened: 0, today_opened: 0,
-      total_unopened: 0, today_cron_started_at: null, today_cron_finished_at: null,
+      total_unopened: 0, today_unopened: 0, today_cron_started_at: null, today_cron_finished_at: null,
+    }]]);
+
+    const [[smsFilteredSummary]] = await pool.query(`
+      SELECT
+        COUNT(*) AS filtered_total,
+        COALESCE(SUM(CASE WHEN tr.sms_status = 'Sent' THEN 1 ELSE 0 END), 0) AS filtered_sent,
+        COALESCE(SUM(CASE WHEN tr.sms_status = 'Failed' THEN 1 ELSE 0 END), 0) AS filtered_failed,
+        COALESCE(SUM(CASE WHEN tr.access_count > 0 THEN 1 ELSE 0 END), 0) AS filtered_opened,
+        COALESCE(SUM(CASE WHEN tr.access_count = 0 AND tr.sms_status = 'Sent' THEN 1 ELSE 0 END), 0) AS filtered_unopened
+      FROM ${unifiedTrackerSubquery}
+      LEFT JOIN customers c ON c.id = tr.customer_id
+      LEFT JOIN vehicles v ON v.id = tr.vehicle_id
+      WHERE ${smsWhereSql}
+    `, smsParams).catch(() => [[{
+      filtered_total: 0, filtered_sent: 0, filtered_failed: 0, filtered_opened: 0, filtered_unopened: 0,
     }]]);
 
     const [smsReminderLogs] = await pool.query(`
@@ -726,8 +746,7 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
       FROM ${unifiedTrackerSubquery}
       LEFT JOIN customers c ON c.id = tr.customer_id
       LEFT JOIN vehicles v ON v.id = tr.vehicle_id
-      WHERE ${smsWhereSql}
-      ORDER BY ${smsOrderBySql}
+      ORDER BY CASE WHEN (${smsWhereSql}) THEN 0 ELSE 1 END ASC, ${smsOrderBySql}
       LIMIT ?
     `, [...smsParams, smsLimit]).catch((err) => {
       console.error('[Admin] smsReminderLogs query error:', err.message);
@@ -798,6 +817,12 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
           total_opened: Number(smsReminderSummary?.total_opened || 0),
           today_opened: Number(smsReminderSummary?.today_opened || 0),
           total_unopened: Number(smsReminderSummary?.total_unopened || 0),
+          today_unopened: Number(smsReminderSummary?.today_unopened || 0),
+          filtered_total: Number(smsFilteredSummary?.filtered_total || 0),
+          filtered_sent: Number(smsFilteredSummary?.filtered_sent || 0),
+          filtered_failed: Number(smsFilteredSummary?.filtered_failed || 0),
+          filtered_opened: Number(smsFilteredSummary?.filtered_opened || 0),
+          filtered_unopened: Number(smsFilteredSummary?.filtered_unopened || 0),
           today_cron_started_at: smsReminderSummary?.today_cron_started_at || null,
           today_cron_finished_at: smsReminderSummary?.today_cron_finished_at || null,
         },

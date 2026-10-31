@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.17.19] — 2026-10-31
+### Fixed & Improved
+- **Dynamic Binding Between Filter Pills (`Today's 7AM Batch`, `All Reminders`, `Sent`, `Opened`, `Failed`), Top Summary Badges (`Delivered`, `Opened Link`, `Failed Number`), and Dropdown Sorting (`server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`, `mobile/app/admin.tsx`)**:
+  - Removed the `MONTH(pr.sms_set_date_time) = 10` restriction from the `Failed` branch of `unifiedTrackerSubquery` in `server/routes/admin.js` so `All Reminders` and `Failed` include all **119 historical Failed reminders** (`154` total reminders across all batches) instead of only Today's 2 October failures.
+  - Dynamically bound the top summary badges (`Delivered`, `Opened Link`, `Failed Number`) and header status pill in `frontend/src/pages/AdminPanel.jsx` and `mobile/app/admin.tsx` to the active filter and search state (`Today's 7AM Batch`: `1 Sent / 0 Opened / 2 Failed`; `All Reminders`: `35 Sent / 1 Opened / 119 Failed`), made the top 3 badges clickable quick-filters, added `Sort: Sent & Delivered First`, and auto-expanded conflicting filter pills when sorting by `Failed First` or `Sent & Delivered First`.
+
 ## [v1.17.18] — 2026-10-30
 ### Added & Improved
 - **Clickable SMS Delivery Button & Delivered SMS Message Modal (`server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`, `mobile/app/admin.tsx`)**:
