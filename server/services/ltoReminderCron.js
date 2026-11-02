@@ -89,7 +89,6 @@ async function runLtoRenewalCheck() {
       FROM vehicles v
       INNER JOIN customers c ON c.id = v.customer_id
       WHERE v.registration_date IS NOT NULL
-        AND v.registration_date != ''
     `);
 
     const now = new Date();

@@ -266,8 +266,8 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
   try {
     // 1. Core KPIs
     const [[custCount]] = await pool.query('SELECT COUNT(*) AS total FROM customers').catch(() => [[{ total: 0 }]]);
-    const [[cardCount]] = await pool.query('SELECT COUNT(*) AS total FROM bookings WHERE status = "Done"').catch(() => [[{ total: 0 }]]);
-    const [[pendingBookings]] = await pool.query('SELECT COUNT(*) AS total FROM care_booking_requests WHERE status = "pending"').catch(() => [[{ total: 0 }]]);
+    const [[cardCount]] = await pool.query('SELECT COUNT(*) AS total FROM loyalty_cards WHERE is_active = 1').catch(() => [[{ total: 0 }]]);
+    const [[pendingBookings]] = await pool.query("SELECT COUNT(*) AS total FROM booking_requests WHERE status IN ('pending', 'negotiating')").catch(() => [[{ total: 0 }]]);
     const [[sosCount]] = await pool.query("SELECT COUNT(*) AS total FROM community_posts WHERE type = 'sos' AND status = 'open' AND is_approved = 1").catch(() => [[{ total: 0 }]]);
     const [[pendingModCount]] = await pool.query("SELECT COUNT(*) AS total FROM community_posts WHERE moderation_status = 'pending' AND status != 'hidden'").catch(() => [[{ total: 0 }]]);
 
@@ -700,54 +700,61 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
 
     const [smsReminderLogs] = await pool.query(`
       SELECT
-        tr.id,
-        tr.slug,
-        tr.short_url,
-        tr.customer_id,
-        tr.vehicle_id,
-        tr.booking_id,
-        tr.reminder_id,
-        tr.bound_platform,
-        tr.bound_user_agent,
-        tr.bound_ip,
-        tr.bound_at,
-        tr.last_accessed_at,
-        tr.access_count,
-        tr.blocked_attempts,
-        tr.link_status,
-        tr.created_at,
-        c.title AS customer_title,
-        c.full_name AS customer_name,
-        c.mobile_number AS customer_mobile,
-        v.make AS vehicle_make,
-        v.model AS vehicle_model,
-        v.plate_no AS vehicle_plate,
-        tr.sms_status,
-        tr.template_code,
-        tr.sms_log_detail,
+        paged.*,
         (SELECT sh.message FROM sms_history sh
-         WHERE sh.customer_id = tr.customer_id
-           AND ABS(TIMESTAMPDIFF(SECOND, sh.created_at, tr.created_at)) <= 120
+         WHERE paged.sms_status = 'Sent'
+           AND sh.created_at BETWEEN DATE_SUB(paged.created_at, INTERVAL 120 SECOND) AND DATE_ADD(paged.created_at, INTERVAL 120 SECOND)
+           AND sh.customer_id = paged.customer_id
          ORDER BY sh.id DESC LIMIT 1) AS sms_message_sent,
         (SELECT sh.reference_id FROM sms_history sh
-         WHERE sh.customer_id = tr.customer_id
-           AND ABS(TIMESTAMPDIFF(SECOND, sh.created_at, tr.created_at)) <= 120
+         WHERE paged.sms_status = 'Sent'
+           AND sh.created_at BETWEEN DATE_SUB(paged.created_at, INTERVAL 120 SECOND) AND DATE_ADD(paged.created_at, INTERVAL 120 SECOND)
+           AND sh.customer_id = paged.customer_id
          ORDER BY sh.id DESC LIMIT 1) AS itexmo_ref_id,
         (SELECT sh.credits_used FROM sms_history sh
-         WHERE sh.customer_id = tr.customer_id
-           AND ABS(TIMESTAMPDIFF(SECOND, sh.created_at, tr.created_at)) <= 120
+         WHERE paged.sms_status = 'Sent'
+           AND sh.created_at BETWEEN DATE_SUB(paged.created_at, INTERVAL 120 SECOND) AND DATE_ADD(paged.created_at, INTERVAL 120 SECOND)
+           AND sh.customer_id = paged.customer_id
          ORDER BY sh.id DESC LIMIT 1) AS sms_credits,
-        (SELECT MAX(t.last_seen_at) FROM care_app_telemetry t WHERE t.customer_id = tr.customer_id) AS app_last_seen_at,
-        (SELECT COALESCE(SUM(t.session_count), 0) FROM care_app_telemetry t WHERE t.customer_id = tr.customer_id) AS app_sessions,
-        (SELECT COALESCE(SUM(t.api_hits), 0) FROM care_app_telemetry t WHERE t.customer_id = tr.customer_id) AS app_api_hits,
-        (SELECT s.location FROM care_magic_link_security_logs s WHERE tr.id > 0 AND s.magic_link_id = tr.id AND s.location IS NOT NULL ORDER BY s.id DESC LIMIT 1) AS bound_location,
-        (SELECT s.browser_detail FROM care_magic_link_security_logs s WHERE tr.id > 0 AND s.magic_link_id = tr.id AND s.event_type IN ('first_bind', 'authorized_access') ORDER BY s.id DESC LIMIT 1) AS bound_browser,
-        (SELECT s.os_detail FROM care_magic_link_security_logs s WHERE tr.id > 0 AND s.magic_link_id = tr.id AND s.event_type IN ('first_bind', 'authorized_access') ORDER BY s.id DESC LIMIT 1) AS bound_os
-      FROM ${unifiedTrackerSubquery}
-      LEFT JOIN customers c ON c.id = tr.customer_id
-      LEFT JOIN vehicles v ON v.id = tr.vehicle_id
-      ORDER BY CASE WHEN (${smsWhereSql}) THEN 0 ELSE 1 END ASC, ${smsOrderBySql}
-      LIMIT ?
+        (SELECT MAX(t.last_seen_at) FROM care_app_telemetry t WHERE t.customer_id = paged.customer_id) AS app_last_seen_at,
+        (SELECT COALESCE(SUM(t.session_count), 0) FROM care_app_telemetry t WHERE t.customer_id = paged.customer_id) AS app_sessions,
+        (SELECT COALESCE(SUM(t.api_hits), 0) FROM care_app_telemetry t WHERE t.customer_id = paged.customer_id) AS app_api_hits,
+        (SELECT s.location FROM care_magic_link_security_logs s WHERE paged.id > 0 AND s.magic_link_id = paged.id AND s.location IS NOT NULL ORDER BY s.id DESC LIMIT 1) AS bound_location,
+        (SELECT s.browser_detail FROM care_magic_link_security_logs s WHERE paged.id > 0 AND s.magic_link_id = paged.id AND s.event_type IN ('first_bind', 'authorized_access') ORDER BY s.id DESC LIMIT 1) AS bound_browser,
+        (SELECT s.os_detail FROM care_magic_link_security_logs s WHERE paged.id > 0 AND s.magic_link_id = paged.id AND s.event_type IN ('first_bind', 'authorized_access') ORDER BY s.id DESC LIMIT 1) AS bound_os
+      FROM (
+        SELECT
+          tr.id,
+          tr.slug,
+          tr.short_url,
+          tr.customer_id,
+          tr.vehicle_id,
+          tr.booking_id,
+          tr.reminder_id,
+          tr.bound_platform,
+          tr.bound_user_agent,
+          tr.bound_ip,
+          tr.bound_at,
+          tr.last_accessed_at,
+          tr.access_count,
+          tr.blocked_attempts,
+          tr.link_status,
+          tr.created_at,
+          c.title AS customer_title,
+          c.full_name AS customer_name,
+          c.mobile_number AS customer_mobile,
+          v.make AS vehicle_make,
+          v.model AS vehicle_model,
+          v.plate_no AS vehicle_plate,
+          tr.sms_status,
+          tr.template_code,
+          tr.sms_log_detail
+        FROM ${unifiedTrackerSubquery}
+        LEFT JOIN customers c ON c.id = tr.customer_id
+        LEFT JOIN vehicles v ON v.id = tr.vehicle_id
+        ORDER BY CASE WHEN (${smsWhereSql}) THEN 0 ELSE 1 END ASC, ${smsOrderBySql}
+        LIMIT ?
+      ) AS paged
     `, [...smsParams, smsLimit]).catch((err) => {
       console.error('[Admin] smsReminderLogs query error:', err.message);
       return [[]];

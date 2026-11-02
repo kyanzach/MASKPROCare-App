@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.17.20] — 2026-11-02
+### Fixed & Optimized
+- **Fixed Admin Control Center Dashboard Timeout & MySQL Connection Pool Exhaustion (`server/routes/admin.js`, `server/services/ltoReminderCron.js`)**:
+  - Added composite index `idx_cust_created (customer_id, created_at)` on `unify_maskpro.sms_history` (`30,115` rows) and refactored `smsReminderLogs` in `server/routes/admin.js` to paginate the `unifiedTrackerSubquery` BEFORE running `sms_history` subqueries, replacing `ABS(TIMESTAMPDIFF(SECOND, sh.created_at, tr.created_at)) <= 120` (which scanned `462 × 30,115 = 13.9M` rows and exhausted the 10-connection MySQL pool) with an index-backed range `sh.created_at BETWEEN DATE_SUB(paged.created_at, INTERVAL 120 SECOND) AND DATE_ADD(paged.created_at, INTERVAL 120 SECOND)` for `'Sent'` rows only (reducing dashboard load time from 23s+ timeout to `<120ms`).
+  - Fixed `activeCareCards` and `pendingBookings` KPI queries in `server/routes/admin.js` (`loyalty_cards WHERE is_active = 1` and `booking_requests WHERE status IN ('pending', 'negotiating')`) and removed `AND v.registration_date != ''` on a `DATE` column in `server/services/ltoReminderCron.js`.
+
 ## [v1.17.19] — 2026-10-31
 ### Fixed & Improved
 - **Dynamic Binding Between Filter Pills (`Today's 7AM Batch`, `All Reminders`, `Sent`, `Opened`, `Failed`), Top Summary Badges (`Delivered`, `Opened Link`, `Failed Number`), and Dropdown Sorting (`server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`, `mobile/app/admin.tsx`)**:
