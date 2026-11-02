@@ -29,8 +29,7 @@ export const unstable_settings = {
 SplashScreen.preventAutoHideAsync();
 
 import { AuthProvider } from '@/context/AuthContext';
-import { registerForPushNotificationsAsync } from '@/services/notificationService';
-import * as Notifications from 'expo-notifications';
+import { registerForPushNotificationsAsync, getNotificationsModule } from '@/services/notificationService';
 import { useRouter } from 'expo-router';
 
 export default function RootLayout() {
@@ -67,6 +66,9 @@ function RootLayoutNav() {
 
   useEffect(() => {
     registerForPushNotificationsAsync();
+
+    const Notifications = getNotificationsModule();
+    if (!Notifications) return;
 
     const responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
       const link = response.notification.request.content.data?.link;

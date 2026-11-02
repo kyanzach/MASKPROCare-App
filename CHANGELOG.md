@@ -1,5 +1,12 @@
 # Changelog
 
+## [v1.17.22] — 2026-11-02
+### Fixed & Verified (iOS & Android Mobile App `v1.13.14`)
+- **Fixed Expo SDK 54 `expo-asset` Deduping, Android Expo Go Notification Loader, and Custom SMS Preview Modal (`mobile/package.json`, `mobile/app.json`, `mobile/app/_layout.tsx`, `mobile/app/admin.tsx`, `mobile/services/notificationService.ts`)**:
+  - Removed stale `expo-asset@11.0.2` from `mobile/node_modules` and pinned `expo-asset@~12.0.14` to resolve `TypeError: _resolveAssetSource.setCustomSourceTransformer is not a function` on iOS and Android startup.
+  - Replaced native `Alert.alert` in `mobile/app/admin.tsx` with a custom themed `smsPreviewModal` `<Modal>` for viewing delivered SMS messages (fixing `TS2552` and adhering to the Mobile UX standard).
+  - Guarded `expo-notifications` loading via `getNotificationsModule()` in `mobile/services/notificationService.ts` and `mobile/app/_layout.tsx` so Android Expo Go runs with zero console errors while preserving full local/remote push functionality on iOS and standalone builds.
+
 ## [v1.17.21] — 2026-11-02
 ### Added & Improved
 - **Hotel/Airline-Style Date Range Picker & `Logged In & Explored` Filter in Maintenance Reminder SMS Tracker (`server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`, `mobile/app/admin.tsx`)**:

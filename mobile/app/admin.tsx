@@ -90,6 +90,10 @@ export default function AdminPanelScreen() {
     customerId: number;
     customerName: string;
   } | null>(null);
+  const [smsPreviewModal, setSmsPreviewModal] = useState<{
+    title: string;
+    message: string;
+  } | null>(null);
   const [impersonating, setImpersonating] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
 
@@ -787,10 +791,10 @@ export default function AdminPanelScreen() {
                                     'MaskPro',
                                     'Always Brand New',
                                   ].join('\n');
-                                  Alert.alert(
-                                    isSent ? 'Delivered SMS Content' : 'SMS Content Preview',
-                                    msgText
-                                  );
+                                  setSmsPreviewModal({
+                                    title: isSent ? 'Delivered SMS' : 'SMS Preview',
+                                    message: msgText,
+                                  });
                                 }}
                                 style={{
                                   paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12,
@@ -1572,6 +1576,48 @@ export default function AdminPanelScreen() {
                 </LinearGradient>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* SMS Content Preview Modal */}
+      <Modal
+        visible={!!smsPreviewModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSmsPreviewModal(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { alignItems: 'stretch' }]}>
+            <Text style={[styles.modalTitle, { textAlign: 'left', marginBottom: 4 }]}>
+              {smsPreviewModal?.title || 'Delivered SMS'}
+            </Text>
+            <Text style={[styles.modalDescription, { textAlign: 'left', marginBottom: 12 }]}>
+              Exact formatted message sent to client.
+            </Text>
+            <View
+              style={{
+                backgroundColor: '#0f172a',
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: '#334155',
+                padding: 14,
+                marginBottom: 16,
+              }}
+            >
+              <Text style={{ color: '#e2e8f0', fontSize: 12.5, lineHeight: 19, fontFamily: 'monospace' }}>
+                {smsPreviewModal?.message || ''}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.cancelModalBtn, { flex: 0, width: '100%' }]}
+              onPress={() => setSmsPreviewModal(null)}
+              activeOpacity={0.8}
+            >
+              <Text numberOfLines={1} adjustsFontSizeToFit style={styles.cancelModalText}>
+                Close
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>

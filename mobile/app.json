@@ -2,7 +2,7 @@
   "expo": {
     "name": "MASKPROCare",
     "slug": "maskpro-care",
-    "version": "1.13.13",
+    "version": "1.13.14",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "mobile",
@@ -65,7 +65,8 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true

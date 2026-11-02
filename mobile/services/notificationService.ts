@@ -1,4 +1,3 @@
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
@@ -8,16 +7,33 @@ const isExpoGo =
   Constants.appOwnership === 'expo' ||
   Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
-// Configure foreground presentation behavior
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    priority: Notifications.AndroidNotificationPriority.MAX,
-  }),
-});
+const isAndroidExpoGo = Platform.OS === 'android' && isExpoGo;
+
+export function getNotificationsModule(): typeof import('expo-notifications') | null {
+  if (isAndroidExpoGo) {
+    return null;
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('expo-notifications');
+  } catch {
+    return null;
+  }
+}
+
+// Configure foreground presentation behavior (skipped in Android Expo Go where SDK 53+ removed remote push module)
+const NotificationsInit = getNotificationsModule();
+if (NotificationsInit) {
+  NotificationsInit.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      priority: NotificationsInit.AndroidNotificationPriority.MAX,
+    }),
+  });
+}
 
 const LAST_SEEN_KEY = 'care_last_alerted_notif_id';
 
@@ -26,6 +42,9 @@ const LAST_SEEN_KEY = 'care_last_alerted_notif_id';
  */
 export async function registerForPushNotificationsAsync(): Promise<boolean> {
   try {
+    const Notifications = getNotificationsModule();
+    if (!Notifications) return false;
+
     if (Platform.OS === 'android') {
       try {
         await Notifications.setNotificationChannelAsync('care-alerts', {
@@ -67,6 +86,9 @@ export async function triggerLocalNotification(
   data: Record<string, any> = {}
 ) {
   try {
+    const Notifications = getNotificationsModule();
+    if (!Notifications) return;
+
     await Notifications.scheduleNotificationAsync({
       content: {
         title,
