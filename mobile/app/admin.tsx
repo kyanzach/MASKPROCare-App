@@ -55,14 +55,15 @@ export default function AdminPanelScreen() {
   const [secSearch, setSecSearch] = useState('');
   const [secSort, setSecSort] = useState<'newest' | 'most_attempts' | 'customer_az' | 'ip_az' | 'oldest'>('newest');
   const [smsPage, setSmsPage] = useState(1);
-  const [smsFilter, setSmsFilter] = useState<'today' | 'all' | 'sent' | 'opened' | 'unopened' | 'failed'>('today');
+  const [smsDatePreset, setSmsDatePreset] = useState<'today' | 'yesterday' | 'last_7_days' | 'last_30_days' | 'last_month' | 'all_time'>('today');
+  const [smsFilter, setSmsFilter] = useState<'all' | 'engaged' | 'sent' | 'opened' | 'unopened' | 'failed'>('all');
   const [smsSearch, setSmsSearch] = useState('');
   const activeLimitRef = useRef<number>(20);
   const secLimitRef = useRef<number>(15);
   const secSearchRef = useRef<string>('');
   const secSortRef = useRef<string>('newest');
-  const smsLimitRef = useRef<number>(250);
-  const smsFilterRef = useRef<string>('today');
+  const smsLimitRef = useRef<number>(500);
+  const smsFilterRef = useRef<string>('all');
   const smsSearchRef = useRef<string>('');
 
   // Moderation state
@@ -164,7 +165,7 @@ export default function AdminPanelScreen() {
     }
   };
 
-  const handleSmsFilterChange = (nextFilter: 'today' | 'all' | 'sent' | 'opened' | 'unopened' | 'failed') => {
+  const handleSmsFilterChange = (nextFilter: 'all' | 'engaged' | 'sent' | 'opened' | 'unopened' | 'failed') => {
     setSmsFilter(nextFilter);
     smsFilterRef.current = nextFilter;
     setSmsPage(1);
@@ -577,81 +578,60 @@ export default function AdminPanelScreen() {
 
           {/* Maintenance Reminder SMS & Magic Link Delivery Tracker (8 per page) */}
           <View style={styles.sectionCard}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Maintenance Reminder SMS Tracker</Text>
-              <Text style={{ fontSize: 11, fontWeight: '700', color: '#34d399' }}>
-                {smsFilter === 'today'
-                  ? `Today: ${smsReminderSummary.today_sent || 0} Sent / ${smsReminderSummary.today_failed || 0} Failed`
-                  : `All: ${smsReminderSummary.total_sent || 0} Sent / ${smsReminderSummary.total_failed || 0} Failed`}
-              </Text>
-            </View>
-
-            <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-              {([
-                { key: 'today', label: `Today (${smsReminderSummary.today_generated || 0})` },
-                { key: 'all', label: `All (${smsReminderSummary.total_generated || 0})` },
-                { key: 'sent', label: `Sent (${smsReminderSummary.total_sent || 0})` },
-                { key: 'opened', label: `Opened (${smsReminderSummary.total_opened || 0})` },
-                { key: 'failed', label: `Failed (${smsReminderSummary.total_failed || 0})` },
-              ] as const).map((f) => {
-                const active = smsFilter === f.key;
-                return (
-                  <TouchableOpacity
-                    key={f.key}
-                    onPress={() => handleSmsFilterChange(f.key)}
-                    style={{
-                      paddingHorizontal: 9,
-                      paddingVertical: 4,
-                      borderRadius: 12,
-                      borderWidth: 1,
-                      borderColor: active ? '#38bdf8' : '#334155',
-                      backgroundColor: active ? 'rgba(56, 189, 248, 0.18)' : '#0f172a',
-                    }}
-                  >
-                    <Text numberOfLines={1} style={{ fontSize: 11, fontWeight: '700', color: active ? '#38bdf8' : '#94a3b8' }}>
-                      {f.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <View style={{
-              flexDirection: 'row', alignItems: 'center', gap: 8,
-              backgroundColor: '#0f172a', borderWidth: 1, borderColor: '#334155',
-              borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 8,
-            }}>
-              <FontAwesome name="search" size={13} color="#94a3b8" />
-              <TextInput
-                value={smsSearch}
-                onChangeText={handleSmsSearchChange}
-                placeholder="Search customer, mobile, vehicle, slug..."
-                placeholderTextColor="#64748b"
-                style={{ flex: 1, fontSize: 12, color: '#f8fafc', paddingVertical: 0 }}
-              />
-              {smsSearch.length > 0 && (
-                <TouchableOpacity onPress={() => handleSmsSearchChange('')}>
-                  <FontAwesome name="times-circle" size={16} color="#94a3b8" />
-                </TouchableOpacity>
-              )}
-            </View>
-
             {(() => {
               const SMS_PER_PAGE = 8;
               const qSms = smsSearch.trim().toLowerCase();
               const todayDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
-              const filteredSms = smsReminderLogs.filter((r: any) => {
-                if (!qSms) {
-                  if (smsFilter === 'today') {
-                    if (!r.created_at) return false;
-                    const rowDate = new Date(r.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
-                    if (rowDate !== todayDate) return false;
-                  }
-                  if (smsFilter === 'sent' && r.sms_status !== 'Sent') return false;
-                  if (smsFilter === 'failed' && r.sms_status !== 'Failed') return false;
-                  if (smsFilter === 'opened' && Number(r.access_count || 0) <= 0) return false;
-                  return true;
+              const [ty, tm, td] = todayDate.split('-').map(Number);
+              const fmtYmd = (dt: Date) =>
+                `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+
+              const getRangeForPreset = (preset: string) => {
+                if (preset === 'today') return { from: todayDate, to: todayDate };
+                if (preset === 'yesterday') {
+                  const yest = fmtYmd(new Date(ty, tm - 1, td - 1));
+                  return { from: yest, to: yest };
                 }
+                if (preset === 'last_7_days') {
+                  return { from: fmtYmd(new Date(ty, tm - 1, td - 6)), to: todayDate };
+                }
+                if (preset === 'last_30_days') {
+                  return { from: fmtYmd(new Date(ty, tm - 1, td - 29)), to: todayDate };
+                }
+                if (preset === 'last_month') {
+                  return {
+                    from: fmtYmd(new Date(ty, tm - 2, 1)),
+                    to: fmtYmd(new Date(ty, tm - 1, 0)),
+                  };
+                }
+                return { from: '', to: '' };
+              };
+
+              const activeRange = getRangeForPreset(smsDatePreset);
+              const matchesDate = (r: any) => {
+                if (smsDatePreset === 'all_time') return true;
+                if (!r.created_at) return false;
+                const rowDate = new Date(r.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+                return rowDate >= activeRange.from && rowDate <= activeRange.to;
+              };
+              const isRowEngaged = (r: any) =>
+                Number(r.access_count || 0) > 0 && Number(r.app_sessions || 0) > 0;
+
+              const dateScopedSms = smsReminderLogs.filter((r: any) => matchesDate(r));
+              const scopedTotal = dateScopedSms.length;
+              const scopedEngaged = dateScopedSms.filter((r: any) => isRowEngaged(r)).length;
+              const scopedSent = dateScopedSms.filter((r: any) => r.sms_status === 'Sent').length;
+              const scopedOpened = dateScopedSms.filter((r: any) => Number(r.access_count || 0) > 0).length;
+              const scopedFailed = dateScopedSms.filter((r: any) => r.sms_status === 'Failed').length;
+
+              const filteredSms = smsReminderLogs.filter((r: any) => {
+                if (!qSms && !matchesDate(r)) return false;
+                if (smsFilter === 'engaged' && !isRowEngaged(r)) return false;
+                if (smsFilter === 'sent' && r.sms_status !== 'Sent') return false;
+                if (smsFilter === 'failed' && r.sms_status !== 'Failed') return false;
+                if (smsFilter === 'opened' && Number(r.access_count || 0) <= 0) return false;
+                if (smsFilter === 'unopened' && (Number(r.access_count || 0) > 0 || r.sms_status !== 'Sent')) return false;
+                if (!qSms) return true;
                 const blob = [
                   r.customer_name,
                   r.customer_mobile,
@@ -668,141 +648,225 @@ export default function AdminPanelScreen() {
                 return blob.includes(qSms);
               });
 
-              const totalSmsCount = qSms
-                ? filteredSms.length
-                : smsFilter === 'today'
-                ? Number(smsReminderSummary.today_generated || filteredSms.length)
-                : smsFilter === 'sent'
-                ? Number(smsReminderSummary.total_sent || filteredSms.length)
-                : smsFilter === 'failed'
-                ? Number(smsReminderSummary.total_failed || filteredSms.length)
-                : smsFilter === 'opened'
-                ? Number(smsReminderSummary.total_opened || filteredSms.length)
-                : Number(smsReminderSummary.total_generated || filteredSms.length);
-
+              const totalSmsCount = filteredSms.length;
               const totalSmsPages = Math.max(1, Math.ceil(totalSmsCount / SMS_PER_PAGE));
               const safeSmsPage = Math.min(smsPage, totalSmsPages);
               const pagedSms = filteredSms.slice((safeSmsPage - 1) * SMS_PER_PAGE, safeSmsPage * SMS_PER_PAGE);
 
-              if (filteredSms.length === 0) {
-                return <Text style={{ color: '#94a3b8', fontSize: 13 }}>No maintenance reminder SMS match this filter.</Text>;
-              }
-
               return (
                 <>
-                  {pagedSms.map((row: any) => {
-                    const isSent = row.sms_status === 'Sent';
-                    const isFailed = row.sms_status === 'Failed';
-                    const isOpened = Number(row.access_count || 0) > 0;
-                    return (
-                      <View key={row.id} style={[styles.activeUserRow, { flexDirection: 'column', alignItems: 'flex-start', gap: 4 }]}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                          <Text style={styles.activeUserName}>
-                            {row.customer_name || 'Unknown'} ({[row.vehicle_make, row.vehicle_model].filter(Boolean).join(' ')})
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Maintenance Reminder SMS Tracker</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#34d399' }}>
+                      {scopedSent} Sent • {scopedEngaged} Logged In • {scopedFailed} Failed
+                    </Text>
+                  </View>
+
+                  {/* Date Scope Presets */}
+                  <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap', marginBottom: 8 }}>
+                    {([
+                      { key: 'today', label: 'Today 7AM' },
+                      { key: 'yesterday', label: 'Yesterday' },
+                      { key: 'last_7_days', label: 'Last 7D' },
+                      { key: 'last_30_days', label: 'Last 30D' },
+                      { key: 'last_month', label: 'Last Month' },
+                      { key: 'all_time', label: 'All Time' },
+                    ] as const).map((dp) => {
+                      const activeDp = smsDatePreset === dp.key;
+                      return (
+                        <TouchableOpacity
+                          key={dp.key}
+                          onPress={() => {
+                            setSmsDatePreset(dp.key);
+                            setSmsPage(1);
+                          }}
+                          style={{
+                            paddingHorizontal: 8,
+                            paddingVertical: 3,
+                            borderRadius: 10,
+                            borderWidth: 1,
+                            borderColor: activeDp ? '#2563eb' : '#334155',
+                            backgroundColor: activeDp ? '#2563eb' : '#0f172a',
+                          }}
+                        >
+                          <Text numberOfLines={1} style={{ fontSize: 10.5, fontWeight: '700', color: activeDp ? '#ffffff' : '#94a3b8' }}>
+                            {dp.label}
                           </Text>
-                          <TouchableOpacity
-                            onPress={() => {
-                              const cleanTitle = String(row.customer_title || '').trim();
-                              const cleanName = String(row.customer_name || 'Valued Client').trim();
-                              const toLine = cleanTitle ? `To: ${cleanTitle} ${cleanName}` : `To: ${cleanName}`;
-                              const vmm = [row.vehicle_make, row.vehicle_model].filter(Boolean).join(' ').trim() || 'Vehicle';
-                              const careLink = row.short_url || (row.slug ? `maskpro.link/${row.slug}` : '[No magic link]');
-                              const msgText = (row.sms_message_sent && String(row.sms_message_sent).trim()) || [
-                                toLine,
-                                '',
-                                'Dear Valued Customer,',
-                                '',
-                                'Greetings!',
-                                '',
-                                `Your ${vmm} is due for 6-Month NanoFix Maintenance.`,
-                                '',
-                                "Now it's even easier and faster to book! 1 click to this link will log you in, hassle-free!",
-                                '',
-                                'Book via our MaskPro Care app:',
-                                '',
-                                careLink,
-                                '',
-                                'MaskPro',
-                                'Always Brand New',
-                              ].join('\n');
-                              Alert.alert(
-                                isSent ? 'Delivered SMS Content' : 'SMS Content Preview',
-                                msgText
-                              );
-                            }}
-                            style={{
-                              paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12,
-                              backgroundColor: isSent ? 'rgba(16, 185, 129, 0.16)' : isFailed ? 'rgba(239, 68, 68, 0.16)' : 'rgba(148, 163, 184, 0.16)',
-                              borderWidth: 1,
-                              borderColor: isSent ? 'rgba(52, 211, 153, 0.4)' : isFailed ? 'rgba(248, 113, 113, 0.4)' : 'rgba(148, 163, 184, 0.3)',
-                            }}
-                          >
-                            <Text numberOfLines={1} style={{ fontSize: 11, fontWeight: '700', color: isSent ? '#34d399' : isFailed ? '#f87171' : '#94a3b8' }}>
-                              {isSent ? 'SMS Sent • View' : isFailed ? 'Failed • View' : 'Pending • View'}
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
-                        <Text style={styles.activeUserSub}>
-                          {row.customer_mobile} • {row.slug || row.short_url ? (row.short_url || `maskpro.link/${row.slug}`) : 'No Magic Link (Invalid Mobile #)'}
-                        </Text>
-                        <Text style={styles.activeUserSub}>
-                          {row.slug || row.short_url
-                            ? (isOpened ? `Opened (${row.access_count}x)` : 'Not Opened Yet')
-                            : 'Skipped by Sanitary Pre-Check'}
-                          {row.bound_platform ? ` • Device: ${row.bound_platform}` : ''}
-                          {row.bound_ip ? ` • IP: ${row.bound_ip}` : ''}
-                        </Text>
-                      </View>
-                    );
-                  })}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  {/* Status Filter Pills Scoped to Date Preset */}
+                  <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                    {([
+                      { key: 'all', label: `All (${scopedTotal})` },
+                      { key: 'engaged', label: `Logged In & Explored (${scopedEngaged})` },
+                      { key: 'sent', label: `Sent (${scopedSent})` },
+                      { key: 'opened', label: `Opened (${scopedOpened})` },
+                      { key: 'failed', label: `Failed (${scopedFailed})` },
+                    ] as const).map((f) => {
+                      const active = smsFilter === f.key;
+                      return (
+                        <TouchableOpacity
+                          key={f.key}
+                          onPress={() => handleSmsFilterChange(f.key as any)}
+                          style={{
+                            paddingHorizontal: 9,
+                            paddingVertical: 4,
+                            borderRadius: 12,
+                            borderWidth: 1,
+                            borderColor: active ? '#38bdf8' : '#334155',
+                            backgroundColor: active ? 'rgba(56, 189, 248, 0.18)' : '#0f172a',
+                          }}
+                        >
+                          <Text numberOfLines={1} style={{ fontSize: 11, fontWeight: '700', color: active ? '#38bdf8' : '#94a3b8' }}>
+                            {f.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
 
                   <View style={{
-                    marginTop: 12,
-                    paddingTop: 10,
-                    borderTopWidth: 1,
-                    borderTopColor: 'rgba(148, 163, 184, 0.16)',
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    flexWrap: 'wrap',
-                    gap: 8,
+                    flexDirection: 'row', alignItems: 'center', gap: 8,
+                    backgroundColor: '#0f172a', borderWidth: 1, borderColor: '#334155',
+                    borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 8,
                   }}>
-                    <Text style={{ fontSize: 11.5, color: '#94a3b8', fontWeight: '600' }}>
-                      Showing {(safeSmsPage - 1) * SMS_PER_PAGE + 1}–{Math.min(safeSmsPage * SMS_PER_PAGE, totalSmsCount)} of {totalSmsCount}
-                    </Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <TouchableOpacity
-                        disabled={safeSmsPage <= 1}
-                        onPress={() => handleSmsPageChange(safeSmsPage - 1)}
-                        style={{
-                          paddingHorizontal: 10,
-                          paddingVertical: 5,
-                          borderRadius: 8,
-                          borderWidth: 1,
-                          borderColor: safeSmsPage <= 1 ? '#1e293b' : '#334155',
-                          backgroundColor: safeSmsPage <= 1 ? '#0f172a' : '#1e293b',
-                          opacity: safeSmsPage <= 1 ? 0.5 : 1,
-                        }}
-                      >
-                        <Text numberOfLines={1} style={{ fontSize: 11.5, fontWeight: '700', color: '#e2e8f0' }}>Prev</Text>
+                    <FontAwesome name="search" size={13} color="#94a3b8" />
+                    <TextInput
+                      value={smsSearch}
+                      onChangeText={handleSmsSearchChange}
+                      placeholder="Search customer, mobile, vehicle, slug..."
+                      placeholderTextColor="#64748b"
+                      style={{ flex: 1, fontSize: 12, color: '#f8fafc', paddingVertical: 0 }}
+                    />
+                    {smsSearch.length > 0 && (
+                      <TouchableOpacity onPress={() => handleSmsSearchChange('')}>
+                        <FontAwesome name="times-circle" size={16} color="#94a3b8" />
                       </TouchableOpacity>
-                      <TouchableOpacity
-                        disabled={safeSmsPage >= totalSmsPages}
-                        onPress={() => handleSmsPageChange(safeSmsPage + 1)}
-                        style={{
-                          paddingHorizontal: 10,
-                          paddingVertical: 5,
-                          borderRadius: 8,
-                          borderWidth: 1,
-                          borderColor: safeSmsPage >= totalSmsPages ? '#1e293b' : '#334155',
-                          backgroundColor: safeSmsPage >= totalSmsPages ? '#0f172a' : '#1e293b',
-                          opacity: safeSmsPage >= totalSmsPages ? 0.5 : 1,
-                        }}
-                      >
-                        <Text numberOfLines={1} style={{ fontSize: 11.5, fontWeight: '700', color: '#e2e8f0' }}>Next</Text>
-                      </TouchableOpacity>
-                    </View>
+                    )}
                   </View>
+
+                  {filteredSms.length === 0 ? (
+                    <Text style={{ color: '#94a3b8', fontSize: 13 }}>No maintenance reminder SMS match this filter.</Text>
+                  ) : (
+                    <>
+                      {pagedSms.map((row: any) => {
+                        const isSent = row.sms_status === 'Sent';
+                        const isFailed = row.sms_status === 'Failed';
+                        const isOpened = Number(row.access_count || 0) > 0;
+                        return (
+                          <View key={row.id} style={[styles.activeUserRow, { flexDirection: 'column', alignItems: 'flex-start', gap: 4 }]}>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                              <Text style={styles.activeUserName}>
+                                {row.customer_name || 'Unknown'} ({[row.vehicle_make, row.vehicle_model].filter(Boolean).join(' ')})
+                              </Text>
+                              <TouchableOpacity
+                                onPress={() => {
+                                  const cleanTitle = String(row.customer_title || '').trim();
+                                  const cleanName = String(row.customer_name || 'Valued Client').trim();
+                                  const toLine = cleanTitle ? `To: ${cleanTitle} ${cleanName}` : `To: ${cleanName}`;
+                                  const vmm = [row.vehicle_make, row.vehicle_model].filter(Boolean).join(' ').trim() || 'Vehicle';
+                                  const careLink = row.short_url || (row.slug ? `maskpro.link/${row.slug}` : '[No magic link]');
+                                  const msgText = (row.sms_message_sent && String(row.sms_message_sent).trim()) || [
+                                    toLine,
+                                    '',
+                                    'Dear Valued Customer,',
+                                    '',
+                                    'Greetings!',
+                                    '',
+                                    `Your ${vmm} is due for 6-Month NanoFix Maintenance.`,
+                                    '',
+                                    "Now it's even easier and faster to book! 1 click to this link will log you in, hassle-free!",
+                                    '',
+                                    'Book via our MaskPro Care app:',
+                                    '',
+                                    careLink,
+                                    '',
+                                    'MaskPro',
+                                    'Always Brand New',
+                                  ].join('\n');
+                                  Alert.alert(
+                                    isSent ? 'Delivered SMS Content' : 'SMS Content Preview',
+                                    msgText
+                                  );
+                                }}
+                                style={{
+                                  paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12,
+                                  backgroundColor: isSent ? 'rgba(16, 185, 129, 0.16)' : isFailed ? 'rgba(239, 68, 68, 0.16)' : 'rgba(148, 163, 184, 0.16)',
+                                  borderWidth: 1,
+                                  borderColor: isSent ? 'rgba(52, 211, 153, 0.4)' : isFailed ? 'rgba(248, 113, 113, 0.4)' : 'rgba(148, 163, 184, 0.3)',
+                                }}
+                              >
+                                <Text numberOfLines={1} style={{ fontSize: 11, fontWeight: '700', color: isSent ? '#34d399' : isFailed ? '#f87171' : '#94a3b8' }}>
+                                  {isSent ? 'SMS Sent • View' : isFailed ? 'Failed • View' : 'Pending • View'}
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                            <Text style={styles.activeUserSub}>
+                              {row.customer_mobile} • {row.slug || row.short_url ? (row.short_url || `maskpro.link/${row.slug}`) : 'No Magic Link (Invalid Mobile #)'}
+                            </Text>
+                            <Text style={styles.activeUserSub}>
+                              {row.slug || row.short_url
+                                ? (isOpened ? `Opened (${row.access_count}x)` : 'Not Opened Yet')
+                                : 'Skipped by Sanitary Pre-Check'}
+                              {row.bound_platform ? ` • Device: ${row.bound_platform}` : ''}
+                              {row.bound_ip ? ` • IP: ${row.bound_ip}` : ''}
+                            </Text>
+                          </View>
+                        );
+                      })}
+
+                      <View style={{
+                        marginTop: 12,
+                        paddingTop: 10,
+                        borderTopWidth: 1,
+                        borderTopColor: 'rgba(148, 163, 184, 0.16)',
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: 8,
+                      }}>
+                        <Text style={{ fontSize: 11.5, color: '#94a3b8', fontWeight: '600' }}>
+                          Showing {(safeSmsPage - 1) * SMS_PER_PAGE + 1}–{Math.min(safeSmsPage * SMS_PER_PAGE, totalSmsCount)} of {totalSmsCount}
+                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <TouchableOpacity
+                            disabled={safeSmsPage <= 1}
+                            onPress={() => handleSmsPageChange(safeSmsPage - 1)}
+                            style={{
+                              paddingHorizontal: 10,
+                              paddingVertical: 5,
+                              borderRadius: 8,
+                              borderWidth: 1,
+                              borderColor: safeSmsPage <= 1 ? '#1e293b' : '#334155',
+                              backgroundColor: safeSmsPage <= 1 ? '#0f172a' : '#1e293b',
+                              opacity: safeSmsPage <= 1 ? 0.5 : 1,
+                            }}
+                          >
+                            <Text numberOfLines={1} style={{ fontSize: 11.5, fontWeight: '700', color: '#e2e8f0' }}>Prev</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            disabled={safeSmsPage >= totalSmsPages}
+                            onPress={() => handleSmsPageChange(safeSmsPage + 1)}
+                            style={{
+                              paddingHorizontal: 10,
+                              paddingVertical: 5,
+                              borderRadius: 8,
+                              borderWidth: 1,
+                              borderColor: safeSmsPage >= totalSmsPages ? '#1e293b' : '#334155',
+                              backgroundColor: safeSmsPage >= totalSmsPages ? '#0f172a' : '#1e293b',
+                              opacity: safeSmsPage >= totalSmsPages ? 0.5 : 1,
+                            }}
+                          >
+                            <Text numberOfLines={1} style={{ fontSize: 11.5, fontWeight: '700', color: '#e2e8f0' }}>Next</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </>
+                  )}
                 </>
               );
             })()}

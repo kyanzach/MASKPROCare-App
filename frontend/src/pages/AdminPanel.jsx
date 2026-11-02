@@ -48,18 +48,29 @@ export default function AdminPanel() {
   const [secSort, setSecSort] = useState('newest');
   const [secPage, setSecPage] = useState(1);
   const [secLimit, setSecLimit] = useState(10); // Prefetch 2 pages (5 per page = 10 items) initially
-  const [smsFilter, setSmsFilter] = useState('today');
+  const manilaTodayInit = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+  const [smsFilter, setSmsFilter] = useState('all'); // 'all' | 'engaged' | 'sent' | 'opened' | 'unopened' | 'failed'
+  const [smsDatePreset, setSmsDatePreset] = useState('today'); // 'today' | 'yesterday' | 'last_7_days' | 'last_30_days' | 'this_month' | 'last_month' | 'all_time' | 'custom'
+  const [smsDateFrom, setSmsDateFrom] = useState(manilaTodayInit);
+  const [smsDateTo, setSmsDateTo] = useState(manilaTodayInit);
+  const [smsDatePickerOpen, setSmsDatePickerOpen] = useState(false);
+  const [smsCalMonth, setSmsCalMonth] = useState(() => {
+    const [y, m] = manilaTodayInit.split('-').map(Number);
+    return { year: y, month: m - 1 };
+  });
+  const [smsPickingStep, setSmsPickingStep] = useState('from'); // 'from' | 'to'
   const [smsSearch, setSmsSearch] = useState('');
   const [smsSort, setSmsSort] = useState('newest');
   const [smsPage, setSmsPage] = useState(1);
-  const [smsLimit, setSmsLimit] = useState(250); // Prefetch full tracker dataset (8 per page)
+  const [smsLimit, setSmsLimit] = useState(500); // Prefetch full tracker dataset (8 per page)
   const [usersPage, setUsersPage] = useState(1);
   const [usersLimit, setUsersLimit] = useState(20); // Prefetch 2 pages (10 per page = 20 items) initially
   const [lastSyncedAt, setLastSyncedAt] = useState(new Date());
   const modFilterRef = useRef('pending');
   const dashParamsRef = useRef({
     secLimit: 10, secFilter: 'all', secSearch: '', secSort: 'newest',
-    smsLimit: 250, smsFilter: 'today', smsSearch: '', smsSort: 'newest',
+    smsLimit: 500, smsFilter: 'all', smsSearch: '', smsSort: 'newest',
+    smsFrom: manilaTodayInit, smsTo: manilaTodayInit,
     usersLimit: 20,
   });
 
@@ -71,9 +82,11 @@ export default function AdminPanel() {
     dashParamsRef.current = {
       secLimit, secFilter: secLogFilter, secSearch, secSort,
       smsLimit, smsFilter, smsSearch, smsSort,
+      smsFrom: smsDatePreset === 'all_time' ? '' : smsDateFrom,
+      smsTo: smsDatePreset === 'all_time' ? '' : smsDateTo,
       usersLimit,
     };
-  }, [secLimit, secLogFilter, secSearch, secSort, smsLimit, smsFilter, smsSearch, smsSort, usersLimit]);
+  }, [secLimit, secLogFilter, secSearch, secSort, smsLimit, smsFilter, smsSearch, smsSort, smsDatePreset, smsDateFrom, smsDateTo, usersLimit]);
 
   const showToast = (text, type = 'success') => {
     setToast({ text, type });
@@ -128,7 +141,7 @@ export default function AdminPanel() {
     try {
       const p = customParams || dashParamsRef.current;
       const res = await api.get(
-        `/admin/dashboard?sec_limit=${p.secLimit}&sec_filter=${encodeURIComponent(p.secFilter)}&sec_search=${encodeURIComponent(p.secSearch || '')}&sec_sort=${encodeURIComponent(p.secSort || 'newest')}&sms_limit=${p.smsLimit || 40}&sms_filter=${encodeURIComponent(p.smsFilter || 'today')}&sms_search=${encodeURIComponent(p.smsSearch || '')}&sms_sort=${encodeURIComponent(p.smsSort || 'newest')}&users_limit=${p.usersLimit}`
+        `/admin/dashboard?sec_limit=${p.secLimit}&sec_filter=${encodeURIComponent(p.secFilter)}&sec_search=${encodeURIComponent(p.secSearch || '')}&sec_sort=${encodeURIComponent(p.secSort || 'newest')}&sms_limit=${p.smsLimit || 500}&sms_filter=${encodeURIComponent(p.smsFilter || 'all')}&sms_search=${encodeURIComponent(p.smsSearch || '')}&sms_sort=${encodeURIComponent(p.smsSort || 'newest')}&sms_from=${encodeURIComponent(p.smsFrom || '')}&sms_to=${encodeURIComponent(p.smsTo || '')}&users_limit=${p.usersLimit}`
       );
       if (res.data.success) {
         setDashData(res.data.data);
@@ -141,10 +154,92 @@ export default function AdminPanel() {
     }
   };
 
+  // Helper to compute YYYY-MM-DD in Asia/Manila for date presets
+  const getManilaDateRangeForPreset = (presetKey) => {
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+    const [y, m, d] = todayStr.split('-').map(Number);
+    const fmt = (dt) => {
+      const yy = dt.getFullYear();
+      const mm = String(dt.getMonth() + 1).padStart(2, '0');
+      const dd = String(dt.getDate()).padStart(2, '0');
+      return `${yy}-${mm}-${dd}`;
+    };
+    if (presetKey === 'today') {
+      return { from: todayStr, to: todayStr };
+    }
+    if (presetKey === 'yesterday') {
+      const yest = new Date(y, m - 1, d - 1);
+      return { from: fmt(yest), to: fmt(yest) };
+    }
+    if (presetKey === 'last_7_days') {
+      const start = new Date(y, m - 1, d - 6);
+      return { from: fmt(start), to: todayStr };
+    }
+    if (presetKey === 'last_30_days') {
+      const start = new Date(y, m - 1, d - 29);
+      return { from: fmt(start), to: todayStr };
+    }
+    if (presetKey === 'this_month') {
+      const start = new Date(y, m - 1, 1);
+      return { from: fmt(start), to: todayStr };
+    }
+    if (presetKey === 'last_month') {
+      const start = new Date(y, m - 2, 1);
+      const end = new Date(y, m - 1, 0);
+      return { from: fmt(start), to: fmt(end) };
+    }
+    return { from: '', to: '' }; // 'all_time'
+  };
+
+  const handleSmsDatePresetChange = (presetKey) => {
+    setSmsDatePreset(presetKey);
+    setSmsPage(1);
+    setSmsPickingStep('from');
+    const range = getManilaDateRangeForPreset(presetKey);
+    setSmsDateFrom(range.from);
+    setSmsDateTo(range.to);
+    if (range.from) {
+      const [ry, rm] = range.from.split('-').map(Number);
+      setSmsCalMonth({ year: ry, month: rm - 1 });
+    }
+    const neededLimit = Math.max(smsLimit, 500);
+    setSmsLimit(neededLimit);
+    const updated = {
+      ...dashParamsRef.current,
+      smsFrom: range.from,
+      smsTo: range.to,
+      smsLimit: neededLimit,
+    };
+    dashParamsRef.current = updated;
+    loadDashboard(true, updated);
+  };
+
+  const handleSmsCustomDateApply = (fromStr, toStr, closePopover = false) => {
+    const cleanFrom = fromStr && toStr && fromStr > toStr ? toStr : fromStr;
+    const cleanTo = fromStr && toStr && fromStr > toStr ? fromStr : toStr;
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+    const nextPreset = (cleanFrom === todayStr && cleanTo === todayStr) ? 'today' : 'custom';
+    setSmsDatePreset(nextPreset);
+    setSmsDateFrom(cleanFrom);
+    setSmsDateTo(cleanTo);
+    setSmsPage(1);
+    if (closePopover) setSmsDatePickerOpen(false);
+    const neededLimit = Math.max(smsLimit, 500);
+    setSmsLimit(neededLimit);
+    const updated = {
+      ...dashParamsRef.current,
+      smsFrom: cleanFrom,
+      smsTo: cleanTo,
+      smsLimit: neededLimit,
+    };
+    dashParamsRef.current = updated;
+    loadDashboard(true, updated);
+  };
+
   // Handlers for Maintenance Reminder SMS & Magic Link Delivery Tracker (8 per page):
   const handleSmsPageChange = (nextPage) => {
     setSmsPage(nextPage);
-    const neededLimit = Math.max(250, (nextPage + 2) * 8);
+    const neededLimit = Math.max(500, (nextPage + 2) * 8);
     if (neededLimit > smsLimit) {
       setSmsLimit(neededLimit);
       const updated = { ...dashParamsRef.current, smsLimit: neededLimit };
@@ -156,7 +251,7 @@ export default function AdminPanel() {
   const handleSmsFilterChange = (nextFilter) => {
     setSmsFilter(nextFilter);
     setSmsPage(1);
-    const neededLimit = Math.max(smsLimit, 250);
+    const neededLimit = Math.max(smsLimit, 500);
     setSmsLimit(neededLimit);
     const updated = { ...dashParamsRef.current, smsFilter: nextFilter, smsLimit: neededLimit };
     dashParamsRef.current = updated;
@@ -166,7 +261,7 @@ export default function AdminPanel() {
   const handleSmsSearchChange = (val) => {
     setSmsSearch(val);
     setSmsPage(1);
-    const needed = Math.max(smsLimit, 250);
+    const needed = Math.max(smsLimit, 500);
     setSmsLimit(needed);
     const updated = { ...dashParamsRef.current, smsSearch: val, smsLimit: needed };
     dashParamsRef.current = updated;
@@ -176,16 +271,15 @@ export default function AdminPanel() {
   const handleSmsSortChange = (nextSort) => {
     setSmsSort(nextSort);
     setSmsPage(1);
-    // If sorting by Failed First while in a Sent-only filter (or vice versa), auto-expand to All Reminders so the sorted category is visible
     let effectiveFilter = smsFilter;
-    if (nextSort === 'failed_first' && ['sent', 'opened', 'unopened'].includes(smsFilter)) {
+    if (nextSort === 'failed_first' && ['sent', 'opened', 'engaged', 'unopened'].includes(smsFilter)) {
       effectiveFilter = 'all';
       setSmsFilter('all');
     } else if ((nextSort === 'sent_first' || nextSort === 'opened_first') && smsFilter === 'failed') {
       effectiveFilter = 'all';
       setSmsFilter('all');
     }
-    const needed = Math.max(smsLimit, 250);
+    const needed = Math.max(smsLimit, 500);
     setSmsLimit(needed);
     const updated = { ...dashParamsRef.current, smsSort: nextSort, smsFilter: effectiveFilter, smsLimit: needed };
     dashParamsRef.current = updated;
@@ -1053,24 +1147,45 @@ export default function AdminPanel() {
               return blob.includes(smsQuery) || Boolean(smsQueryId && blob.includes(smsQueryId));
             };
 
-            const isRowToday = (r) => {
-              if (!r.created_at) return false;
-              const rowDate = new Date(r.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+            const getRowManilaDate = (r) => {
+              if (!r.created_at) return '';
+              return new Date(r.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+            };
+
+            const isRowEngaged = (r) =>
+              Number(r.access_count || 0) > 0 && Number(r.app_sessions || 0) > 0;
+
+            const matchesDateRange = (r) => {
+              if (smsDatePreset === 'all_time') return true;
+              const rowDate = getRowManilaDate(r);
+              if (!rowDate) return false;
+              if (smsDateFrom && smsDateTo) {
+                return rowDate >= smsDateFrom && rowDate <= smsDateTo;
+              }
+              if (smsDateFrom) return rowDate >= smsDateFrom;
+              if (smsDateTo) return rowDate <= smsDateTo;
               return rowDate === todayDate;
             };
 
+            // 1. All rows within the selected Hotel/Airline Date Range (before status pill filter)
+            const dateScopedRows = smsReminderLogs.filter((r) => matchesDateRange(r));
+            const scopedTotalCount = dateScopedRows.length;
+            const scopedSentCount = dateScopedRows.filter((r) => r.sms_status === 'Sent').length;
+            const scopedOpenedCount = dateScopedRows.filter((r) => Number(r.access_count || 0) > 0).length;
+            const scopedEngagedCount = dateScopedRows.filter((r) => isRowEngaged(r)).length;
+            const scopedUnopenedCount = dateScopedRows.filter((r) => Number(r.access_count || 0) <= 0 && r.sms_status === 'Sent').length;
+            const scopedFailedCount = dateScopedRows.filter((r) => r.sms_status === 'Failed').length;
+
+            // Global Today vs All-Time engaged counts for the quick 1-click toggle
+            const todayEngagedCount = smsReminderLogs.filter((r) => getRowManilaDate(r) === todayDate && isRowEngaged(r)).length;
+            const allTimeEngagedCount = smsReminderLogs.filter((r) => isRowEngaged(r)).length;
+
+            // 2. Apply Search + Status Filter Pill + Sort
             const filteredSmsRows = smsReminderLogs
               .filter((r) => {
                 if (!matchesSearchRow(r)) return false;
-                if (smsQuery) {
-                  // When searching, still honor explicit status filter pills ('sent', 'failed', 'opened', 'unopened')
-                  if (smsFilter === 'sent' && r.sms_status !== 'Sent') return false;
-                  if (smsFilter === 'failed' && r.sms_status !== 'Failed') return false;
-                  if (smsFilter === 'opened' && Number(r.access_count || 0) <= 0) return false;
-                  if (smsFilter === 'unopened' && (Number(r.access_count || 0) > 0 || r.sms_status !== 'Sent')) return false;
-                  return true;
-                }
-                if (smsFilter === 'today') return isRowToday(r);
+                if (!smsQuery && !matchesDateRange(r)) return false;
+                if (smsFilter === 'engaged') return isRowEngaged(r);
                 if (smsFilter === 'sent') return r.sms_status === 'Sent';
                 if (smsFilter === 'failed') return r.sms_status === 'Failed';
                 if (smsFilter === 'opened') return Number(r.access_count || 0) > 0;
@@ -1079,6 +1194,9 @@ export default function AdminPanel() {
               })
               .sort((a, b) => {
                 if (smsSort === 'opened_first') {
+                  const aEng = isRowEngaged(a) ? 1 : 0;
+                  const bEng = isRowEngaged(b) ? 1 : 0;
+                  if (bEng !== aEng) return bEng - aEng;
                   const diff = Number(b.access_count || 0) - Number(a.access_count || 0);
                   if (diff !== 0) return diff;
                   return new Date(b.last_accessed_at || b.created_at || 0).getTime() - new Date(a.last_accessed_at || a.created_at || 0).getTime();
@@ -1104,79 +1222,79 @@ export default function AdminPanel() {
                 return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
               });
 
-            const totalSmsFiltered = smsQuery
-              ? filteredSmsRows.length
-              : Math.max(
-                  filteredSmsRows.length,
-                  smsFilter === 'today'
-                    ? Number(smsReminderSummary.today_generated || 0)
-                    : smsFilter === 'sent'
-                    ? Number(smsReminderSummary.total_sent || 0)
-                    : smsFilter === 'failed'
-                    ? Number(smsReminderSummary.total_failed || 0)
-                    : smsFilter === 'opened'
-                    ? Number(smsReminderSummary.total_opened || 0)
-                    : smsFilter === 'unopened'
-                    ? Number(smsReminderSummary.total_unopened || 0)
-                    : Number(smsReminderSummary.total_generated || 0)
-                );
+            const totalSmsFiltered = filteredSmsRows.length;
 
-            // Dynamic top summary badge figures bound to the active filter & search state
-            const filteredSentCount = filteredSmsRows.filter((r) => r.sms_status === 'Sent').length;
-            const filteredOpenedCount = filteredSmsRows.filter((r) => Number(r.access_count || 0) > 0).length;
-            const filteredFailedCount = filteredSmsRows.filter((r) => r.sms_status === 'Failed').length;
+            // Dynamic top summary badge figures bound to the active Date Range + Status Filter + Search
+            const activeRowsForBadges = smsQuery || smsFilter !== 'all' ? filteredSmsRows : dateScopedRows;
+            const badgeDeliveredCount = activeRowsForBadges.filter((r) => r.sms_status === 'Sent').length;
+            const badgeEngagedCount = activeRowsForBadges.filter((r) => isRowEngaged(r)).length;
+            const badgeOpenedCount = activeRowsForBadges.filter((r) => Number(r.access_count || 0) > 0).length;
+            const badgeFailedCount = activeRowsForBadges.filter((r) => r.sms_status === 'Failed').length;
 
-            const badgeDeliveredCount = smsQuery
-              ? filteredSentCount
-              : smsFilter === 'today'
-              ? Number(smsReminderSummary.today_sent ?? filteredSentCount)
-              : smsFilter === 'all'
-              ? Number(smsReminderSummary.total_sent ?? filteredSentCount)
-              : filteredSentCount;
+            const formatShortManilaDate = (ymd) => {
+              if (!ymd) return '';
+              const [y, m, d] = ymd.split('-').map(Number);
+              if (!y || !m || !d) return ymd;
+              return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            };
 
-            const badgeOpenedCount = smsQuery
-              ? filteredOpenedCount
-              : smsFilter === 'today'
-              ? Number(smsReminderSummary.today_opened ?? filteredOpenedCount)
-              : smsFilter === 'all'
-              ? Number(smsReminderSummary.total_opened ?? filteredOpenedCount)
-              : filteredOpenedCount;
+            const presetLabels = {
+              today: "Today's 7AM Batch",
+              yesterday: 'Yesterday',
+              last_7_days: 'Last 7 Days',
+              last_30_days: 'Last 30 Days',
+              this_month: 'This Month',
+              last_month: 'Last Month',
+              all_time: 'All Time',
+              custom: 'Custom Dates',
+            };
 
-            const badgeFailedCount = smsQuery
-              ? filteredFailedCount
-              : smsFilter === 'today'
-              ? Number(smsReminderSummary.today_failed ?? filteredFailedCount)
-              : smsFilter === 'all'
-              ? Number(smsReminderSummary.total_failed ?? filteredFailedCount)
-              : filteredFailedCount;
+            const activePresetLabel = presetLabels[smsDatePreset] || 'Custom Dates';
+            const dateRangeSubtitle = smsDatePreset === 'all_time'
+              ? 'All Historical + Today'
+              : smsDateFrom === smsDateTo
+              ? formatShortManilaDate(smsDateFrom)
+              : `${formatShortManilaDate(smsDateFrom)} → ${formatShortManilaDate(smsDateTo)}`;
 
             const headerScopeText = smsQuery
               ? `Search Match (${filteredSmsRows.length}) • ${badgeDeliveredCount} Sent / ${badgeFailedCount} Failed`
-              : smsFilter === 'today'
-              ? `7:00 AM Cron • Today: ${smsReminderSummary.today_sent || 0} Sent / ${smsReminderSummary.today_failed || 0} Failed`
-              : smsFilter === 'all'
-              ? `All Reminders (${smsReminderSummary.total_generated || totalSmsFiltered}) • ${smsReminderSummary.total_sent || 0} Sent / ${smsReminderSummary.total_failed || 0} Failed`
-              : smsFilter === 'sent'
-              ? `Sent Reminders (${smsReminderSummary.total_sent || totalSmsFiltered}) • ${smsReminderSummary.total_opened || 0} Opened`
-              : smsFilter === 'opened'
-              ? `Opened Links (${smsReminderSummary.total_opened || totalSmsFiltered}) • Active Click-Throughs`
-              : smsFilter === 'unopened'
-              ? `Not Opened Yet (${smsReminderSummary.total_unopened || totalSmsFiltered}) • Awaiting 1st Click`
-              : `Failed Reminders (${smsReminderSummary.total_failed || totalSmsFiltered}) • Invalid / Missing Mobile #`;
+              : `${activePresetLabel} (${dateRangeSubtitle}) • ${scopedSentCount} Sent / ${scopedEngagedCount} Logged In / ${scopedFailedCount} Failed`;
 
             const totalSmsPages = Math.max(1, Math.ceil(totalSmsFiltered / SMS_PER_PAGE));
             const safeSmsPage = Math.min(smsPage, totalSmsPages);
             const pagedSmsRows = filteredSmsRows.slice((safeSmsPage - 1) * SMS_PER_PAGE, safeSmsPage * SMS_PER_PAGE);
 
+            // Build calendar days for the Hotel/Airline Date Picker popover
+            const calYear = smsCalMonth.year;
+            const calMonthIdx = smsCalMonth.month;
+            const firstDayOfWeek = new Date(calYear, calMonthIdx, 1).getDay();
+            const daysInCalMonth = new Date(calYear, calMonthIdx + 1, 0).getDate();
+            const calMonthTitle = new Date(calYear, calMonthIdx, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            const calCells = [];
+            for (let i = 0; i < firstDayOfWeek; i += 1) calCells.push(null);
+            for (let d = 1; d <= daysInCalMonth; d += 1) {
+              const ymd = `${calYear}-${String(calMonthIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+              calCells.push({ day: d, ymd });
+            }
+
+            const spanDaysCount = (() => {
+              if (smsDatePreset === 'all_time' || !smsDateFrom || !smsDateTo) return null;
+              const [fy, fm, fd] = smsDateFrom.split('-').map(Number);
+              const [ty, tm, td] = smsDateTo.split('-').map(Number);
+              const diff = Math.round((new Date(ty, tm - 1, td) - new Date(fy, fm - 1, fd)) / 86400000) + 1;
+              return diff > 0 ? diff : 1;
+            })();
+
             return (
               <div style={{
-                background: 'white', borderRadius: '18px', overflow: 'hidden',
+                background: 'white', borderRadius: '18px', overflow: 'visible',
                 border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.03)',
                 marginBottom: '24px',
               }}>
                 {/* Header & Summary Badges */}
                 <div style={{
                   padding: '18px 22px', borderBottom: '1px solid #e2e8f0',
+                  borderTopLeftRadius: '18px', borderTopRightRadius: '18px',
                   background: 'linear-gradient(135deg, #eff6ff 0%, #ffffff 100%)',
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
@@ -1202,7 +1320,7 @@ export default function AdminPanel() {
                       <button
                         type="button"
                         onClick={() => handleSmsFilterChange(smsFilter === 'sent' ? 'all' : 'sent')}
-                        title="Click to filter by Delivered SMS"
+                        title="Click to filter by Delivered SMS in selected date range"
                         style={{
                           background: '#dcfce7', border: smsFilter === 'sent' ? '2px solid #15803d' : '1px solid #86efac', color: '#15803d',
                           fontSize: '12px', fontWeight: 700, padding: '5px 11px', borderRadius: '20px', whiteSpace: 'nowrap',
@@ -1213,8 +1331,20 @@ export default function AdminPanel() {
                       </button>
                       <button
                         type="button"
+                        onClick={() => handleSmsFilterChange(smsFilter === 'engaged' ? 'all' : 'engaged')}
+                        title="Click to filter by clients who clicked magic link, logged in & explored the app"
+                        style={{
+                          background: '#ecfeff', border: smsFilter === 'engaged' ? '2px solid #0e7490' : '1px solid #67e8f9', color: '#0e7490',
+                          fontSize: '12px', fontWeight: 700, padding: '5px 11px', borderRadius: '20px', whiteSpace: 'nowrap',
+                          cursor: 'pointer', fontFamily: 'inherit',
+                        }}
+                      >
+                        Logged In & Explored: {badgeEngagedCount}
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleSmsFilterChange(smsFilter === 'opened' ? 'all' : 'opened')}
-                        title="Click to filter by Opened Magic Links"
+                        title="Click to filter by Opened Magic Links in selected date range"
                         style={{
                           background: '#eff6ff', border: smsFilter === 'opened' ? '2px solid #1d4ed8' : '1px solid #bfdbfe', color: '#1d4ed8',
                           fontSize: '12px', fontWeight: 700, padding: '5px 11px', borderRadius: '20px', whiteSpace: 'nowrap',
@@ -1226,7 +1356,7 @@ export default function AdminPanel() {
                       <button
                         type="button"
                         onClick={() => handleSmsFilterChange(smsFilter === 'failed' ? 'all' : 'failed')}
-                        title="Click to filter by Failed SMS Reminders"
+                        title="Click to filter by Failed SMS Reminders in selected date range"
                         style={{
                           background: '#fef2f2', border: smsFilter === 'failed' ? '2px solid #dc2626' : '1px solid #fecaca', color: '#dc2626',
                           fontSize: '12px', fontWeight: 700, padding: '5px 11px', borderRadius: '20px', whiteSpace: 'nowrap',
@@ -1238,36 +1368,93 @@ export default function AdminPanel() {
                     </div>
                   </div>
 
-                  {/* Filter Pills + Search & Sort */}
+                  {/* Filter Pills (Scoped to Date Picker) + Search + Hotel/Airline Date Picker + Sort */}
                   <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginTop: '12px' }}>
-                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
                       {[
-                        { key: 'today', label: `Today's 7AM Batch (${smsReminderSummary.today_generated || 0})` },
-                        { key: 'all', label: `All Reminders (${smsReminderSummary.total_generated || 0})` },
-                        { key: 'sent', label: `Sent (${smsReminderSummary.total_sent || 0})` },
-                        { key: 'opened', label: `Opened (${smsReminderSummary.total_opened || 0})` },
-                        { key: 'unopened', label: `Not Opened Yet (${smsReminderSummary.total_unopened || 0})` },
-                        { key: 'failed', label: `Failed (${smsReminderSummary.total_failed || 0})` },
-                      ].map((f) => (
-                        <button
-                          key={f.key}
-                          onClick={() => handleSmsFilterChange(f.key)}
-                          style={{
-                            padding: '5px 11px', borderRadius: '16px', fontSize: '11.5px', fontWeight: 700,
-                            cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-                            border: smsFilter === f.key ? '1px solid #2563eb' : '1px solid #e2e8f0',
-                            background: smsFilter === f.key ? '#2563eb' : 'white',
-                            color: smsFilter === f.key ? 'white' : '#475569',
-                          }}
-                        >
-                          {f.label}
-                        </button>
-                      ))}
+                        {
+                          key: 'all',
+                          label: smsDatePreset === 'today'
+                            ? `Today's 7AM Batch (${scopedTotalCount})`
+                            : smsDatePreset === 'all_time'
+                            ? `All Reminders (${scopedTotalCount})`
+                            : `${activePresetLabel} (${scopedTotalCount})`,
+                        },
+                        {
+                          key: 'engaged',
+                          label: `Logged In & Explored (${scopedEngagedCount})`,
+                          icon: 'bi-person-check-fill',
+                        },
+                        { key: 'sent', label: `Sent (${scopedSentCount})` },
+                        { key: 'opened', label: `Opened (${scopedOpenedCount})` },
+                        { key: 'unopened', label: `Not Opened Yet (${scopedUnopenedCount})` },
+                        { key: 'failed', label: `Failed (${scopedFailedCount})` },
+                      ].map((f) => {
+                        const isActive = smsFilter === f.key;
+                        return (
+                          <button
+                            key={f.key}
+                            type="button"
+                            onClick={() => handleSmsFilterChange(f.key)}
+                            style={{
+                              padding: '5px 11px', borderRadius: '16px', fontSize: '11.5px', fontWeight: 700,
+                              cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                              display: 'inline-flex', alignItems: 'center', gap: '5px',
+                              border: isActive
+                                ? (f.key === 'engaged' ? '1px solid #0891b2' : '1px solid #2563eb')
+                                : (f.key === 'engaged' ? '1px solid #a5f3fc' : '1px solid #e2e8f0'),
+                              background: isActive
+                                ? (f.key === 'engaged' ? '#0891b2' : '#2563eb')
+                                : (f.key === 'engaged' ? '#ecfeff' : 'white'),
+                              color: isActive
+                                ? 'white'
+                                : (f.key === 'engaged' ? '#0e7490' : '#475569'),
+                            }}
+                          >
+                            {f.icon && <i className={`bi ${f.icon}`} style={{ fontSize: '11px' }}></i>}
+                            {f.label}
+                          </button>
+                        );
+                      })}
+
+                      {/* When 'Logged In & Explored' is active, show 1-click Today vs All Time scope switcher */}
+                      {smsFilter === 'engaged' && (
+                        <div style={{
+                          display: 'inline-flex', alignItems: 'center', background: '#f1f5f9',
+                          border: '1px solid #cbd5e1', borderRadius: '14px', padding: '2px', gap: '2px',
+                        }}>
+                          <button
+                            type="button"
+                            onClick={() => handleSmsDatePresetChange('today')}
+                            style={{
+                              padding: '3px 8px', borderRadius: '11px', fontSize: '10.5px', fontWeight: 800,
+                              border: 'none', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                              background: smsDatePreset === 'today' ? '#0f172a' : 'transparent',
+                              color: smsDatePreset === 'today' ? 'white' : '#475569',
+                            }}
+                          >
+                            Only Today ({todayEngagedCount})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSmsDatePresetChange('all_time')}
+                            style={{
+                              padding: '3px 8px', borderRadius: '11px', fontSize: '10.5px', fontWeight: 800,
+                              border: 'none', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                              background: smsDatePreset === 'all_time' ? '#0f172a' : 'transparent',
+                              color: smsDatePreset === 'all_time' ? 'white' : '#475569',
+                            }}
+                          >
+                            All Time ({allTimeEngagedCount})
+                          </button>
+                        </div>
+                      )}
                     </div>
 
+                    {/* Search Input */}
                     <div style={{
                       position: 'relative', display: 'flex', alignItems: 'center',
-                      minWidth: '260px', flex: '1 1 260px', maxWidth: '380px',
+                      minWidth: '230px', flex: '1 1 230px', maxWidth: '340px',
                     }}>
                       <i className="bi bi-search" style={{
                         position: 'absolute', left: '11px', fontSize: '12.5px', color: '#64748b', pointerEvents: 'none',
@@ -1297,6 +1484,293 @@ export default function AdminPanel() {
                       )}
                     </div>
 
+                    {/* Hotel/Airline-Style Date Range Picker (Placed Next to Sort Dropdown) */}
+                    <div style={{ position: 'relative' }}>
+                      <button
+                        type="button"
+                        onClick={() => setSmsDatePickerOpen((prev) => !prev)}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '8px',
+                          padding: '5px 12px', borderRadius: '10px',
+                          border: smsDatePickerOpen ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                          background: smsDatePickerOpen ? '#eff6ff' : 'white',
+                          color: '#0f172a', fontSize: '12px', fontWeight: 700,
+                          cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                          boxShadow: smsDatePickerOpen ? '0 0 0 3px rgba(37,99,235,0.12)' : '0 1px 2px rgba(15,23,42,0.04)',
+                        }}
+                      >
+                        <i className="bi bi-calendar-range-fill" style={{ color: '#2563eb', fontSize: '13px' }}></i>
+                        <span>{activePresetLabel}</span>
+                        <span style={{
+                          fontSize: '11px', fontWeight: 600, color: '#1d4ed8',
+                          background: '#dbeafe', padding: '1px 7px', borderRadius: '10px',
+                        }}>
+                          {smsDatePreset === 'all_time'
+                            ? 'All Dates'
+                            : smsDateFrom === smsDateTo
+                            ? formatShortManilaDate(smsDateFrom)
+                            : `${formatShortManilaDate(smsDateFrom)} – ${formatShortManilaDate(smsDateTo)}`}
+                        </span>
+                        <i className={`bi bi-chevron-${smsDatePickerOpen ? 'up' : 'down'}`} style={{ fontSize: '10px', color: '#64748b' }}></i>
+                      </button>
+
+                      {smsDatePickerOpen && (
+                        <>
+                          <div
+                            onClick={() => setSmsDatePickerOpen(false)}
+                            style={{ position: 'fixed', inset: 0, zIndex: 998 }}
+                          />
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                              position: 'absolute', right: 0, top: 'calc(100% + 8px)', zIndex: 999,
+                              width: '360px', maxWidth: '92vw', background: 'white',
+                              borderRadius: '16px', border: '1px solid #cbd5e1',
+                              boxShadow: '0 20px 50px rgba(15, 23, 42, 0.18)',
+                              padding: '14px',
+                            }}
+                          >
+                            {/* Quick Preset Pills at Top */}
+                            <div style={{ marginBottom: '12px' }}>
+                              <div style={{ fontSize: '10.5px', fontWeight: 800, color: '#64748b', marginBottom: '6px' }}>
+                                Quick Date Scope
+                              </div>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                                {[
+                                  { key: 'today', label: "Today's 7AM Batch" },
+                                  { key: 'yesterday', label: 'Yesterday' },
+                                  { key: 'last_7_days', label: 'Last 7 Days' },
+                                  { key: 'last_30_days', label: 'Last 30 Days' },
+                                  { key: 'this_month', label: 'This Month' },
+                                  { key: 'last_month', label: 'Last Month' },
+                                  { key: 'all_time', label: 'All Time' },
+                                ].map((p) => {
+                                  const isSel = smsDatePreset === p.key;
+                                  return (
+                                    <button
+                                      key={p.key}
+                                      type="button"
+                                      onClick={() => {
+                                        handleSmsDatePresetChange(p.key);
+                                        setSmsDatePickerOpen(false);
+                                      }}
+                                      style={{
+                                        padding: '4px 9px', borderRadius: '12px', fontSize: '11px', fontWeight: 700,
+                                        cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                                        border: isSel ? '1px solid #2563eb' : '1px solid #e2e8f0',
+                                        background: isSel ? '#2563eb' : '#f8fafc',
+                                        color: isSel ? 'white' : '#334155',
+                                      }}
+                                    >
+                                      {p.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Hotel/Airline Check-In (From) -> Check-Out (To) Cards */}
+                            <div style={{
+                              display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '6px', alignItems: 'center',
+                              background: '#f8fafc', padding: '8px', borderRadius: '12px', border: '1px solid #e2e8f0',
+                              marginBottom: '12px',
+                            }}>
+                              <div
+                                onClick={() => setSmsPickingStep('from')}
+                                style={{
+                                  padding: '6px 8px', borderRadius: '8px', cursor: 'pointer',
+                                  background: smsPickingStep === 'from' ? 'white' : 'transparent',
+                                  border: smsPickingStep === 'from' ? '1.5px solid #2563eb' : '1px solid transparent',
+                                }}
+                              >
+                                <div style={{ fontSize: '10px', fontWeight: 700, color: '#64748b' }}>From Date</div>
+                                <input
+                                  type="date"
+                                  value={smsDateFrom}
+                                  max={todayDate}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (!val) return;
+                                    const nextTo = smsDateTo && val > smsDateTo ? val : (smsDateTo || val);
+                                    handleSmsCustomDateApply(val, nextTo, false);
+                                    setSmsPickingStep('to');
+                                  }}
+                                  style={{
+                                    border: 'none', background: 'transparent', fontSize: '11.5px', fontWeight: 800,
+                                    color: '#0f172a', fontFamily: 'inherit', width: '100%', outline: 'none', padding: 0,
+                                  }}
+                                />
+                              </div>
+
+                              <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '12px', fontWeight: 800 }}>
+                                <i className="bi bi-arrow-right"></i>
+                                {spanDaysCount && (
+                                  <div style={{ fontSize: '9.5px', color: '#2563eb', fontWeight: 800 }}>
+                                    {spanDaysCount}d
+                                  </div>
+                                )}
+                              </div>
+
+                              <div
+                                onClick={() => setSmsPickingStep('to')}
+                                style={{
+                                  padding: '6px 8px', borderRadius: '8px', cursor: 'pointer',
+                                  background: smsPickingStep === 'to' ? 'white' : 'transparent',
+                                  border: smsPickingStep === 'to' ? '1.5px solid #2563eb' : '1px solid transparent',
+                                }}
+                              >
+                                <div style={{ fontSize: '10px', fontWeight: 700, color: '#64748b' }}>To Date</div>
+                                <input
+                                  type="date"
+                                  value={smsDateTo}
+                                  max={todayDate}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (!val) return;
+                                    const nextFrom = smsDateFrom && val < smsDateFrom ? val : (smsDateFrom || val);
+                                    handleSmsCustomDateApply(nextFrom, val, false);
+                                  }}
+                                  style={{
+                                    border: 'none', background: 'transparent', fontSize: '11.5px', fontWeight: 800,
+                                    color: '#0f172a', fontFamily: 'inherit', width: '100%', outline: 'none', padding: 0,
+                                  }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Interactive Hotel/Airline Calendar Grid */}
+                            <div style={{ marginBottom: '10px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setSmsCalMonth((prev) => {
+                                    const d = new Date(prev.year, prev.month - 1, 1);
+                                    return { year: d.getFullYear(), month: d.getMonth() };
+                                  })}
+                                  style={{
+                                    border: '1px solid #e2e8f0', background: 'white', borderRadius: '8px',
+                                    width: '28px', height: '28px', cursor: 'pointer', color: '#334155', fontWeight: 800,
+                                  }}
+                                >
+                                  ‹
+                                </button>
+                                <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#0f172a' }}>
+                                  {calMonthTitle}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setSmsCalMonth((prev) => {
+                                    const d = new Date(prev.year, prev.month + 1, 1);
+                                    return { year: d.getFullYear(), month: d.getMonth() };
+                                  })}
+                                  style={{
+                                    border: '1px solid #e2e8f0', background: 'white', borderRadius: '8px',
+                                    width: '28px', height: '28px', cursor: 'pointer', color: '#334155', fontWeight: 800,
+                                  }}
+                                >
+                                  ›
+                                </button>
+                              </div>
+
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px', textAlign: 'center', marginBottom: '4px' }}>
+                                {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((dow) => (
+                                  <div key={dow} style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', padding: '2px 0' }}>
+                                    {dow}
+                                  </div>
+                                ))}
+                              </div>
+
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px' }}>
+                                {calCells.map((cell, idx) => {
+                                  if (!cell) return <div key={`empty-${idx}`} style={{ height: '30px' }} />;
+                                  const isFuture = cell.ymd > todayDate;
+                                  const isStart = smsDatePreset !== 'all_time' && cell.ymd === smsDateFrom;
+                                  const isEnd = smsDatePreset !== 'all_time' && cell.ymd === smsDateTo;
+                                  const isInRange = smsDatePreset !== 'all_time' && smsDateFrom && smsDateTo && cell.ymd > smsDateFrom && cell.ymd < smsDateTo;
+                                  const isSelectedEdge = isStart || isEnd;
+
+                                  return (
+                                    <button
+                                      key={cell.ymd}
+                                      type="button"
+                                      disabled={isFuture}
+                                      onClick={() => {
+                                        if (smsPickingStep === 'from' || !smsDateFrom || (smsDateFrom && smsDateTo && smsDateFrom !== smsDateTo)) {
+                                          handleSmsCustomDateApply(cell.ymd, cell.ymd, false);
+                                          setSmsPickingStep('to');
+                                        } else {
+                                          if (cell.ymd < smsDateFrom) {
+                                            handleSmsCustomDateApply(cell.ymd, smsDateFrom, false);
+                                          } else {
+                                            handleSmsCustomDateApply(smsDateFrom, cell.ymd, false);
+                                          }
+                                          setSmsPickingStep('from');
+                                        }
+                                      }}
+                                      style={{
+                                        height: '30px', border: 'none', borderRadius: isSelectedEdge ? '8px' : isInRange ? '4px' : '8px',
+                                        fontSize: '11.5px', fontWeight: isSelectedEdge ? 800 : 600,
+                                        cursor: isFuture ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+                                        background: isSelectedEdge
+                                          ? '#2563eb'
+                                          : isInRange
+                                          ? '#dbeafe'
+                                          : cell.ymd === todayDate
+                                          ? '#f1f5f9'
+                                          : 'transparent',
+                                        color: isFuture
+                                          ? '#cbd5e1'
+                                          : isSelectedEdge
+                                          ? 'white'
+                                          : isInRange
+                                          ? '#1d4ed8'
+                                          : '#0f172a',
+                                      }}
+                                    >
+                                      {cell.day}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Popover Footer */}
+                            <div style={{
+                              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                              paddingTop: '10px', borderTop: '1px solid #e2e8f0', gap: '8px',
+                            }}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleSmsDatePresetChange('today');
+                                  setSmsDatePickerOpen(false);
+                                }}
+                                style={{
+                                  padding: '6px 10px', borderRadius: '8px', border: '1px solid #cbd5e1',
+                                  background: 'white', color: '#475569', fontSize: '11.5px', fontWeight: 700,
+                                  cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                                }}
+                              >
+                                Reset to Today 7AM
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setSmsDatePickerOpen(false)}
+                                style={{
+                                  padding: '6px 14px', borderRadius: '8px', border: 'none',
+                                  background: '#2563eb', color: 'white', fontSize: '11.5px', fontWeight: 700,
+                                  cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                                }}
+                              >
+                                Done ({scopedTotalCount} records)
+                              </button>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Sort Dropdown */}
                     <select
                       value={smsSort}
                       onChange={(e) => handleSmsSortChange(e.target.value)}
@@ -1308,7 +1782,7 @@ export default function AdminPanel() {
                     >
                       <option value="newest">Sort: Newest Sent</option>
                       <option value="sent_first">Sort: Sent & Delivered First</option>
-                      <option value="opened_first">Sort: Opened First</option>
+                      <option value="opened_first">Sort: Logged In & Opened First</option>
                       <option value="failed_first">Sort: Failed First</option>
                       <option value="customer_az">Sort: Customer Name (A–Z)</option>
                       <option value="oldest">Sort: Oldest First</option>

@@ -535,11 +535,13 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
       LIMIT ?
     `, [usersLimit]).catch(() => [[]]);
 
-    // 6. Maintenance Reminder SMS & Magic Link Delivery Tracker (Paginated + Search + Filter + Sort)
-    const smsLimit = Math.min(500, Math.max(15, parseInt(req.query.sms_limit, 10) || 200));
+    // 6. Maintenance Reminder SMS & Magic Link Delivery Tracker (Paginated + Search + Filter + Sort + Date Range)
+    const smsLimit = Math.min(1000, Math.max(15, parseInt(req.query.sms_limit, 10) || 500));
     const smsFilter = String(req.query.sms_filter || 'all');
     const smsSearch = String(req.query.sms_search || '').trim();
     const smsSort = String(req.query.sms_sort || 'newest');
+    const smsFrom = String(req.query.sms_from || '').trim();
+    const smsTo = String(req.query.sms_to || '').trim();
 
     const unifiedTrackerSubquery = `
       (
@@ -608,17 +610,31 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
 
     let smsWhereSql = '1=1';
     const smsParams = [];
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
     if (!smsSearch) {
-      if (smsFilter === 'today') {
-        smsWhereSql = 'DATE(tr.created_at) = CURDATE()';
-      } else if (smsFilter === 'sent') {
-        smsWhereSql = "tr.sms_status = 'Sent'";
+      if (dateRegex.test(smsFrom) && dateRegex.test(smsTo)) {
+        smsWhereSql += ' AND DATE(tr.created_at) BETWEEN ? AND ?';
+        smsParams.push(smsFrom, smsTo);
+      } else if (dateRegex.test(smsFrom)) {
+        smsWhereSql += ' AND DATE(tr.created_at) >= ?';
+        smsParams.push(smsFrom);
+      } else if (dateRegex.test(smsTo)) {
+        smsWhereSql += ' AND DATE(tr.created_at) <= ?';
+        smsParams.push(smsTo);
+      } else if (smsFilter === 'today') {
+        smsWhereSql += ' AND DATE(tr.created_at) = CURDATE()';
+      }
+
+      if (smsFilter === 'sent') {
+        smsWhereSql += " AND tr.sms_status = 'Sent'";
       } else if (smsFilter === 'failed') {
-        smsWhereSql = "tr.sms_status = 'Failed'";
+        smsWhereSql += " AND tr.sms_status = 'Failed'";
       } else if (smsFilter === 'opened') {
-        smsWhereSql = 'tr.access_count > 0';
+        smsWhereSql += ' AND tr.access_count > 0';
+      } else if (smsFilter === 'engaged') {
+        smsWhereSql += ' AND (tr.access_count > 0 OR EXISTS (SELECT 1 FROM care_app_telemetry t WHERE t.customer_id = tr.customer_id AND t.session_count > 0))';
       } else if (smsFilter === 'unopened') {
-        smsWhereSql = "tr.access_count = 0 AND tr.sms_status = 'Sent'";
+        smsWhereSql += " AND tr.access_count = 0 AND tr.sms_status = 'Sent'";
       }
     }
 
@@ -672,6 +688,8 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
         COALESCE(SUM(CASE WHEN DATE(tr.created_at) = CURDATE() AND tr.sms_status = 'Failed' THEN 1 ELSE 0 END), 0) AS today_failed,
         COALESCE(SUM(CASE WHEN tr.access_count > 0 THEN 1 ELSE 0 END), 0) AS total_opened,
         COALESCE(SUM(CASE WHEN DATE(tr.created_at) = CURDATE() AND tr.access_count > 0 THEN 1 ELSE 0 END), 0) AS today_opened,
+        COALESCE(SUM(CASE WHEN tr.access_count > 0 AND EXISTS (SELECT 1 FROM care_app_telemetry t WHERE t.customer_id = tr.customer_id AND t.session_count > 0) THEN 1 ELSE 0 END), 0) AS total_engaged,
+        COALESCE(SUM(CASE WHEN DATE(tr.created_at) = CURDATE() AND tr.access_count > 0 AND EXISTS (SELECT 1 FROM care_app_telemetry t WHERE t.customer_id = tr.customer_id AND t.session_count > 0) THEN 1 ELSE 0 END), 0) AS today_engaged,
         COALESCE(SUM(CASE WHEN tr.access_count = 0 AND tr.sms_status = 'Sent' THEN 1 ELSE 0 END), 0) AS total_unopened,
         COALESCE(SUM(CASE WHEN DATE(tr.created_at) = CURDATE() AND tr.access_count = 0 AND tr.sms_status = 'Sent' THEN 1 ELSE 0 END), 0) AS today_unopened,
         MIN(CASE WHEN DATE(tr.created_at) = CURDATE() THEN tr.created_at END) AS today_cron_started_at,
@@ -680,6 +698,7 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
     `).catch(() => [[{
       total_generated: 0, today_generated: 0, total_sent: 0, today_sent: 0,
       total_failed: 0, today_failed: 0, total_opened: 0, today_opened: 0,
+      total_engaged: 0, today_engaged: 0,
       total_unopened: 0, today_unopened: 0, today_cron_started_at: null, today_cron_finished_at: null,
     }]]);
 

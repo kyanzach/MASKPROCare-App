@@ -1,5 +1,12 @@
 # Changelog
 
+## [v1.17.21] — 2026-11-02
+### Added & Improved
+- **Hotel/Airline-Style Date Range Picker & `Logged In & Explored` Filter in Maintenance Reminder SMS Tracker (`server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`, `mobile/app/admin.tsx`)**:
+  - Added a **Hotel/Airline-Style Date Range Picker** placed next to the Sort dropdown (defaulting to **`Today's 7AM Batch`**) with quick presets (`Today's 7AM Batch`, `Yesterday`, `Last 7 Days`, `Last 30 Days`, `This Month`, `Last Month`, `All Time`), `From Date → To Date` cards, and an interactive calendar month grid.
+  - Scoped all status filter pills (`Today's 7AM Batch` / active range, **`Logged In & Explored`**, `Sent`, `Opened`, `Not Opened Yet`, `Failed`) and top-right summary badges (`Delivered`, `Logged In & Explored`, `Opened Link`, `Failed Number`) dynamically to the selected Date Range.
+  - Added the **`Logged In & Explored`** (`engaged`) filter pill right next to `Today's 7AM Batch` (plus a 1-click `Only Today | All Time` scope switcher) to view clients who clicked their magic link, logged in, and explored the Care App.
+
 ## [v1.17.20] — 2026-11-02
 ### Fixed & Optimized
 - **Fixed Admin Control Center Dashboard Timeout & MySQL Connection Pool Exhaustion (`server/routes/admin.js`, `server/services/ltoReminderCron.js`)**:
