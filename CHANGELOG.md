@@ -1,5 +1,15 @@
 # Changelog
 
+## [v1.17.23] — 2026-11-04
+### Fixed & Audited
+- **Authoritative Unify Vehicle & Plate Resolution + Wallet-Safe Loyalty Card Audit & Migration (`server/routes/loyalty.js`, `unify_maskpro.loyalty_cards`, BoomerangMe API)**:
+  - **Hermie Vilo (`customer_id = 452`)**: Re-bound Diamond Package card `#627360-973-525` (`Toyota Innova / LAH 5208`) to `Booking #2855` (synced to `6/24` credits used, `150` pts), patched Gold Package card `#788466-346-645` (`Booking #13697`) in BoomerangMe to display `Ford Everest 2025 / MBD 5438` (synced to `1/14` credits used, `25` pts), and removed the duplicate Gold card `#357385-771-347`.
+  - **System-Wide Wallet-Safe Migration (`unify_maskpro.loyalty_cards` & BoomerangMe API)**:
+    - Re-bound **329 mislinked Coating cards** to their true `Nano Ceramic Coating` booking (`booking_id`) and reconciled **88 cards'** stamp/point balances to match their vehicle's completed `Nano Fix (Maintenance)` visits.
+    - Patched **619 multi-vehicle cards** via BoomerangMe `PATCH /cards/{card_no}` where the pre-Mar-14 Unify SQL bug had written the customer's 1st vehicle (`MIN(v.id)`) instead of the booking's actual 2nd/3rd vehicle (`Make Model / Plate No.`), pushing live vehicle/plate updates to installed Apple/Google Wallet passes without affecting wallet installation.
+    - Removed **544 deleted/duplicate uninstalled or superseded bot-backfilled cards** (`92` `status: "deleted"` in BoomerangMe + `452` duplicate uninstalled/bot-backfilled cards) while preserving **100% (`0` removed)** of real customer Apple Wallet / Google Pay installations.
+  - **Authoritative Vehicle Override & Deleted Card Filter (`server/routes/loyalty.js`)**: Updated `GET /api/loyalty/cards` to join `vehicles v ON b.customer_vehicle_id = v.id`, use the booking's authoritative `Make Model / Plate No.` from Unify, and filter out `status === 'deleted'` BoomerangMe cards.
+
 ## [v1.17.22] — 2026-11-02
 ### Fixed & Verified (iOS & Android Mobile App `v1.13.14`)
 - **Fixed Expo SDK 54 `expo-asset` Deduping, Android Expo Go Notification Loader, and Custom SMS Preview Modal (`mobile/package.json`, `mobile/app.json`, `mobile/app/_layout.tsx`, `mobile/app/admin.tsx`, `mobile/services/notificationService.ts`)**:

@@ -28,7 +28,7 @@ router.get('/cards', authenticateToken, async (req, res) => {
     const forceRefresh = req.query.refresh === 'true';
     console.log('[Loyalty] Fetching cards for customer_id:', customerId, forceRefresh ? '(forced refresh)' : '');
 
-    // Step 1: Get card numbers from Unify's loyalty_cards table via bookings
+    // Step 1: Get card numbers + authoritative booking vehicle from Unify's loyalty_cards table
     const [dbCards] = await pool.query(`
       SELECT 
         lc.lc_id,
@@ -38,9 +38,13 @@ router.get('/cards', authenticateToken, async (req, res) => {
         lc.card_install_link,
         lc.joturl_shortlink,
         lc.joturl_qrlink,
-        lc.booking_id
+        lc.booking_id,
+        v.make AS vehicle_make,
+        v.model AS vehicle_model,
+        v.plate_no AS vehicle_plate
       FROM loyalty_cards lc
       JOIN bookings b ON lc.booking_id = b.booking_id
+      LEFT JOIN vehicles v ON b.customer_vehicle_id = v.id
       WHERE b.customer_id = ?
       ORDER BY lc.created_date DESC
     `, [customerId]);
@@ -56,9 +60,18 @@ router.get('/cards', authenticateToken, async (req, res) => {
       });
     }
 
+    const buildUnifyVehicleLabel = (make, model, plate) => {
+      const mm = `${(make || '').trim()} ${(model || '').trim()}`.trim().replace(/\s+/g, ' ');
+      if (!mm) return null;
+      const p = String(plate || '').trim();
+      const validPlate = p && !/^(to follow|no plate|for registration|none|n\/a|-|\.|tba|new)$/i.test(p) ? p : '';
+      return validPlate ? `${mm} / ${validPlate}` : mm;
+    };
+
     // Step 2: Fetch balance/details concurrently with in-memory caching
-    const cards = await Promise.all(
+    const rawCards = await Promise.all(
       dbCards.map(async (dbCard) => {
+        const unifyVehicle = buildUnifyVehicleLabel(dbCard.vehicle_make, dbCard.vehicle_model, dbCard.vehicle_plate);
         try {
           const now = Date.now();
           const cached = cardCache.get(dbCard.card_no);
@@ -74,8 +87,15 @@ router.get('/cards', authenticateToken, async (req, res) => {
           }
 
           if (apiCard) {
+            if (apiCard.status === 'deleted') {
+              return null;
+            }
             const formatted = formatCard(apiCard);
             formatted.dbId = dbCard.lc_id;
+            formatted.bookingId = dbCard.booking_id;
+            if (unifyVehicle) {
+              formatted.vehicle = unifyVehicle;
+            }
             formatted.installLink = dbCard.card_install_link || formatted.installLink;
             formatted.shortLink = dbCard.joturl_shortlink || null;
             formatted.qrLink = dbCard.joturl_qrlink || formatted.qrLink;
@@ -103,10 +123,11 @@ router.get('/cards', authenticateToken, async (req, res) => {
               installLink: dbCard.card_install_link || null,
               shortLink: dbCard.joturl_shortlink || null,
               qrLink: dbCard.joturl_qrlink || null,
-              vehicle: null,
+              vehicle: unifyVehicle || null,
               branch: null,
               customerName: null,
               dbId: dbCard.lc_id,
+              bookingId: dbCard.booking_id,
             };
           }
         } catch (cardErr) {
@@ -126,11 +147,15 @@ router.get('/cards', authenticateToken, async (req, res) => {
             createdAt: dbCard.created_date || null,
             installLink: dbCard.card_install_link || null,
             shortLink: dbCard.joturl_shortlink || null,
+            vehicle: unifyVehicle || null,
             dbId: dbCard.lc_id,
+            bookingId: dbCard.booking_id,
           };
         }
       })
     );
+
+    const cards = rawCards.filter(Boolean);
 
     console.log('[Loyalty] Total cards formatted:', cards.length);
 
