@@ -1,5 +1,12 @@
 # Changelog
 
+## [v1.18.2] — 2026-11-06
+### Added & Refined
+- **Separated Cryptographically Verified Native Wallets (`1,506`) from QR Form / Browser-Only PWA Views (`1,690`) + 15-Minute Auto-Sync Cron (`server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`)**:
+  - Updated `GET /api/admin/wallet-cards` and the Admin UI so `Verified Native Wallets` counts **only** `Apple Wallet` (`1,370`, verified via Apple PassKit `POST /v1/devices/{deviceLibraryIdentifier}/registrations/...` callback) and `Google Wallet` (`136`, verified via Google Wallet `eventType: "save"` callback) = **`1,506` (`21.3%`)**.
+  - Separated BoomerangMe's `device = 'PWA'` (`1,690` cards) into **`Form / Browser Only (1,690)`** (`QR Form / Browser Only (PWA)`) since BoomerangMe marks `PWA` as `installed` the moment the browser loads `/installcard/{id}/pwa` after QR form submission without requiring a native wallet installation.
+  - Added a 15-minute automatic background sync interval (`syncWalletCardsFromBoomerangMe`) in `server/routes/admin.js` so `care_wallet_cards_cache` stays synced automatically without manual clicks.
+
 ## [v1.18.1] — 2026-11-06
 ### Fixed
 - **Fixed `branches` Table Primary Key Join in `GET /api/admin/wallet-cards` (`server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`)**:

@@ -1692,8 +1692,8 @@ export default function AdminPanel() {
               }
               if (device === 'Apple Wallet') {
                 return {
-                  label: 'Apple Wallet (iOS)',
-                  sub: 'Installed on iPhone Wallet',
+                  label: 'Apple Wallet (Verified)',
+                  sub: 'Verified via Apple PassKit callback',
                   icon: 'bi-apple',
                   bg: '#0f172a',
                   color: '#ffffff',
@@ -1702,8 +1702,8 @@ export default function AdminPanel() {
               }
               if (device === 'Google Pay') {
                 return {
-                  label: 'Google Wallet (Android)',
-                  sub: 'Installed on Google Pay',
+                  label: 'Google Wallet (Verified)',
+                  sub: 'Verified via Google Wallet callback',
                   icon: 'bi-google',
                   bg: '#dcfce7',
                   color: '#15803d',
@@ -1711,12 +1711,12 @@ export default function AdminPanel() {
                 };
               }
               return {
-                label: 'Android / Web Pass (PWA)',
-                sub: 'Installed via Mobile Web Pass',
-                icon: 'bi-android2',
-                bg: '#e0f2fe',
-                color: '#0369a1',
-                border: '#7dd3fc',
+                label: 'QR Form / Browser Only (PWA)',
+                sub: 'Submitted form — no native wallet install',
+                icon: 'bi-globe2',
+                bg: '#fef3c7',
+                color: '#b45309',
+                border: '#fcd34d',
               };
             };
 
@@ -1736,17 +1736,17 @@ export default function AdminPanel() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                         <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <i className="bi bi-wallet2" style={{ color: '#2563eb' }}></i>
-                          Care Card Wallet Installed Clients (Apple Wallet & Android)
+                          Care Card Wallet Installed Clients (Apple Wallet & Google Wallet)
                         </h3>
                         <span style={{
                           background: '#dcfce7', border: '1px solid #86efac', color: '#15803d',
                           fontSize: '11px', fontWeight: 800, padding: '3px 10px', borderRadius: '20px', whiteSpace: 'nowrap',
                         }}>
-                          {(ws.total_installed || 0).toLocaleString()} Installed / {(ws.total_active_cards || 0).toLocaleString()} Active Cards ({ws.install_rate_pct || 0}%)
+                          {(ws.total_installed || 0).toLocaleString()} Verified Native Wallets / {(ws.total_active_cards || 0).toLocaleString()} Active Cards ({ws.install_rate_pct || 0}%)
                         </span>
                       </div>
                       <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#64748b' }}>
-                        Complete directory of clients who installed their MaskPro Care Card in Apple Wallet, Google Wallet, or Android Pass — synced with BoomerangMe API v2 & Unify
+                        Separates cryptographically verified Apple PassKit & Google Wallet installs from QR form / browser-only PWA views — auto-synced every 15m
                       </p>
                     </div>
 
@@ -1787,14 +1787,14 @@ export default function AdminPanel() {
                         onClick={() => applyWalletFilter(walletFilter === 'pwa' ? 'all_installed' : 'pwa')}
                         style={{
                           display: 'inline-flex', alignItems: 'center', gap: '6px',
-                          background: walletFilter === 'pwa' ? '#0284c7' : '#e0f2fe',
-                          color: walletFilter === 'pwa' ? '#ffffff' : '#0369a1',
-                          border: '1px solid #7dd3fc', fontSize: '12px', fontWeight: 700,
+                          background: walletFilter === 'pwa' ? '#b45309' : '#fef3c7',
+                          color: walletFilter === 'pwa' ? '#ffffff' : '#b45309',
+                          border: '1px solid #fcd34d', fontSize: '12px', fontWeight: 700,
                           padding: '5px 11px', borderRadius: '20px', whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: 'inherit',
                         }}
                       >
-                        <i className="bi bi-android2"></i>
-                        <span>Android / PWA Pass: {(ws.pwa_wallet_count || 0).toLocaleString()}</span>
+                        <i className="bi bi-globe2"></i>
+                        <span>Form / Browser Only: {(ws.pwa_wallet_count || 0).toLocaleString()}</span>
                       </button>
 
                       <button
@@ -1808,8 +1808,8 @@ export default function AdminPanel() {
                           whiteSpace: 'nowrap', cursor: walletSyncing ? 'wait' : 'pointer', fontFamily: 'inherit',
                         }}
                       >
-                        <i className={`bi ${walletSyncing ? 'bi-arrow-repeat' : 'bi-cloud-arrow-down-fill'}`}></i>
-                        <span>{walletSyncing ? 'Syncing BoomerangMe...' : 'Sync BoomerangMe'}</span>
+                        <i className={`bi ${walletSyncing ? 'bi-arrow-repeat' : 'bi-check2-circle'}`}></i>
+                        <span>{walletSyncing ? 'Syncing BoomerangMe...' : 'Auto-Sync (15m) • Sync Now'}</span>
                       </button>
                     </div>
                   </div>
@@ -1818,12 +1818,11 @@ export default function AdminPanel() {
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', marginTop: '12px' }}>
                     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
                       {[
-                        { key: 'all_installed', label: `All Installed (${(ws.total_installed || 0).toLocaleString()})`, icon: 'bi-check2-circle' },
+                        { key: 'all_installed', label: `Verified Native Wallets (${(ws.total_installed || 0).toLocaleString()})`, icon: 'bi-patch-check-fill' },
                         { key: 'apple', label: `Apple Wallet (${(ws.apple_wallet_count || 0).toLocaleString()})`, icon: 'bi-apple' },
-                        { key: 'android_all', label: `All Android / PWA (${(ws.android_web_count || 0).toLocaleString()})`, icon: 'bi-android2' },
                         { key: 'google_pay', label: `Google Wallet (${(ws.google_pay_count || 0).toLocaleString()})`, icon: 'bi-google' },
-                        { key: 'pwa', label: `PWA Pass (${(ws.pwa_wallet_count || 0).toLocaleString()})`, icon: 'bi-phone-fill' },
-                        { key: 'not_installed', label: `Not Installed (${(ws.not_installed_count || 0).toLocaleString()})`, icon: 'bi-hourglass-split' },
+                        { key: 'pwa', label: `Form / Browser Only (${(ws.pwa_wallet_count || 0).toLocaleString()})`, icon: 'bi-globe2' },
+                        { key: 'not_installed', label: `Never Scanned (${(ws.not_installed_count || 0).toLocaleString()})`, icon: 'bi-hourglass-split' },
                       ].map((f) => {
                         const isActive = walletFilter === f.key;
                         return (

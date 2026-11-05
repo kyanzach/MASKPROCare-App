@@ -1303,19 +1303,21 @@ router.get('/wallet-cards', authenticateToken, requireAdmin, async (req, res) =>
     const sort = String(req.query.sort || 'recent_installed').trim();
 
     // 1. Summary KPIs from care_wallet_cards_cache joined with loyalty_cards (active Unify cards)
+    // NOTE: Only 'Apple Wallet' and 'Google Pay' are true native wallet installs verified via Apple PassKit / Google Wallet callbacks.
+    // 'PWA' means the client scanned the QR / submitted the BoomerangMe form and viewed the web pass in the browser without installing a native wallet.
     const [[summaryRow]] = await pool.query(`
       SELECT
         COUNT(*) AS total_active_cards,
-        SUM(CASE WHEN w.status = 'installed' THEN 1 ELSE 0 END) AS total_installed,
+        SUM(CASE WHEN w.status = 'installed' AND w.device IN ('Apple Wallet', 'Google Pay') THEN 1 ELSE 0 END) AS total_installed,
         SUM(CASE WHEN w.status = 'installed' AND w.device = 'Apple Wallet' THEN 1 ELSE 0 END) AS apple_wallet_count,
         SUM(CASE WHEN w.status = 'installed' AND w.device = 'Google Pay' THEN 1 ELSE 0 END) AS google_pay_count,
         SUM(CASE WHEN w.status = 'installed' AND w.device = 'PWA' THEN 1 ELSE 0 END) AS pwa_wallet_count,
         SUM(CASE WHEN w.status = 'installed' AND w.device IN ('Google Pay', 'PWA') THEN 1 ELSE 0 END) AS android_web_count,
         SUM(CASE WHEN w.status = 'not_installed' THEN 1 ELSE 0 END) AS not_installed_count,
-        SUM(CASE WHEN w.status = 'installed' AND w.template_id IN (41402, 42605, 43203, 1006938) THEN 1 ELSE 0 END) AS coating_installed_count,
-        SUM(CASE WHEN w.status = 'installed' AND w.template_id = 147644 THEN 1 ELSE 0 END) AS tint_installed_count,
-        SUM(CASE WHEN w.status = 'installed' AND w.template_id IN (318553, 302979) THEN 1 ELSE 0 END) AS ppf_installed_count,
-        COUNT(DISTINCT CASE WHEN w.status = 'installed' THEN COALESCE(CAST(b.customer_id AS CHAR), w.bm_customer_id, w.card_no) END) AS unique_installed_clients,
+        SUM(CASE WHEN w.status = 'installed' AND w.device IN ('Apple Wallet', 'Google Pay') AND w.template_id IN (41402, 42605, 43203, 1006938) THEN 1 ELSE 0 END) AS coating_installed_count,
+        SUM(CASE WHEN w.status = 'installed' AND w.device IN ('Apple Wallet', 'Google Pay') AND w.template_id = 147644 THEN 1 ELSE 0 END) AS tint_installed_count,
+        SUM(CASE WHEN w.status = 'installed' AND w.device IN ('Apple Wallet', 'Google Pay') AND w.template_id IN (318553, 302979) THEN 1 ELSE 0 END) AS ppf_installed_count,
+        COUNT(DISTINCT CASE WHEN w.status = 'installed' AND w.device IN ('Apple Wallet', 'Google Pay') THEN COALESCE(CAST(b.customer_id AS CHAR), w.bm_customer_id, w.card_no) END) AS unique_installed_clients,
         MAX(w.synced_at) AS last_synced_at
       FROM care_wallet_cards_cache w
       INNER JOIN loyalty_cards lc ON lc.card_no = w.card_no
@@ -1328,7 +1330,7 @@ router.get('/wallet-cards', authenticateToken, requireAdmin, async (req, res) =>
     const params = [];
 
     if (filter === 'all_installed') {
-      whereParts.push("w.status = 'installed'");
+      whereParts.push("w.status = 'installed' AND w.device IN ('Apple Wallet', 'Google Pay')");
     } else if (filter === 'apple') {
       whereParts.push("w.status = 'installed' AND w.device = 'Apple Wallet'");
     } else if (filter === 'android_all') {
@@ -1544,13 +1546,14 @@ router.get('/wallet-cards', authenticateToken, requireAdmin, async (req, res) =>
   }
 });
 
-// POST /api/admin/wallet-cards/sync — Sync recent or all cards from BoomerangMe API v2
-router.post('/wallet-cards/sync', authenticateToken, requireAdmin, async (req, res) => {
+// Reusable BoomerangMe wallet sync helper (used by both auto-cron every 15m and manual POST /wallet-cards/sync)
+let isWalletSyncRunning = false;
+async function syncWalletCardsFromBoomerangMe(maxPages = 2) {
+  if (isWalletSyncRunning) return 0;
+  isWalletSyncRunning = true;
+  let totalSynced = 0;
   try {
     const apiKey = process.env.BOOMERANGME_API_KEY || '6f59f368388c29e4a01e704af6432d74';
-    const maxPages = req.body?.full ? 10 : 2; // Quick sync checks newest 2,000 cards; full sync checks all
-    let totalSynced = 0;
-
     const toMysqlDt = (iso) => {
       if (!iso) return null;
       const d = new Date(iso);
@@ -1662,7 +1665,24 @@ router.post('/wallet-cards/sync', authenticateToken, requireAdmin, async (req, r
       totalSynced += items.length;
       if (items.length < 1000) break;
     }
+  } catch (err) {
+    console.error('[Admin] Auto wallet sync error:', err.message);
+  } finally {
+    isWalletSyncRunning = false;
+  }
+  return totalSynced;
+}
 
+// Automatic background cron: sync BoomerangMe wallet cards every 15 minutes
+setInterval(() => {
+  syncWalletCardsFromBoomerangMe(2).catch(() => {});
+}, 15 * 60 * 1000);
+
+// POST /api/admin/wallet-cards/sync — Manual on-demand sync
+router.post('/wallet-cards/sync', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const maxPages = req.body?.full ? 10 : 2;
+    const totalSynced = await syncWalletCardsFromBoomerangMe(maxPages);
     return res.json({
       success: true,
       message: `Synced ${totalSynced.toLocaleString()} cards from BoomerangMe`,
