@@ -1,5 +1,16 @@
 # Changelog
 
+## [v1.17.24] — 2026-11-05
+### Added & Fixed
+- **Magic Link Booking Conversion Badge (`Booked` / `Booked • Cancelled` / `Not Booked`) & Full Customer Exploration Journey Tracker (`server/routes/admin.js`, `server/routes/dashboard.js`, `server/routes/auth.js`, `server/routes/bookings.js`, `server/middleware/auth.js`, `frontend/src/pages/AdminPanel.jsx`, `frontend/src/components/Layout.jsx`, `frontend/src/pages/Profile.jsx`, `frontend/src/api/client.js`, `frontend/src/context/AuthContext.jsx`, `mobile/app/_layout.tsx`, `mobile/app/admin.tsx`)**:
+  - **Conversion Badge beside `Opened (1x)`**: Added real-time booking conversion tracking to `GET /api/admin/dashboard` (`smsReminderLogs`) and rendered a concise **`Booked`**, **`Booked • Cancelled`**, or **`Not Booked`** badge right beside `Opened (1x)` in the **Magic Link & Open Status** column (plus a `Booked` filter pill and header badge).
+  - **App-Wide Page & Action Exploration Tracker (`care_app_activity_logs`) + Historical Backfill**:
+    - Created `care_app_activity_logs` and backfilled historical exploration timelines from Nginx access logs, `care_magic_link_security_logs`, `booking_requests`, and `care_app_telemetry` for all Magic Link users (`Carlo Peli`, `Welhelm Suico`, `Jan Laurea`, `Hermie Vilo`, `Patrick Henry Lacson`, `Ryan Paco`).
+    - Added automatic route-level page tracking across all pages (`Dashboard`, `My Bookings`, `My Vehicles`, `My MASKPROCare Cards`, `Account Settings`, `Aftercare`, `Community Care`, `Shop`) in Web (`Layout.jsx`, `Profile.jsx`) and Mobile (`mobile/app/_layout.tsx`), plus backend action logging (`Opened Smart Magic Link`, `Checked Available Dates`, `Booked Appointment`, `Cancelled Booking Request`).
+  - **Interactive `Explore Log` Button & Journey Modal**: Added the **`Explore Log`** button in the **App Activity** column (and in **Who Uses the App**) opening the **App Exploration Journey Modal** (`GET /api/admin/customer-journey/:customerId`) with a chronological step-by-step timeline of every page and action explored.
+  - **iOS Safari Magic Link Session Persistence Fix**: Added 3-layer token persistence (`inMemoryToken` + `sessionStorage` + `localStorage` in `frontend/src/api/client.js` and `HttpOnly` cookie fallback `mpc_auth_token` in `server/routes/auth.js` / `server/middleware/auth.js`) so iOS Safari WebViews never drop authentication on `POST /api/bookings/create`.
+  - **2nd & 3rd Pass Loyalty Cards Live Audit (`unify_maskpro.loyalty_cards`)**: Verified `0` deleted cards, `0` duplicate Coating bookings, and `0` orphaned cards across all `7,069` active loyalty cards.
+
 ## [v1.17.23] — 2026-11-04
 ### Fixed & Audited
 - **Authoritative Unify Vehicle & Plate Resolution + Wallet-Safe Loyalty Card Audit & Migration (`server/routes/loyalty.js`, `unify_maskpro.loyalty_cards`, BoomerangMe API)**:

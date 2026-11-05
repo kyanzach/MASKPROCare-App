@@ -528,7 +528,8 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
           WHEN DATE(t.last_seen_at) = CURDATE() THEN 'today'
           ELSE 'offline'
         END AS presence_status,
-        (SELECT COUNT(*) FROM bookings b WHERE b.customer_id = c.id) AS booking_count
+        (SELECT COUNT(*) FROM bookings b WHERE b.customer_id = c.id) AS booking_count,
+        (SELECT COUNT(*) FROM care_app_activity_logs al WHERE al.customer_id = c.id) AS activity_count
       FROM care_app_telemetry t
       JOIN customers c ON c.id = t.customer_id
       ORDER BY t.last_seen_at DESC
@@ -633,6 +634,8 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
         smsWhereSql += ' AND tr.access_count > 0';
       } else if (smsFilter === 'engaged') {
         smsWhereSql += ' AND (tr.access_count > 0 OR EXISTS (SELECT 1 FROM care_app_telemetry t WHERE t.customer_id = tr.customer_id AND t.session_count > 0))';
+      } else if (smsFilter === 'booked') {
+        smsWhereSql += " AND (EXISTS (SELECT 1 FROM booking_requests br WHERE br.customer_id = tr.customer_id AND br.time_added >= DATE_SUB(tr.created_at, INTERVAL 15 MINUTE)) OR EXISTS (SELECT 1 FROM bookings b WHERE b.customer_id = tr.customer_id AND b.time_added >= DATE_SUB(tr.created_at, INTERVAL 15 MINUTE) AND (b.notes IS NULL OR b.notes NOT LIKE '%CANCELLED:%')))";
       } else if (smsFilter === 'unopened') {
         smsWhereSql += " AND tr.access_count = 0 AND tr.sms_status = 'Sent'";
       }
@@ -738,6 +741,46 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
         (SELECT MAX(t.last_seen_at) FROM care_app_telemetry t WHERE t.customer_id = paged.customer_id) AS app_last_seen_at,
         (SELECT COALESCE(SUM(t.session_count), 0) FROM care_app_telemetry t WHERE t.customer_id = paged.customer_id) AS app_sessions,
         (SELECT COALESCE(SUM(t.api_hits), 0) FROM care_app_telemetry t WHERE t.customer_id = paged.customer_id) AS app_api_hits,
+        (SELECT COUNT(*) FROM care_app_activity_logs al WHERE al.customer_id = paged.customer_id) AS activity_count,
+        (SELECT br.request_id FROM booking_requests br
+         WHERE br.customer_id = paged.customer_id
+           AND br.time_added >= DATE_SUB(paged.created_at, INTERVAL 15 MINUTE)
+         ORDER BY FIELD(br.status, 'approved', 'pending', 'negotiating', 'waitlisted', 'cancelled', 'rejected'), br.request_id DESC LIMIT 1) AS booked_request_id,
+        (SELECT br.status FROM booking_requests br
+         WHERE br.customer_id = paged.customer_id
+           AND br.time_added >= DATE_SUB(paged.created_at, INTERVAL 15 MINUTE)
+         ORDER BY FIELD(br.status, 'approved', 'pending', 'negotiating', 'waitlisted', 'cancelled', 'rejected'), br.request_id DESC LIMIT 1) AS booked_request_status,
+        (SELECT br.latest_service FROM booking_requests br
+         WHERE br.customer_id = paged.customer_id
+           AND br.time_added >= DATE_SUB(paged.created_at, INTERVAL 15 MINUTE)
+         ORDER BY FIELD(br.status, 'approved', 'pending', 'negotiating', 'waitlisted', 'cancelled', 'rejected'), br.request_id DESC LIMIT 1) AS booked_service,
+        (SELECT br.booking_date FROM booking_requests br
+         WHERE br.customer_id = paged.customer_id
+           AND br.time_added >= DATE_SUB(paged.created_at, INTERVAL 15 MINUTE)
+         ORDER BY FIELD(br.status, 'approved', 'pending', 'negotiating', 'waitlisted', 'cancelled', 'rejected'), br.request_id DESC LIMIT 1) AS booked_for_date,
+        (SELECT br.time_added FROM booking_requests br
+         WHERE br.customer_id = paged.customer_id
+           AND br.time_added >= DATE_SUB(paged.created_at, INTERVAL 15 MINUTE)
+         ORDER BY FIELD(br.status, 'approved', 'pending', 'negotiating', 'waitlisted', 'cancelled', 'rejected'), br.request_id DESC LIMIT 1) AS booked_created_at,
+        (SELECT br.cancellation_reason FROM booking_requests br
+         WHERE br.customer_id = paged.customer_id
+           AND br.time_added >= DATE_SUB(paged.created_at, INTERVAL 15 MINUTE)
+         ORDER BY FIELD(br.status, 'approved', 'pending', 'negotiating', 'waitlisted', 'cancelled', 'rejected'), br.request_id DESC LIMIT 1) AS booked_cancel_reason,
+        (SELECT b2.booking_id FROM bookings b2
+         WHERE b2.customer_id = paged.customer_id
+           AND b2.time_added >= DATE_SUB(paged.created_at, INTERVAL 15 MINUTE)
+           AND (b2.notes IS NULL OR b2.notes NOT LIKE '%CANCELLED:%')
+         ORDER BY b2.booking_id DESC LIMIT 1) AS direct_booking_id,
+        (SELECT b2.booking_date FROM bookings b2
+         WHERE b2.customer_id = paged.customer_id
+           AND b2.time_added >= DATE_SUB(paged.created_at, INTERVAL 15 MINUTE)
+           AND (b2.notes IS NULL OR b2.notes NOT LIKE '%CANCELLED:%')
+         ORDER BY b2.booking_id DESC LIMIT 1) AS direct_booking_date,
+        (SELECT b2.latest_service FROM bookings b2
+         WHERE b2.customer_id = paged.customer_id
+           AND b2.time_added >= DATE_SUB(paged.created_at, INTERVAL 15 MINUTE)
+           AND (b2.notes IS NULL OR b2.notes NOT LIKE '%CANCELLED:%')
+         ORDER BY b2.booking_id DESC LIMIT 1) AS direct_booking_service,
         (SELECT s.location FROM care_magic_link_security_logs s WHERE paged.id > 0 AND s.magic_link_id = paged.id AND s.location IS NOT NULL ORDER BY s.id DESC LIMIT 1) AS bound_location,
         (SELECT s.browser_detail FROM care_magic_link_security_logs s WHERE paged.id > 0 AND s.magic_link_id = paged.id AND s.event_type IN ('first_bind', 'authorized_access') ORDER BY s.id DESC LIMIT 1) AS bound_browser,
         (SELECT s.os_detail FROM care_magic_link_security_logs s WHERE paged.id > 0 AND s.magic_link_id = paged.id AND s.event_type IN ('first_bind', 'authorized_access') ORDER BY s.id DESC LIMIT 1) AS bound_os
@@ -1148,6 +1191,66 @@ router.post('/security/action', authenticateToken, requireAdmin, async (req, res
   } catch (err) {
     console.error('[Admin] Security action error:', err.message);
     return res.status(500).json({ success: false, message: 'Failed to execute security action' });
+  }
+});
+
+// ─── GET /api/admin/customer-journey/:customerId ─────────────
+// Returns chronological page & action exploration journey for a customer
+router.get('/customer-journey/:customerId', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const customerId = parseInt(req.params.customerId, 10);
+    if (!customerId || customerId <= 0) {
+      return res.status(400).json({ success: false, message: 'Valid customerId is required' });
+    }
+
+    const [[customer]] = await pool.query(
+      'SELECT id, full_name, mobile_number FROM customers WHERE id = ? LIMIT 1',
+      [customerId]
+    );
+
+    const [logs] = await pool.query(
+      `SELECT id, customer_id, platform, event_type, page_path, page_label, action_detail, ip_address, device_label, created_at
+       FROM care_app_activity_logs
+       WHERE customer_id = ?
+       ORDER BY created_at ASC, id ASC
+       LIMIT 250`,
+      [customerId]
+    ).catch(() => [[]]);
+
+    const [bookingRequests] = await pool.query(
+      `SELECT br.request_id, br.booking_date, br.latest_service, br.status, br.cancellation_reason, br.time_added,
+              v.make, v.model, v.plate_no
+       FROM booking_requests br
+       LEFT JOIN vehicles v ON v.id = br.customer_vehicle_id
+       WHERE br.customer_id = ?
+       ORDER BY br.time_added DESC
+       LIMIT 20`,
+      [customerId]
+    ).catch(() => [[]]);
+
+    const [magicLinks] = await pool.query(
+      `SELECT ml.id, ml.slug, ml.short_url, ml.access_count, ml.bound_platform, ml.bound_ip, ml.bound_at, ml.last_accessed_at,
+              v.make AS vehicle_make, v.model AS vehicle_model
+       FROM care_magic_links ml
+       LEFT JOIN vehicles v ON v.id = ml.vehicle_id
+       WHERE ml.customer_id = ?
+       ORDER BY ml.last_accessed_at DESC, ml.id DESC
+       LIMIT 10`,
+      [customerId]
+    ).catch(() => [[]]);
+
+    return res.json({
+      success: true,
+      data: {
+        customer: customer || { id: customerId, full_name: `Customer #${customerId}`, mobile_number: '' },
+        logs,
+        booking_requests: bookingRequests,
+        magic_links: magicLinks,
+      },
+    });
+  } catch (err) {
+    console.error('[Admin] Customer journey error:', err.message);
+    return res.status(500).json({ success: false, message: 'Failed to load customer journey' });
   }
 });
 

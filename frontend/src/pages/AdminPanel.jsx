@@ -41,6 +41,7 @@ export default function AdminPanel() {
   // Confirmation modal state
   const [confirmModal, setConfirmModal] = useState(null);
   const [smsPreviewModal, setSmsPreviewModal] = useState(null);
+  const [journeyModal, setJourneyModal] = useState(null);
   const [impersonating, setImpersonating] = useState(false);
   const [secActionLoading, setSecActionLoading] = useState(null);
   const [secLogFilter, setSecLogFilter] = useState('all');
@@ -438,6 +439,75 @@ export default function AdminPanel() {
     }
   };
 
+  const openCustomerJourney = async (customerId, customerName, rowMeta = null) => {
+    if (!customerId) return;
+    setJourneyModal({
+      loading: true,
+      customerId,
+      customerName: customerName || `Customer #${customerId}`,
+      rowMeta,
+      logs: [],
+      bookingRequests: [],
+      magicLinks: [],
+    });
+    try {
+      const res = await api.get(`/admin/customer-journey/${customerId}`);
+      const d = res.data?.data || {};
+      setJourneyModal((prev) =>
+        prev && prev.customerId === customerId
+          ? {
+              ...prev,
+              loading: false,
+              customerName: d.customer?.full_name || prev.customerName,
+              customerMobile: d.customer?.mobile_number || rowMeta?.customer_mobile || '',
+              logs: d.logs || [],
+              bookingRequests: d.booking_requests || [],
+              magicLinks: d.magic_links || [],
+            }
+          : prev
+      );
+    } catch (err) {
+      setJourneyModal((prev) =>
+        prev && prev.customerId === customerId ? { ...prev, loading: false } : prev
+      );
+      showToast(err.response?.data?.message || 'Failed to load customer journey', 'error');
+    }
+  };
+
+  const getRowBookingConversion = (row) => {
+    if (!row) return { status: 'not_booked', label: 'Not Booked', detail: '' };
+    const reqStatus = String(row.booked_request_status || '').toLowerCase();
+    const hasActiveReq = Boolean(row.booked_request_id && ['pending', 'approved', 'negotiating', 'waitlisted'].includes(reqStatus));
+    const hasDirectBooking = Boolean(row.direct_booking_id);
+    const hasCancelledReq = !hasActiveReq && !hasDirectBooking && Boolean(row.booked_request_id && reqStatus === 'cancelled');
+
+    const rawDate = row.booked_for_date || row.direct_booking_date || null;
+    const formattedDate = rawDate
+      ? new Date(rawDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      : '';
+    const svc = row.booked_service || row.direct_booking_service || 'Maintenance (NanoFix)';
+
+    if (hasActiveReq || hasDirectBooking) {
+      return {
+        status: 'booked',
+        label: 'Booked',
+        detail: `${svc}${formattedDate ? ` • For ${formattedDate}` : ''}${reqStatus === 'approved' || hasDirectBooking ? ' (Confirmed)' : ' (Pending Approval)'}`,
+      };
+    }
+    if (hasCancelledReq) {
+      return {
+        status: 'cancelled',
+        label: 'Booked • Cancelled',
+        detail: `Booked ${svc}${formattedDate ? ` for ${formattedDate}` : ''} — Cancelled${row.booked_cancel_reason ? `: "${row.booked_cancel_reason}"` : ''}`,
+      };
+    }
+    return {
+      status: 'not_booked',
+      label: 'Not Booked',
+      detail: 'Has not submitted a booking yet',
+    };
+  };
+
   const formatTimeAgo = (dateStr) => {
     if (!dateStr) return 'Never';
     const diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
@@ -752,6 +822,310 @@ export default function AdminPanel() {
                   style={{
                     padding: '8px 14px', borderRadius: '9px', border: '1px solid #e2e8f0',
                     background: '#f8fafc', color: '#475569', fontSize: '12.5px', fontWeight: 700,
+                    cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Customer Exploration Journey Modal */}
+      {journeyModal && (() => {
+        const logs = journeyModal.logs || [];
+        const bReqs = journeyModal.bookingRequests || [];
+        const mLinks = journeyModal.magicLinks || [];
+        const latestLink = mLinks[0] || journeyModal.rowMeta || {};
+        const conv = journeyModal.rowMeta
+          ? getRowBookingConversion(journeyModal.rowMeta)
+          : (() => {
+              const latestReq = bReqs[0];
+              if (!latestReq) return { status: 'not_booked', label: 'Not Booked', detail: 'No booking submitted yet' };
+              const fDate = latestReq.booking_date
+                ? new Date(latestReq.booking_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                : '';
+              if (['pending', 'approved', 'negotiating', 'waitlisted'].includes(latestReq.status)) {
+                return {
+                  status: 'booked',
+                  label: 'Booked',
+                  detail: `${latestReq.latest_service || 'Maintenance'} • For ${fDate}`,
+                };
+              }
+              if (latestReq.status === 'cancelled') {
+                return {
+                  status: 'cancelled',
+                  label: 'Booked • Cancelled',
+                  detail: `${latestReq.latest_service || 'Maintenance'} (${fDate}) — Cancelled${latestReq.cancellation_reason ? `: "${latestReq.cancellation_reason}"` : ''}`,
+                };
+              }
+              return { status: 'not_booked', label: 'Not Booked', detail: 'No active booking yet' };
+            })();
+
+        const uniquePages = Array.from(new Set(logs.map((l) => l.page_label))).filter(Boolean);
+
+        const getStepVisual = (item) => {
+          const et = String(item.event_type || 'page_view');
+          const lbl = String(item.page_label || '');
+          if (et === 'magic_link') {
+            return { icon: 'bi-link-45deg', bg: '#dbeafe', color: '#1d4ed8', border: '#93c5fd', badge: 'Smart Link' };
+          }
+          if (et === 'booking') {
+            if (/cancel/i.test(lbl)) {
+              return { icon: 'bi-calendar-x-fill', bg: '#fef3c7', color: '#b45309', border: '#fde68a', badge: 'Cancelled' };
+            }
+            return { icon: 'bi-calendar-check-fill', bg: '#dcfce7', color: '#15803d', border: '#86efac', badge: 'Booked' };
+          }
+          if (et === 'action') {
+            return { icon: 'bi-cursor-fill', bg: '#ecfeff', color: '#0e7490', border: '#a5f3fc', badge: 'Action' };
+          }
+          if (et === 'auth') {
+            return { icon: 'bi-shield-check', bg: '#f1f5f9', color: '#334155', border: '#cbd5e1', badge: 'Login' };
+          }
+          if (/card|loyalty/i.test(lbl)) {
+            return { icon: 'bi-credit-card-2-front-fill', bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe', badge: 'Care Cards' };
+          }
+          if (/dashboard/i.test(lbl)) {
+            return { icon: 'bi-grid-fill', bg: '#f0f9ff', color: '#0369a1', border: '#bae6fd', badge: 'Dashboard' };
+          }
+          if (/booking/i.test(lbl)) {
+            return { icon: 'bi-calendar-event-fill', bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe', badge: 'Bookings' };
+          }
+          if (/vehicle/i.test(lbl)) {
+            return { icon: 'bi-car-front-fill', bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0', badge: 'Vehicles' };
+          }
+          return { icon: 'bi-compass-fill', bg: '#f8fafc', color: '#334155', border: '#e2e8f0', badge: 'Page View' };
+        };
+
+        return (
+          <div
+            style={{
+              position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.58)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              zIndex: 9999, backdropFilter: 'blur(4px)', padding: '16px',
+            }}
+            onClick={() => setJourneyModal(null)}
+          >
+            <div
+              style={{
+                background: 'white', borderRadius: '20px', width: '100%', maxWidth: '640px',
+                maxHeight: '88vh', display: 'flex', flexDirection: 'column',
+                boxShadow: '0 28px 70px rgba(0,0,0,0.32)', overflow: 'hidden',
+                border: '1px solid #e2e8f0',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div style={{
+                padding: '16px 20px', borderBottom: '1px solid #e2e8f0',
+                background: 'linear-gradient(135deg, #eff6ff 0%, #ffffff 100%)',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '11px' }}>
+                  <div style={{
+                    width: '40px', height: '40px', borderRadius: '12px',
+                    background: '#dbeafe', color: '#1d4ed8',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '19px',
+                  }}>
+                    <i className="bi bi-compass-fill"></i>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '15px', fontWeight: 800, color: '#0f172a' }}>
+                      App Exploration Journey
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#64748b' }}>
+                      <strong>{journeyModal.customerName}</strong>
+                      {journeyModal.customerMobile ? ` • ${journeyModal.customerMobile}` : ''}
+                      {` • ID #${journeyModal.customerId}`}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setJourneyModal(null)}
+                  style={{
+                    border: 'none', background: '#f1f5f9', color: '#475569',
+                    width: '32px', height: '32px', borderRadius: '8px', cursor: 'pointer', fontSize: '14px',
+                  }}
+                >
+                  <i className="bi bi-x-lg"></i>
+                </button>
+              </div>
+
+              {/* Summary Strip */}
+              <div style={{
+                padding: '12px 20px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0',
+                display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px',
+              }}>
+                <div style={{
+                  background: 'white', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '10px 12px',
+                }}>
+                  <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#64748b' }}>Conversion Status</div>
+                  <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '4px',
+                      fontSize: '11.5px', fontWeight: 800, padding: '2px 9px', borderRadius: '14px', whiteSpace: 'nowrap',
+                      background: conv.status === 'booked' ? '#dcfce7' : conv.status === 'cancelled' ? '#fef3c7' : '#f1f5f9',
+                      color: conv.status === 'booked' ? '#15803d' : conv.status === 'cancelled' ? '#b45309' : '#475569',
+                      border: `1px solid ${conv.status === 'booked' ? '#86efac' : conv.status === 'cancelled' ? '#fde68a' : '#cbd5e1'}`,
+                    }}>
+                      <i className={`bi ${conv.status === 'booked' ? 'bi-calendar-check-fill' : conv.status === 'cancelled' ? 'bi-calendar-x-fill' : 'bi-calendar-minus'}`}></i>
+                      {conv.label}
+                    </span>
+                  </div>
+                  {conv.detail && (
+                    <div style={{ fontSize: '11px', color: '#475569', marginTop: '4px', lineHeight: 1.35 }}>
+                      {conv.detail}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{
+                  background: 'white', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '10px 12px',
+                }}>
+                  <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#64748b' }}>Pages & Actions Recorded</div>
+                  <div style={{ fontSize: '16px', fontWeight: 800, color: '#0f172a', marginTop: '2px' }}>
+                    {logs.length} {logs.length === 1 ? 'Step' : 'Steps'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                    {uniquePages.length} unique {uniquePages.length === 1 ? 'area' : 'areas'} explored
+                  </div>
+                </div>
+
+                <div style={{
+                  background: 'white', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '10px 12px',
+                }}>
+                  <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#64748b' }}>Device & Network</div>
+                  <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#0f172a', marginTop: '3px' }}>
+                    {latestLink.bound_platform || logs[logs.length - 1]?.device_label || 'Mobile Browser'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#64748b', fontFamily: 'monospace', marginTop: '2px' }}>
+                    IP: {latestLink.bound_ip || logs[logs.length - 1]?.ip_address || '—'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Timeline Body */}
+              <div style={{ padding: '18px 20px', overflowY: 'auto', flex: 1 }}>
+                {journeyModal.loading ? (
+                  <div style={{ padding: '40px 20px', textAlign: 'center', color: '#64748b', fontSize: '13px' }}>
+                    <div className="spinner" style={{ width: '28px', height: '28px', margin: '0 auto 10px' }} />
+                    Loading exploration timeline...
+                  </div>
+                ) : logs.length === 0 ? (
+                  <div style={{ padding: '36px 20px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>
+                    <i className="bi bi-compass" style={{ fontSize: '28px', display: 'block', marginBottom: '8px' }}></i>
+                    No page activity recorded for this customer yet.
+                  </div>
+                ) : (
+                  <div style={{ position: 'relative', paddingLeft: '14px' }}>
+                    <div style={{
+                      position: 'absolute', left: '27px', top: '14px', bottom: '14px',
+                      width: '2px', background: '#e2e8f0',
+                    }} />
+                    {logs.map((item, idx) => {
+                      const vis = getStepVisual(item);
+                      const tsStr = item.created_at
+                        ? new Date(item.created_at).toLocaleString('en-US', {
+                            month: 'short', day: 'numeric', year: 'numeric',
+                            hour: 'numeric', minute: '2-digit', second: '2-digit',
+                          })
+                        : '';
+                      return (
+                        <div
+                          key={item.id || idx}
+                          style={{
+                            display: 'flex', alignItems: 'flex-start', gap: '12px',
+                            marginBottom: idx === logs.length - 1 ? 0 : '14px',
+                            position: 'relative', zIndex: 1,
+                          }}
+                        >
+                          <div style={{
+                            width: '28px', height: '28px', borderRadius: '50%', flexShrink: 0,
+                            background: vis.bg, color: vis.color, border: `1.5px solid ${vis.border}`,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px',
+                            marginTop: '2px',
+                          }}>
+                            <i className={`bi ${vis.icon}`}></i>
+                          </div>
+                          <div style={{
+                            flex: 1, background: '#f8fafc', border: '1px solid #e2e8f0',
+                            borderRadius: '12px', padding: '10px 13px',
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                <span style={{ fontWeight: 800, fontSize: '13px', color: '#0f172a' }}>
+                                  {item.page_label}
+                                </span>
+                                <span style={{
+                                  fontSize: '10px', fontWeight: 700, padding: '1px 7px', borderRadius: '10px',
+                                  background: vis.bg, color: vis.color, border: `1px solid ${vis.border}`,
+                                  whiteSpace: 'nowrap',
+                                }}>
+                                  {vis.badge}
+                                </span>
+                                {item.page_path && (
+                                  <code style={{
+                                    fontSize: '10.5px', color: '#475569', background: 'white',
+                                    border: '1px solid #e2e8f0', borderRadius: '5px', padding: '1px 5px',
+                                  }}>
+                                    {item.page_path}
+                                  </code>
+                                )}
+                              </div>
+                              <span style={{ fontSize: '11px', color: '#64748b', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                                {tsStr}
+                              </span>
+                            </div>
+                            {item.action_detail && (
+                              <div style={{ fontSize: '12px', color: '#334155', marginTop: '4px', lineHeight: 1.4 }}>
+                                {item.action_detail}
+                              </div>
+                            )}
+                            {(item.device_label || item.ip_address) && (
+                              <div style={{ fontSize: '10.5px', color: '#94a3b8', marginTop: '4px' }}>
+                                {[item.device_label, item.ip_address ? `IP: ${item.ip_address}` : ''].filter(Boolean).join(' • ')}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div style={{
+                padding: '12px 20px', borderTop: '1px solid #e2e8f0', background: '#f8fafc',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap',
+              }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const cId = journeyModal.customerId;
+                    const cName = journeyModal.customerName;
+                    setJourneyModal(null);
+                    handleImpersonate(cId, cName);
+                  }}
+                  style={{
+                    background: 'rgba(245, 158, 11, 0.15)', color: '#b45309',
+                    border: '1px solid rgba(245, 158, 11, 0.35)', borderRadius: '9px',
+                    padding: '7px 12px', fontSize: '12px', fontWeight: 700,
+                    cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                    display: 'inline-flex', alignItems: 'center', gap: '5px',
+                  }}
+                >
+                  <i className="bi bi-box-arrow-in-right"></i> Login as {journeyModal.customerName}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setJourneyModal(null)}
+                  style={{
+                    padding: '7px 16px', borderRadius: '9px', border: '1px solid #cbd5e1',
+                    background: 'white', color: '#334155', fontSize: '12.5px', fontWeight: 700,
                     cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
                   }}
                 >
@@ -1155,6 +1529,11 @@ export default function AdminPanel() {
             const isRowEngaged = (r) =>
               Number(r.access_count || 0) > 0 && Number(r.app_sessions || 0) > 0;
 
+            const isRowBooked = (r) => {
+              const conv = getRowBookingConversion(r);
+              return conv.status === 'booked' || conv.status === 'cancelled';
+            };
+
             const matchesDateRange = (r) => {
               if (smsDatePreset === 'all_time') return true;
               const rowDate = getRowManilaDate(r);
@@ -1173,6 +1552,7 @@ export default function AdminPanel() {
             const scopedSentCount = dateScopedRows.filter((r) => r.sms_status === 'Sent').length;
             const scopedOpenedCount = dateScopedRows.filter((r) => Number(r.access_count || 0) > 0).length;
             const scopedEngagedCount = dateScopedRows.filter((r) => isRowEngaged(r)).length;
+            const scopedBookedCount = dateScopedRows.filter((r) => isRowBooked(r)).length;
             const scopedUnopenedCount = dateScopedRows.filter((r) => Number(r.access_count || 0) <= 0 && r.sms_status === 'Sent').length;
             const scopedFailedCount = dateScopedRows.filter((r) => r.sms_status === 'Failed').length;
 
@@ -1186,6 +1566,7 @@ export default function AdminPanel() {
                 if (!matchesSearchRow(r)) return false;
                 if (!smsQuery && !matchesDateRange(r)) return false;
                 if (smsFilter === 'engaged') return isRowEngaged(r);
+                if (smsFilter === 'booked') return isRowBooked(r);
                 if (smsFilter === 'sent') return r.sms_status === 'Sent';
                 if (smsFilter === 'failed') return r.sms_status === 'Failed';
                 if (smsFilter === 'opened') return Number(r.access_count || 0) > 0;
@@ -1228,6 +1609,7 @@ export default function AdminPanel() {
             const activeRowsForBadges = smsQuery || smsFilter !== 'all' ? filteredSmsRows : dateScopedRows;
             const badgeDeliveredCount = activeRowsForBadges.filter((r) => r.sms_status === 'Sent').length;
             const badgeEngagedCount = activeRowsForBadges.filter((r) => isRowEngaged(r)).length;
+            const badgeBookedCount = activeRowsForBadges.filter((r) => isRowBooked(r)).length;
             const badgeOpenedCount = activeRowsForBadges.filter((r) => Number(r.access_count || 0) > 0).length;
             const badgeFailedCount = activeRowsForBadges.filter((r) => r.sms_status === 'Failed').length;
 
@@ -1343,6 +1725,18 @@ export default function AdminPanel() {
                       </button>
                       <button
                         type="button"
+                        onClick={() => handleSmsFilterChange(smsFilter === 'booked' ? 'all' : 'booked')}
+                        title="Click to filter by clients who submitted a booking via the app"
+                        style={{
+                          background: '#f0fdf4', border: smsFilter === 'booked' ? '2px solid #15803d' : '1px solid #86efac', color: '#15803d',
+                          fontSize: '12px', fontWeight: 700, padding: '5px 11px', borderRadius: '20px', whiteSpace: 'nowrap',
+                          cursor: 'pointer', fontFamily: 'inherit',
+                        }}
+                      >
+                        Booked: {badgeBookedCount}
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleSmsFilterChange(smsFilter === 'opened' ? 'all' : 'opened')}
                         title="Click to filter by Opened Magic Links in selected date range"
                         style={{
@@ -1384,6 +1778,11 @@ export default function AdminPanel() {
                           key: 'engaged',
                           label: `Logged In & Explored (${scopedEngagedCount})`,
                           icon: 'bi-person-check-fill',
+                        },
+                        {
+                          key: 'booked',
+                          label: `Booked (${scopedBookedCount})`,
+                          icon: 'bi-calendar-check-fill',
                         },
                         { key: 'sent', label: `Sent (${scopedSentCount})` },
                         { key: 'opened', label: `Opened (${scopedOpenedCount})` },
@@ -1902,14 +2301,37 @@ export default function AdminPanel() {
                                           fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '14px',
                                           background: isOpened ? '#dbeafe' : '#f1f5f9',
                                           color: isOpened ? '#1d4ed8' : '#64748b',
+                                          whiteSpace: 'nowrap',
                                         }}>
                                           <i className={`bi ${isOpened ? 'bi-envelope-open-fill' : 'bi-hourglass-split'}`}></i>
                                           {isOpened ? `Opened (${row.access_count}x)` : 'Not Opened Yet'}
                                         </span>
+                                        {(() => {
+                                          const conv = getRowBookingConversion(row);
+                                          const isBookedOk = conv.status === 'booked';
+                                          const isBookedCancelled = conv.status === 'cancelled';
+                                          return (
+                                            <span
+                                              title={conv.detail || conv.label}
+                                              style={{
+                                                display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                                fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '14px',
+                                                background: isBookedOk ? '#dcfce7' : isBookedCancelled ? '#fef3c7' : '#f1f5f9',
+                                                color: isBookedOk ? '#15803d' : isBookedCancelled ? '#b45309' : '#64748b',
+                                                border: `1px solid ${isBookedOk ? '#86efac' : isBookedCancelled ? '#fde68a' : '#e2e8f0'}`,
+                                                whiteSpace: 'nowrap',
+                                              }}
+                                            >
+                                              <i className={`bi ${isBookedOk ? 'bi-calendar-check-fill' : isBookedCancelled ? 'bi-calendar-x-fill' : 'bi-calendar-minus'}`}></i>
+                                              {conv.label}
+                                            </span>
+                                          );
+                                        })()}
                                         {Number(row.blocked_attempts || 0) > 0 && (
                                           <span style={{
                                             fontSize: '10.5px', fontWeight: 700, color: '#dc2626',
                                             background: '#fef2f2', padding: '2px 6px', borderRadius: '10px',
+                                            whiteSpace: 'nowrap',
                                           }}>
                                             {row.blocked_attempts} blocked
                                           </span>
@@ -1937,27 +2359,61 @@ export default function AdminPanel() {
                                 {/* 5. App Activity Status */}
                                 <td style={{ padding: '12px 12px' }}>
                                   {isAppOnline ? (
-                                    <span style={{
-                                      display: 'inline-flex', alignItems: 'center', gap: '5px',
-                                      background: '#dcfce7', color: '#15803d', border: '1px solid #86efac',
-                                      padding: '3px 9px', borderRadius: '20px', fontSize: '11px', fontWeight: 800,
-                                      whiteSpace: 'nowrap',
-                                    }}>
-                                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#16a34a' }} />
-                                      Online Now
-                                    </span>
-                                  ) : isAppActive ? (
                                     <div>
-                                      <span style={{
-                                        display: 'inline-flex', alignItems: 'center', gap: '5px',
-                                        background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe',
-                                        padding: '3px 9px', borderRadius: '20px', fontSize: '11px', fontWeight: 700,
-                                        whiteSpace: 'nowrap',
-                                      }}>
-                                        Used App ({row.app_sessions} sess)
-                                      </span>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                        <span style={{
+                                          display: 'inline-flex', alignItems: 'center', gap: '5px',
+                                          background: '#dcfce7', color: '#15803d', border: '1px solid #86efac',
+                                          padding: '3px 9px', borderRadius: '20px', fontSize: '11px', fontWeight: 800,
+                                          whiteSpace: 'nowrap',
+                                        }}>
+                                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#16a34a' }} />
+                                          Online Now
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => openCustomerJourney(row.customer_id, row.customer_name, row)}
+                                          title="View pages & actions explored by this customer"
+                                          style={{
+                                            display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                            background: '#f0f9ff', color: '#0369a1', border: '1px solid #7dd3fc',
+                                            padding: '2px 8px', borderRadius: '14px', fontSize: '11px', fontWeight: 700,
+                                            cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                                          }}
+                                        >
+                                          <i className="bi bi-compass-fill"></i>
+                                          Explore Log{Number(row.activity_count || 0) > 0 ? ` (${row.activity_count})` : ''}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : isAppActive || isOpened || Number(row.activity_count || 0) > 0 ? (
+                                    <div>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                        <span style={{
+                                          display: 'inline-flex', alignItems: 'center', gap: '5px',
+                                          background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe',
+                                          padding: '3px 9px', borderRadius: '20px', fontSize: '11px', fontWeight: 700,
+                                          whiteSpace: 'nowrap',
+                                        }}>
+                                          Used App ({Math.max(1, Number(row.app_sessions || 0))} sess)
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => openCustomerJourney(row.customer_id, row.customer_name, row)}
+                                          title="View pages & actions explored by this customer"
+                                          style={{
+                                            display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                            background: '#f0f9ff', color: '#0369a1', border: '1px solid #7dd3fc',
+                                            padding: '2px 8px', borderRadius: '14px', fontSize: '11px', fontWeight: 700,
+                                            cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                                          }}
+                                        >
+                                          <i className="bi bi-compass-fill"></i>
+                                          Explore Log{Number(row.activity_count || 0) > 0 ? ` (${row.activity_count})` : ''}
+                                        </button>
+                                      </div>
                                       <div style={{ fontSize: '10.5px', color: '#64748b', marginTop: '3px' }}>
-                                        Last seen: {formatTimeAgo(row.app_last_seen_at)}
+                                        Last seen: {formatTimeAgo(row.app_last_seen_at || row.last_accessed_at)}
                                       </div>
                                     </div>
                                   ) : (
@@ -2197,18 +2653,34 @@ export default function AdminPanel() {
                                   </div>
                                 </td>
                                 <td style={{ padding: '12px 18px', textAlign: 'right' }}>
-                                  <button
-                                    onClick={() => handleImpersonate(u.customer_id, u.full_name)}
-                                    style={{
-                                      background: 'rgba(245, 158, 11, 0.15)', color: '#b45309',
-                                      border: '1px solid rgba(245, 158, 11, 0.35)', borderRadius: '8px',
-                                      padding: '5px 12px', fontSize: '12px', fontWeight: 700,
-                                      cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-                                    }}
-                                  >
-                                    <i className="bi bi-box-arrow-in-right" style={{ marginRight: '4px' }}></i>
-                                    Login as
-                                  </button>
+                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => openCustomerJourney(u.customer_id, u.full_name)}
+                                      style={{
+                                        background: '#f0f9ff', color: '#0369a1',
+                                        border: '1px solid #7dd3fc', borderRadius: '8px',
+                                        padding: '5px 10px', fontSize: '12px', fontWeight: 700,
+                                        cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                                        display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                      }}
+                                    >
+                                      <i className="bi bi-compass-fill"></i>
+                                      Explore Log{Number(u.activity_count || 0) > 0 ? ` (${u.activity_count})` : ''}
+                                    </button>
+                                    <button
+                                      onClick={() => handleImpersonate(u.customer_id, u.full_name)}
+                                      style={{
+                                        background: 'rgba(245, 158, 11, 0.15)', color: '#b45309',
+                                        border: '1px solid rgba(245, 158, 11, 0.35)', borderRadius: '8px',
+                                        padding: '5px 12px', fontSize: '12px', fontWeight: 700,
+                                        cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                                      }}
+                                    >
+                                      <i className="bi bi-box-arrow-in-right" style={{ marginRight: '4px' }}></i>
+                                      Login as
+                                    </button>
+                                  </div>
                                 </td>
                               </tr>
                             );

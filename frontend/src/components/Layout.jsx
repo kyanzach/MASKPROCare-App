@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
 
@@ -14,10 +14,87 @@ const AFTERCARE_ITEMS = [
   { slug: 'detailing', label: 'Detailing', icon: 'bi-stars' },
 ];
 
+function resolvePageTrackingMeta(pathname, search) {
+  const params = new URLSearchParams(search || '');
+  const fullPath = `${pathname}${search || ''}`;
+
+  if (pathname === '/' || pathname === '') {
+    return {
+      page_path: '/',
+      page_label: 'Dashboard',
+      action_detail: 'Viewed Dashboard overview, vehicles & maintenance summary',
+    };
+  }
+  if (pathname.startsWith('/bookings')) {
+    const openBooking = params.get('openBooking') === 'true';
+    const svc = params.get('service') || '';
+    return {
+      page_path: '/bookings',
+      page_label: 'My Bookings',
+      action_detail: openBooking
+        ? `Opened My Bookings & launched ${svc || 'Appointment'} booking modal`
+        : 'Explored My Bookings & appointment schedule',
+    };
+  }
+  if (pathname.startsWith('/vehicles')) {
+    return {
+      page_path: '/vehicles',
+      page_label: 'My Vehicles',
+      action_detail: 'Explored registered vehicles & service history',
+    };
+  }
+  if (pathname.startsWith('/profile') || pathname.startsWith('/loyalty')) {
+    const tab = params.get('tab');
+    if (tab === 'loyalty' || pathname.startsWith('/loyalty')) {
+      return {
+        page_path: '/profile?tab=loyalty',
+        page_label: 'My MASKPROCare Cards',
+        action_detail: 'Explored active MASKPROCare loyalty cards, maintenance credits & barcodes',
+      };
+    }
+    return {
+      page_path: '/profile',
+      page_label: 'Account Settings',
+      action_detail: 'Viewed My Profile & account settings',
+    };
+  }
+  if (pathname.startsWith('/shop')) {
+    return {
+      page_path: '/shop',
+      page_label: 'Shop',
+      action_detail: 'Browsed MaskPro Shop & car care products',
+    };
+  }
+  if (pathname.startsWith('/community-care')) {
+    return {
+      page_path: '/community-care',
+      page_label: 'Community Care',
+      action_detail: 'Explored Community Care discussions & S.O.S. feed',
+    };
+  }
+  if (pathname.startsWith('/aftercare/')) {
+    const slug = pathname.replace('/aftercare/', '');
+    const found = AFTERCARE_ITEMS.find((i) => i.slug === slug);
+    const label = found ? `Aftercare: ${found.label}` : 'Aftercare Guide';
+    return {
+      page_path: pathname,
+      page_label: label,
+      action_detail: `Read ${found ? found.label : 'service'} aftercare guide`,
+    };
+  }
+  return {
+    page_path: fullPath,
+    page_label: 'App Page',
+    action_detail: `Visited ${fullPath}`,
+  };
+}
+
 export default function Layout() {
   const { customer, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const lastTrackedPathRef = useRef('');
 
   // Notification state
   const [notifCount, setNotifCount] = useState(0);
@@ -45,6 +122,27 @@ export default function Layout() {
       try { setImpersonation(JSON.parse(imp)); } catch {}
     }
   }, []);
+
+  // Track every customer page visit across the app
+  useEffect(() => {
+    const pathname = location.pathname || '/';
+    const search = location.search || '';
+    if (pathname.startsWith('/admin')) return;
+    try {
+      if (localStorage.getItem('impersonation')) return;
+    } catch {}
+    const fullKey = `${pathname}${search}`;
+    if (lastTrackedPathRef.current === fullKey) return;
+    lastTrackedPathRef.current = fullKey;
+
+    const meta = resolvePageTrackingMeta(pathname, search);
+    api.post('/dashboard/activity', {
+      event_type: 'page_view',
+      page_path: meta.page_path,
+      page_label: meta.page_label,
+      action_detail: meta.action_detail,
+    }).catch(() => {});
+  }, [location.pathname, location.search]);
 
   const exitImpersonation = () => {
     if (impersonation?.originalToken) {

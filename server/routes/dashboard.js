@@ -8,9 +8,26 @@ const express = require('express');
 const router = express.Router();
 
 const pool = require('../db/connection');
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateToken, logCustomerActivity } = require('../middleware/auth');
 
 router.use(authenticateToken);
+
+// ─── POST /api/dashboard/activity ─────────────────────────────────
+router.post('/activity', async (req, res) => {
+  try {
+    const { event_type, page_path, page_label, action_detail } = req.body || {};
+    logCustomerActivity(req, req.user, {
+      eventType: event_type || 'page_view',
+      pagePath: page_path || '/',
+      pageLabel: page_label || 'App Page',
+      actionDetail: action_detail || null,
+      dedupWindowMs: 15000,
+    });
+    return res.json({ success: true });
+  } catch {
+    return res.json({ success: false });
+  }
+});
 
 // --- Helper: Get vehicle service status ---
 async function getVehicleServiceStatus(vehicleId) {

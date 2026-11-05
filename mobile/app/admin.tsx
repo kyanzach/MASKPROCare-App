@@ -94,8 +94,30 @@ export default function AdminPanelScreen() {
     title: string;
     message: string;
   } | null>(null);
+  const [journeyModal, setJourneyModal] = useState<{
+    loading: boolean;
+    customerId: number;
+    customerName: string;
+    logs: any[];
+  } | null>(null);
   const [impersonating, setImpersonating] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
+
+  const openCustomerJourney = async (customerId: number, customerName: string) => {
+    if (!customerId) return;
+    setJourneyModal({ loading: true, customerId, customerName: customerName || `Customer #${customerId}`, logs: [] });
+    try {
+      const res = await client.get(`/admin/customer-journey/${customerId}`);
+      const d = res.data?.data || {};
+      setJourneyModal((prev) =>
+        prev && prev.customerId === customerId
+          ? { ...prev, loading: false, logs: d.logs || [] }
+          : prev
+      );
+    } catch {
+      setJourneyModal((prev) => (prev && prev.customerId === customerId ? { ...prev, loading: false } : prev));
+    }
+  };
 
   const searchTimeoutRef = useRef<any>(null);
   const modFilterRef = useRef<'pending' | 'sos' | 'approved' | 'rejected'>('pending');
@@ -811,13 +833,50 @@ export default function AdminPanelScreen() {
                             <Text style={styles.activeUserSub}>
                               {row.customer_mobile} • {row.slug || row.short_url ? (row.short_url || `maskpro.link/${row.slug}`) : 'No Magic Link (Invalid Mobile #)'}
                             </Text>
-                            <Text style={styles.activeUserSub}>
-                              {row.slug || row.short_url
-                                ? (isOpened ? `Opened (${row.access_count}x)` : 'Not Opened Yet')
-                                : 'Skipped by Sanitary Pre-Check'}
-                              {row.bound_platform ? ` • Device: ${row.bound_platform}` : ''}
-                              {row.bound_ip ? ` • IP: ${row.bound_ip}` : ''}
-                            </Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 2 }}>
+                              <Text style={styles.activeUserSub}>
+                                {row.slug || row.short_url
+                                  ? (isOpened ? `Opened (${row.access_count}x)` : 'Not Opened Yet')
+                                  : 'Skipped by Sanitary Pre-Check'}
+                              </Text>
+                              {(row.slug || row.short_url) && (() => {
+                                const reqStatus = String(row.booked_request_status || '').toLowerCase();
+                                const hasBooked = Boolean((row.booked_request_id && ['pending', 'approved', 'negotiating', 'waitlisted'].includes(reqStatus)) || row.direct_booking_id);
+                                const hasCancelled = !hasBooked && Boolean(row.booked_request_id && reqStatus === 'cancelled');
+                                return (
+                                  <View style={{
+                                    paddingHorizontal: 7, paddingVertical: 2, borderRadius: 10,
+                                    backgroundColor: hasBooked ? 'rgba(16, 185, 129, 0.18)' : hasCancelled ? 'rgba(245, 158, 11, 0.18)' : 'rgba(148, 163, 184, 0.15)',
+                                    borderWidth: 1,
+                                    borderColor: hasBooked ? 'rgba(52, 211, 153, 0.45)' : hasCancelled ? 'rgba(251, 191, 36, 0.45)' : 'rgba(148, 163, 184, 0.3)',
+                                  }}>
+                                    <Text numberOfLines={1} style={{ fontSize: 10.5, fontWeight: '700', color: hasBooked ? '#34d399' : hasCancelled ? '#fbbf24' : '#94a3b8' }}>
+                                      {hasBooked ? 'Booked' : hasCancelled ? 'Booked • Cancelled' : 'Not Booked'}
+                                    </Text>
+                                  </View>
+                                );
+                              })()}
+                              {(isOpened || Number(row.app_sessions || 0) > 0 || Number(row.activity_count || 0) > 0) && (
+                                <TouchableOpacity
+                                  onPress={() => openCustomerJourney(row.customer_id, row.customer_name)}
+                                  style={{
+                                    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10,
+                                    backgroundColor: 'rgba(14, 165, 233, 0.16)',
+                                    borderWidth: 1, borderColor: 'rgba(56, 189, 248, 0.4)',
+                                  }}
+                                >
+                                  <Text numberOfLines={1} style={{ fontSize: 10.5, fontWeight: '700', color: '#38bdf8' }}>
+                                    Explore Log{Number(row.activity_count || 0) > 0 ? ` (${row.activity_count})` : ''}
+                                  </Text>
+                                </TouchableOpacity>
+                              )}
+                            </View>
+                            {(row.bound_platform || row.bound_ip) ? (
+                              <Text style={styles.activeUserSub}>
+                                {row.bound_platform ? `Device: ${row.bound_platform}` : ''}
+                                {row.bound_ip ? ` • IP: ${row.bound_ip}` : ''}
+                              </Text>
+                            ) : null}
                           </View>
                         );
                       })}
@@ -1612,6 +1671,85 @@ export default function AdminPanelScreen() {
             <TouchableOpacity
               style={[styles.cancelModalBtn, { flex: 0, width: '100%' }]}
               onPress={() => setSmsPreviewModal(null)}
+              activeOpacity={0.8}
+            >
+              <Text numberOfLines={1} adjustsFontSizeToFit style={styles.cancelModalText}>
+                Close
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Customer Exploration Journey Modal */}
+      <Modal
+        visible={!!journeyModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setJourneyModal(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { alignItems: 'stretch', maxHeight: '82%' }]}>
+            <Text style={[styles.modalTitle, { textAlign: 'left', marginBottom: 4 }]}>
+              App Exploration Journey
+            </Text>
+            <Text style={[styles.modalDescription, { textAlign: 'left', marginBottom: 12 }]}>
+              {journeyModal?.customerName || 'Customer'} • {journeyModal?.logs?.length || 0} recorded steps
+            </Text>
+
+            <ScrollView style={{ maxHeight: 380, marginBottom: 14 }}>
+              {journeyModal?.loading ? (
+                <ActivityIndicator size="small" color="#38bdf8" style={{ marginVertical: 24 }} />
+              ) : (journeyModal?.logs || []).length === 0 ? (
+                <Text style={{ color: '#94a3b8', fontSize: 12.5, textAlign: 'center', paddingVertical: 20 }}>
+                  No page activity recorded yet.
+                </Text>
+              ) : (
+                (journeyModal?.logs || []).map((item: any, idx: number) => (
+                  <View
+                    key={item.id || idx}
+                    style={{
+                      backgroundColor: '#0f172a',
+                      borderRadius: 10,
+                      borderWidth: 1,
+                      borderColor: '#334155',
+                      padding: 10,
+                      marginBottom: 8,
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={{ color: '#f8fafc', fontSize: 12.5, fontWeight: '800', flex: 1 }}>
+                        {item.page_label}
+                      </Text>
+                      <Text style={{ color: '#64748b', fontSize: 10.5 }}>
+                        {item.created_at
+                          ? new Date(item.created_at).toLocaleString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit',
+                            })
+                          : ''}
+                      </Text>
+                    </View>
+                    {item.action_detail ? (
+                      <Text style={{ color: '#cbd5e1', fontSize: 11.5, marginTop: 4 }}>
+                        {item.action_detail}
+                      </Text>
+                    ) : null}
+                    {item.page_path ? (
+                      <Text style={{ color: '#38bdf8', fontSize: 10.5, marginTop: 3 }}>
+                        {item.page_path} {item.device_label ? `• ${item.device_label}` : ''}
+                      </Text>
+                    ) : null}
+                  </View>
+                ))
+              )}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.cancelModalBtn, { flex: 0, width: '100%' }]}
+              onPress={() => setJourneyModal(null)}
               activeOpacity={0.8}
             >
               <Text numberOfLines={1} adjustsFontSizeToFit style={styles.cancelModalText}>

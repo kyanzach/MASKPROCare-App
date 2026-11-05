@@ -28,9 +28,10 @@ export const unstable_settings = {
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
-import { AuthProvider } from '@/context/AuthContext';
+import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { registerForPushNotificationsAsync, getNotificationsModule } from '@/services/notificationService';
-import { useRouter } from 'expo-router';
+import { useRouter, usePathname } from 'expo-router';
+import client from '@/api/client';
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
@@ -63,6 +64,42 @@ export default function RootLayout() {
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const router = useRouter();
+  const pathname = usePathname();
+  const { isAuthenticated } = useAuth();
+
+  useEffect(() => {
+    if (!isAuthenticated || !pathname || pathname.startsWith('/admin') || pathname.startsWith('/login')) return;
+    let label = 'Dashboard';
+    let detail = 'Viewed Dashboard on mobile app';
+    if (pathname.includes('bookings')) {
+      label = 'My Bookings';
+      detail = 'Explored My Bookings on mobile app';
+    } else if (pathname.includes('vehicles')) {
+      label = 'My Vehicles';
+      detail = 'Explored My Vehicles on mobile app';
+    } else if (pathname.includes('loyalty') || pathname.includes('cards')) {
+      label = 'My MASKPROCare Cards';
+      detail = 'Explored MASKPROCare loyalty cards on mobile app';
+    } else if (pathname.includes('community')) {
+      label = 'Community Care';
+      detail = 'Explored Community Care on mobile app';
+    } else if (pathname.includes('shop')) {
+      label = 'Shop';
+      detail = 'Browsed Shop on mobile app';
+    } else if (pathname.includes('profile')) {
+      label = 'Account Settings';
+      detail = 'Viewed Profile & settings on mobile app';
+    } else if (pathname.includes('aftercare')) {
+      label = 'Aftercare Guide';
+      detail = 'Read Aftercare guide on mobile app';
+    }
+    client.post('/dashboard/activity', {
+      event_type: 'page_view',
+      page_path: pathname,
+      page_label: label,
+      action_detail: detail,
+    }).catch(() => {});
+  }, [pathname, isAuthenticated]);
 
   useEffect(() => {
     registerForPushNotificationsAsync();

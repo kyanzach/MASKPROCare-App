@@ -13,7 +13,7 @@ const express = require('express');
 const router = express.Router();
 
 const pool = require('../db/connection');
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateToken, logCustomerActivity } = require('../middleware/auth');
 
 // All booking routes require authentication
 router.use(authenticateToken);
@@ -474,6 +474,14 @@ router.post('/create', async (req, res) => {
         'booking_requests.php',
         requestId
       );
+
+      logCustomerActivity(req, req.user, {
+        eventType: 'booking',
+        pagePath: '/bookings',
+        pageLabel: 'Booked Appointment',
+        actionDetail: `Submitted ${service_type} booking request #${requestId} for ${booking_date} • ${vehName}`,
+        dedupWindowMs: 1000,
+      });
     } catch (notifErr) {
       console.warn('Booking create notification error:', notifErr);
     }
@@ -544,6 +552,13 @@ router.post('/cancel', async (req, res) => {
           'booking_requests.php?tab=cancelled',
           reqId
         );
+        logCustomerActivity(req, req.user, {
+          eventType: 'booking',
+          pagePath: '/bookings',
+          pageLabel: 'Cancelled Booking Request',
+          actionDetail: `Cancelled Request #${reqId} • Reason: "${cancelReason}"`,
+          dedupWindowMs: 1000,
+        });
       } catch (e) {
         console.warn('Cancel notification error:', e);
       }

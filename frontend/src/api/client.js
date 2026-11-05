@@ -5,15 +5,46 @@ import axios from 'axios';
 const API_BASE = import.meta.env.VITE_API_URL ||
   (import.meta.env.PROD ? '/api' : 'http://localhost:3004/api');
 
+let inMemoryToken = null;
+try {
+  inMemoryToken = localStorage.getItem('mpc_token') || sessionStorage.getItem('mpc_token') || null;
+} catch {}
+
+export function setClientAuthToken(tokenStr) {
+  inMemoryToken = tokenStr || null;
+  try {
+    if (tokenStr) {
+      localStorage.setItem('mpc_token', tokenStr);
+    } else {
+      localStorage.removeItem('mpc_token');
+    }
+  } catch {}
+  try {
+    if (tokenStr) {
+      sessionStorage.setItem('mpc_token', tokenStr);
+    } else {
+      sessionStorage.removeItem('mpc_token');
+    }
+  } catch {}
+}
+
 const api = axios.create({
   baseURL: API_BASE,
+  withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
 });
 
-// Attach JWT token to every request
+// Attach JWT token to every request (in-memory + localStorage + sessionStorage fallback for iOS Safari)
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('mpc_token');
+  let token = inMemoryToken;
+  if (!token) {
+    try { token = localStorage.getItem('mpc_token'); } catch {}
+  }
+  if (!token) {
+    try { token = sessionStorage.getItem('mpc_token'); } catch {}
+  }
   if (token) {
+    inMemoryToken = token;
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
@@ -25,15 +56,16 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401 && !isRedirecting) {
-      // Skip redirect for background polling and admin calls
+      // Skip redirect for background polling, activity tracking, and admin calls
       const url = error.config?.url || '';
-      if (url.includes('/notifications/') || url.includes('/admin/')) {
+      if (url.includes('/notifications/') || url.includes('/admin/') || url.includes('/dashboard/activity')) {
         // Silent fail — don't nuke the session
         return Promise.reject(error);
       }
       isRedirecting = true;
-      localStorage.removeItem('mpc_token');
-      localStorage.removeItem('mpc_customer');
+      setClientAuthToken(null);
+      try { localStorage.removeItem('mpc_customer'); } catch {}
+      try { sessionStorage.removeItem('mpc_customer'); } catch {}
       window.location.href = '/login';
     }
     return Promise.reject(error);

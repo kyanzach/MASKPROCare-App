@@ -285,7 +285,19 @@ export default function Profile() {
         border: expired ? '2px solid #fca5a5' : '1px solid rgba(59,130,246,0.08)',
         opacity: expired ? 0.7 : 1, transition: 'all 0.3s ease',
         cursor: 'pointer',
-      }} onClick={() => setSelectedCard(card)}>
+      }} onClick={() => {
+        setSelectedCard(card);
+        try {
+          if (!localStorage.getItem('impersonation')) {
+            api.post('/dashboard/activity', {
+              event_type: 'action',
+              page_path: '/profile?tab=loyalty',
+              page_label: 'Inspected Loyalty Card Details',
+              action_detail: `Opened card details for ${card.service} (${card.tier})`,
+            }).catch(() => {});
+          }
+        } catch {}
+      }}>
         {/* Card Header */}
         <div style={{ background: catMeta.gradient, padding: '20px 24px 16px', position: 'relative', overflow: 'hidden' }}>
           <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '120px', height: '120px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)' }} />

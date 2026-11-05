@@ -13,7 +13,7 @@ const axios = require('axios');
 const router = express.Router();
 
 const pool = require('../db/connection');
-const { authenticateToken, recordAppTelemetry, JWT_SECRET } = require('../middleware/auth');
+const { authenticateToken, recordAppTelemetry, logCustomerActivity, JWT_SECRET } = require('../middleware/auth');
 const { sendOtpSms } = require('../services/sms');
 const { standardizeMobile, getLast10, isValidPhMobile } = require('../utils/mobile');
 
@@ -172,7 +172,22 @@ router.post('/verify', async (req, res) => {
       [formattedMobile]
     );
 
+    res.cookie('mpc_auth_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: JWT_EXPIRY * 1000,
+      path: '/',
+    });
+
     recordAppTelemetry(req, { sub: customerId, auth_method: 'otp' }, true);
+    logCustomerActivity(req, { sub: customerId }, {
+      eventType: 'auth',
+      pagePath: '/login',
+      pageLabel: 'Signed In via Mobile OTP',
+      actionDetail: `Verified OTP login (${formattedMobile})`,
+      dedupWindowMs: 5000,
+    });
 
     // Get full customer profile
     const [customerData] = await pool.query("SELECT * FROM customers WHERE id = ?", [customerId]);
@@ -816,8 +831,26 @@ router.post('/magic-verify', async (req, res) => {
       { expiresIn: magicJwtExpiry }
     );
 
+    res.cookie('mpc_auth_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: magicJwtExpiry * 1000,
+      path: '/',
+    });
+
     if (!isDuplicateBurst) {
       recordAppTelemetry(req, { sub: customerId, magic_slug: link.slug, auth_method: 'magic_link' }, true);
+      const vehName = [link.vehicle_make, link.vehicle_model].filter(Boolean).join(' ') || 'Vehicle';
+      logCustomerActivity(req, { sub: customerId }, {
+        eventType: 'magic_link',
+        pagePath: `/m/${link.slug}`,
+        pageLabel: isFirstBind ? 'Opened Smart Magic Link' : 'Re-Opened Smart Magic Link',
+        actionDetail: isFirstBind
+          ? `Verified device lock on ${resolvedPlatform} • ${vehName}`
+          : `Returned via verified device on ${resolvedPlatform} • ${vehName}`,
+        dedupWindowMs: 10000,
+      });
     }
 
     const [customerData] = await pool.query('SELECT * FROM customers WHERE id = ?', [customerId]);
@@ -853,7 +886,7 @@ router.post('/magic-verify', async (req, res) => {
 
 // ─── POST /api/auth/logout ────────────────────────────────────────
 router.post('/logout', authenticateToken, (req, res) => {
-  // JWT is stateless — logout is client-side (discard token)
+  res.clearCookie('mpc_auth_token', { path: '/' });
   return res.json({
     success: true,
     data: null,
