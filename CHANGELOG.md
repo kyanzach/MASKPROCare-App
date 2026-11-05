@@ -1,5 +1,10 @@
 # Changelog
 
+## [v1.18.1] — 2026-11-06
+### Fixed
+- **Fixed `branches` Table Primary Key Join in `GET /api/admin/wallet-cards` (`server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`)**:
+  - Updated `LEFT JOIN branches br ON br.id = b.branch_id` (was `br.branch_id`) so `GET /api/admin/wallet-cards` returns all `3,196` installed wallet cards (`1,370` Apple Wallet, `136` Google Wallet, `1,690` Android/PWA Pass) and aligned the branch filter dropdown to Unify's actual branch names (`Davao Obrero`, `Davao Ecoland`, `Gensan`, `Tagum`, `Bukidnon`).
+
 ## [v1.18.0] — 2026-11-05
 ### Added & Enhanced
 - **Full-Width Care Card Wallet Installed Clients Tracker (`server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`, `unify_maskpro.care_wallet_cards_cache`)**:

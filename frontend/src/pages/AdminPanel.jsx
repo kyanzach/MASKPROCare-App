@@ -1910,11 +1910,11 @@ export default function AdminPanel() {
                       }}
                     >
                       <option value="all">All Branches</option>
-                      <option value="Davao">Davao</option>
-                      <option value="Cagayan">Cagayan De Oro</option>
-                      <option value="General Santos">General Santos</option>
-                      <option value="Cebu">Cebu</option>
-                      <option value="Manila">Manila / Quezon City</option>
+                      <option value="Davao Obrero">Davao Obrero</option>
+                      <option value="Davao Ecoland">Davao Ecoland</option>
+                      <option value="Gensan">Gensan</option>
+                      <option value="Tagum">Tagum</option>
+                      <option value="Bukidnon">Bukidnon</option>
                     </select>
 
                     {/* Sort Dropdown */}

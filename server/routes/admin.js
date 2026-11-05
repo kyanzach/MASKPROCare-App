@@ -1404,7 +1404,7 @@ router.get('/wallet-cards', authenticateToken, requireAdmin, async (req, res) =>
        FROM care_wallet_cards_cache w
        INNER JOIN loyalty_cards lc ON lc.card_no = w.card_no
        LEFT JOIN bookings b ON b.booking_id = lc.booking_id
-       LEFT JOIN branches br ON br.branch_id = b.branch_id
+       LEFT JOIN branches br ON br.id = b.branch_id
        LEFT JOIN customers c ON c.id = b.customer_id
        LEFT JOIN vehicles v ON v.id = b.customer_vehicle_id
        WHERE ${whereSql}`,
@@ -1457,7 +1457,7 @@ router.get('/wallet-cards', authenticateToken, requireAdmin, async (req, res) =>
        FROM care_wallet_cards_cache w
        INNER JOIN loyalty_cards lc ON lc.card_no = w.card_no
        LEFT JOIN bookings b ON b.booking_id = lc.booking_id
-       LEFT JOIN branches br ON br.branch_id = b.branch_id
+       LEFT JOIN branches br ON br.id = b.branch_id
        LEFT JOIN customers c ON c.id = b.customer_id
        LEFT JOIN vehicles v ON v.id = b.customer_vehicle_id
        WHERE ${whereSql}
