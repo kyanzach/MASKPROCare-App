@@ -1954,7 +1954,7 @@ export default function AdminPanel() {
                             <th style={{ padding: '11px 12px' }}>Vehicle & Plate #</th>
                             <th style={{ padding: '11px 12px' }}>Wallet Installed (Device)</th>
                             <th style={{ padding: '11px 12px' }}>Card Package & Serial #</th>
-                            <th style={{ padding: '11px 12px' }}>Visits Balance & Warranty</th>
+                            <th style={{ padding: '11px 12px' }}>Credits Used & Warranty</th>
                             <th style={{ padding: '11px 12px' }}>Care App Status</th>
                             <th style={{ padding: '11px 16px', textAlign: 'right' }}>Actions</th>
                           </tr>
@@ -2063,14 +2063,23 @@ export default function AdminPanel() {
                                   </div>
                                 </td>
 
-                                {/* 5. Visits Balance & Warranty */}
+                                {/* 5. Credits Used & Warranty */}
                                 <td style={{ padding: '12px 12px', minWidth: '175px' }}>
                                   {hasVisits ? (
                                     <div>
                                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', fontWeight: 700, color: '#0f172a', marginBottom: '4px' }}>
-                                        <span>{row.visits_remaining ?? row.visits_total} / {row.visits_total} Visits Left</span>
-                                        <span style={{ fontSize: '10.5px', color: row.visits_used > 0 ? '#0284c7' : '#64748b' }}>
-                                          {row.visits_used} Used
+                                        <span>
+                                          <strong style={{ color: row.visits_used > 0 ? '#0284c7' : '#0f172a', fontWeight: 800 }}>
+                                            {row.visits_used ?? 0}
+                                          </strong>{' '}
+                                          <span style={{ color: '#64748b', fontWeight: 600 }}>of {row.visits_total} Used</span>
+                                        </span>
+                                        <span style={{
+                                          fontSize: '10.5px', fontWeight: 700, color: '#0f172a',
+                                          background: '#f1f5f9', border: '1px solid #e2e8f0',
+                                          padding: '1px 6px', borderRadius: '8px', whiteSpace: 'nowrap',
+                                        }}>
+                                          {row.visits_remaining ?? row.visits_total} Left
                                         </span>
                                       </div>
                                       <div style={{ height: '5px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden', marginBottom: '4px' }}>

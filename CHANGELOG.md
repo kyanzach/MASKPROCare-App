@@ -1,5 +1,10 @@
 # Changelog
 
+## [v1.18.3] — 2026-11-06
+### Improved
+- **Aligned Admin Care Card Wallet Visits Column with Customer Care Card Wording (`frontend/src/pages/AdminPanel.jsx`)**:
+  - Rearranged the ambiguous `23 / 24 Visits Left` + `1 Used` display (which clashed visually with the `1 / 24` progress bar fill and the Care Card's `1 out of 24` Credits Used counter) into **`1 of 24 Used`** on the left (matching both the Care Card and the blue progress bar below it) and a clean **`23 Left`** pill badge on the right under **`Credits Used & Warranty`**.
+
 ## [v1.18.2] — 2026-11-06
 ### Added & Refined
 - **Separated Cryptographically Verified Native Wallets (`1,506`) from QR Form / Browser-Only PWA Views (`1,690`) + 15-Minute Auto-Sync Cron (`server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`)**:
