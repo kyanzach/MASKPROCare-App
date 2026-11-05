@@ -768,19 +768,42 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
          ORDER BY FIELD(br.status, 'approved', 'pending', 'negotiating', 'waitlisted', 'cancelled', 'rejected'), br.request_id DESC LIMIT 1) AS booked_cancel_reason,
         (SELECT b2.booking_id FROM bookings b2
          WHERE b2.customer_id = paged.customer_id
+           AND b2.booking_id > COALESCE(paged.booking_id, 0)
            AND b2.time_added >= DATE_SUB(paged.created_at, INTERVAL 15 MINUTE)
            AND (b2.notes IS NULL OR b2.notes NOT LIKE '%CANCELLED:%')
          ORDER BY b2.booking_id DESC LIMIT 1) AS direct_booking_id,
         (SELECT b2.booking_date FROM bookings b2
          WHERE b2.customer_id = paged.customer_id
+           AND b2.booking_id > COALESCE(paged.booking_id, 0)
            AND b2.time_added >= DATE_SUB(paged.created_at, INTERVAL 15 MINUTE)
            AND (b2.notes IS NULL OR b2.notes NOT LIKE '%CANCELLED:%')
          ORDER BY b2.booking_id DESC LIMIT 1) AS direct_booking_date,
-        (SELECT b2.latest_service FROM bookings b2
+        (SELECT COALESCE(NULLIF(b2.latest_service, ''), (SELECT bst.service_name FROM bookings_service_types bst WHERE bst.booking_id = b2.booking_id ORDER BY bst.service_id ASC LIMIT 1))
+         FROM bookings b2
          WHERE b2.customer_id = paged.customer_id
+           AND b2.booking_id > COALESCE(paged.booking_id, 0)
            AND b2.time_added >= DATE_SUB(paged.created_at, INTERVAL 15 MINUTE)
            AND (b2.notes IS NULL OR b2.notes NOT LIKE '%CANCELLED:%')
          ORDER BY b2.booking_id DESC LIMIT 1) AS direct_booking_service,
+        (SELECT b2.time_added FROM bookings b2
+         WHERE b2.customer_id = paged.customer_id
+           AND b2.booking_id > COALESCE(paged.booking_id, 0)
+           AND b2.time_added >= DATE_SUB(paged.created_at, INTERVAL 15 MINUTE)
+           AND (b2.notes IS NULL OR b2.notes NOT LIKE '%CANCELLED:%')
+         ORDER BY b2.booking_id DESC LIMIT 1) AS direct_booking_created_at,
+        (SELECT (SELECT bst.status FROM bookings_service_types bst WHERE bst.booking_id = b2.booking_id ORDER BY bst.service_id ASC LIMIT 1)
+         FROM bookings b2
+         WHERE b2.customer_id = paged.customer_id
+           AND b2.booking_id > COALESCE(paged.booking_id, 0)
+           AND b2.time_added >= DATE_SUB(paged.created_at, INTERVAL 15 MINUTE)
+           AND (b2.notes IS NULL OR b2.notes NOT LIKE '%CANCELLED:%')
+         ORDER BY b2.booking_id DESC LIMIT 1) AS direct_booking_status,
+        (SELECT b2.notes FROM bookings b2
+         WHERE b2.customer_id = paged.customer_id
+           AND b2.booking_id > COALESCE(paged.booking_id, 0)
+           AND b2.time_added >= DATE_SUB(paged.created_at, INTERVAL 15 MINUTE)
+           AND (b2.notes IS NULL OR b2.notes NOT LIKE '%CANCELLED:%')
+         ORDER BY b2.booking_id DESC LIMIT 1) AS direct_booking_notes,
         (SELECT s.location FROM care_magic_link_security_logs s WHERE paged.id > 0 AND s.magic_link_id = paged.id AND s.location IS NOT NULL ORDER BY s.id DESC LIMIT 1) AS bound_location,
         (SELECT s.browser_detail FROM care_magic_link_security_logs s WHERE paged.id > 0 AND s.magic_link_id = paged.id AND s.event_type IN ('first_bind', 'authorized_access') ORDER BY s.id DESC LIMIT 1) AS bound_browser,
         (SELECT s.os_detail FROM care_magic_link_security_logs s WHERE paged.id > 0 AND s.magic_link_id = paged.id AND s.event_type IN ('first_bind', 'authorized_access') ORDER BY s.id DESC LIMIT 1) AS bound_os
@@ -1251,6 +1274,403 @@ router.get('/customer-journey/:customerId', authenticateToken, requireAdmin, asy
   } catch (err) {
     console.error('[Admin] Customer journey error:', err.message);
     return res.status(500).json({ success: false, message: 'Failed to load customer journey' });
+  }
+});
+
+// ─── Care Card Wallet (BoomerangMe) Installed Clients Tracker ─────────
+const WALLET_TEMPLATE_META = {
+  41402:   { service: 'Nano Ceramic Coating', tier: 'Silver Package',        category: 'coating', defaultVisits: 10, pointsPerVisit: 20 },
+  42605:   { service: 'Nano Ceramic Coating', tier: 'Gold Package',          category: 'coating', defaultVisits: 14, pointsPerVisit: 25 },
+  43203:   { service: 'Nano Ceramic Coating', tier: 'Diamond Package',       category: 'coating', defaultVisits: 24, pointsPerVisit: 25 },
+  1006938: { service: 'Nano Ceramic Coating', tier: 'Diamond Package',       category: 'coating', defaultVisits: 24, pointsPerVisit: 25 },
+  147644:  { service: 'Nano Ceramic Tint',    tier: 'Tint Loyalty Card',     category: 'tint',    defaultVisits: 0,  pointsPerVisit: 0  },
+  318553:  { service: 'Paint Protection Film', tier: 'PPF Maintenance',      category: 'ppf',     defaultVisits: 24, pointsPerVisit: 25 },
+  302979:  { service: 'Paint Protection Film', tier: 'PPF Extended Warranty', category: 'ppf',    defaultVisits: 4,  pointsPerVisit: 25 },
+  40799:   { service: 'Care Wash',            tier: 'Prepaid Wash Card',     category: 'wash',    defaultVisits: 0,  pointsPerVisit: 0  },
+  283699:  { service: 'MaskPro Gift',         tier: 'Gift Card',             category: 'gift',    defaultVisits: 0,  pointsPerVisit: 0  },
+};
+
+// GET /api/admin/wallet-cards
+router.get('/wallet-cards', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(5, parseInt(req.query.limit, 10) || 10));
+    const offset = (page - 1) * limit;
+    const filter = String(req.query.filter || 'all_installed').trim();
+    const tierFilter = String(req.query.tier || 'all').trim();
+    const branchFilter = String(req.query.branch || 'all').trim();
+    const search = String(req.query.search || '').trim();
+    const sort = String(req.query.sort || 'recent_installed').trim();
+
+    // 1. Summary KPIs from care_wallet_cards_cache joined with loyalty_cards (active Unify cards)
+    const [[summaryRow]] = await pool.query(`
+      SELECT
+        COUNT(*) AS total_active_cards,
+        SUM(CASE WHEN w.status = 'installed' THEN 1 ELSE 0 END) AS total_installed,
+        SUM(CASE WHEN w.status = 'installed' AND w.device = 'Apple Wallet' THEN 1 ELSE 0 END) AS apple_wallet_count,
+        SUM(CASE WHEN w.status = 'installed' AND w.device = 'Google Pay' THEN 1 ELSE 0 END) AS google_pay_count,
+        SUM(CASE WHEN w.status = 'installed' AND w.device = 'PWA' THEN 1 ELSE 0 END) AS pwa_wallet_count,
+        SUM(CASE WHEN w.status = 'installed' AND w.device IN ('Google Pay', 'PWA') THEN 1 ELSE 0 END) AS android_web_count,
+        SUM(CASE WHEN w.status = 'not_installed' THEN 1 ELSE 0 END) AS not_installed_count,
+        SUM(CASE WHEN w.status = 'installed' AND w.template_id IN (41402, 42605, 43203, 1006938) THEN 1 ELSE 0 END) AS coating_installed_count,
+        SUM(CASE WHEN w.status = 'installed' AND w.template_id = 147644 THEN 1 ELSE 0 END) AS tint_installed_count,
+        SUM(CASE WHEN w.status = 'installed' AND w.template_id IN (318553, 302979) THEN 1 ELSE 0 END) AS ppf_installed_count,
+        COUNT(DISTINCT CASE WHEN w.status = 'installed' THEN COALESCE(CAST(b.customer_id AS CHAR), w.bm_customer_id, w.card_no) END) AS unique_installed_clients,
+        MAX(w.synced_at) AS last_synced_at
+      FROM care_wallet_cards_cache w
+      INNER JOIN loyalty_cards lc ON lc.card_no = w.card_no
+      LEFT JOIN bookings b ON b.booking_id = lc.booking_id
+      WHERE w.status != 'deleted'
+    `);
+
+    // 2. Build WHERE conditions
+    const whereParts = ["w.status != 'deleted'"];
+    const params = [];
+
+    if (filter === 'all_installed') {
+      whereParts.push("w.status = 'installed'");
+    } else if (filter === 'apple') {
+      whereParts.push("w.status = 'installed' AND w.device = 'Apple Wallet'");
+    } else if (filter === 'android_all') {
+      whereParts.push("w.status = 'installed' AND w.device IN ('Google Pay', 'PWA')");
+    } else if (filter === 'google_pay') {
+      whereParts.push("w.status = 'installed' AND w.device = 'Google Pay'");
+    } else if (filter === 'pwa') {
+      whereParts.push("w.status = 'installed' AND w.device = 'PWA'");
+    } else if (filter === 'not_installed') {
+      whereParts.push("w.status = 'not_installed'");
+    }
+
+    if (tierFilter === 'coating') {
+      whereParts.push('w.template_id IN (41402, 42605, 43203, 1006938)');
+    } else if (tierFilter === 'diamond') {
+      whereParts.push('w.template_id IN (43203, 1006938)');
+    } else if (tierFilter === 'gold') {
+      whereParts.push('w.template_id = 42605');
+    } else if (tierFilter === 'silver') {
+      whereParts.push('w.template_id = 41402');
+    } else if (tierFilter === 'tint') {
+      whereParts.push('w.template_id = 147644');
+    } else if (tierFilter === 'ppf') {
+      whereParts.push('w.template_id IN (318553, 302979)');
+    }
+
+    if (branchFilter && branchFilter !== 'all') {
+      whereParts.push('(w.bm_branch LIKE ? OR br.branch_name LIKE ?)');
+      params.push(`%${branchFilter}%`, `%${branchFilter}%`);
+    }
+
+    if (search) {
+      const like = `%${search.replace(/^#/, '')}%`;
+      whereParts.push(`(
+        c.full_name LIKE ?
+        OR c.mobile_number LIKE ?
+        OR CONCAT(w.bm_first_name, ' ', w.bm_last_name) LIKE ?
+        OR w.card_no LIKE ?
+        OR w.bm_vehicle LIKE ?
+        OR v.make LIKE ?
+        OR v.model LIKE ?
+        OR v.plate_no LIKE ?
+        OR w.bm_branch LIKE ?
+        OR CAST(b.customer_id AS CHAR) LIKE ?
+        OR CAST(lc.booking_id AS CHAR) LIKE ?
+      )`);
+      params.push(like, like, like, like, like, like, like, like, like, like, like);
+    }
+
+    const whereSql = whereParts.join(' AND ');
+
+    let orderBySql = 'COALESCE(w.bm_updated_at, w.bm_created_at, lc.created_date) DESC, lc.lc_id DESC';
+    if (sort === 'newest_issued') {
+      orderBySql = 'COALESCE(w.bm_created_at, lc.created_date) DESC, lc.lc_id DESC';
+    } else if (sort === 'most_visits_used') {
+      orderBySql = `(
+        CASE
+          WHEN w.template_id IN (43203, 1006938, 318553) THEN GREATEST(0, 24 - COALESCE(w.visits_remaining, 24))
+          WHEN w.template_id = 42605 THEN GREATEST(0, 14 - COALESCE(w.visits_remaining, 14))
+          WHEN w.template_id = 41402 THEN GREATEST(0, 10 - COALESCE(w.visits_remaining, 10))
+          WHEN w.template_id = 302979 THEN GREATEST(0, 4 - COALESCE(w.visits_remaining, 4))
+          ELSE 0
+        END
+      ) DESC, COALESCE(w.bm_updated_at, w.bm_created_at) DESC`;
+    } else if (sort === 'customer_az') {
+      orderBySql = "COALESCE(NULLIF(TRIM(c.full_name), ''), CONCAT(w.bm_first_name, ' ', w.bm_last_name), 'ZZZZ') ASC";
+    } else if (sort === 'bonus_points') {
+      orderBySql = 'COALESCE(w.bonus_balance, 0) DESC, COALESCE(w.bm_updated_at, w.bm_created_at) DESC';
+    }
+
+    const [[countRow]] = await pool.query(
+      `SELECT COUNT(*) AS total
+       FROM care_wallet_cards_cache w
+       INNER JOIN loyalty_cards lc ON lc.card_no = w.card_no
+       LEFT JOIN bookings b ON b.booking_id = lc.booking_id
+       LEFT JOIN branches br ON br.branch_id = b.branch_id
+       LEFT JOIN customers c ON c.id = b.customer_id
+       LEFT JOIN vehicles v ON v.id = b.customer_vehicle_id
+       WHERE ${whereSql}`,
+      params
+    );
+
+    const [rows] = await pool.query(
+      `SELECT
+         w.card_no,
+         w.template_id,
+         w.card_type,
+         w.status,
+         w.device,
+         w.bm_first_name,
+         w.bm_last_name,
+         w.bm_email,
+         w.bm_phone,
+         w.bm_vehicle,
+         w.bm_branch,
+         w.visits_remaining,
+         w.stamps_total,
+         w.bonus_balance,
+         w.discount_pct,
+         w.discount_amount,
+         w.count_visits,
+         w.last_stamp_at,
+         COALESCE(lc.card_install_link, w.install_link) AS install_link,
+         lc.joturl_shortlink,
+         COALESCE(lc.joturl_qrlink, w.qr_link) AS qr_link,
+         w.apple_install_link,
+         w.google_install_link,
+         w.pwa_install_link,
+         COALESCE(w.bm_created_at, lc.created_date) AS issued_at,
+         w.bm_updated_at AS updated_at,
+         COALESCE(w.bm_expires_at, lc.expiration_date) AS expires_at,
+         lc.lc_id,
+         lc.booking_id,
+         b.customer_id,
+         b.customer_vehicle_id,
+         b.booking_date,
+         COALESCE(br.branch_name, w.bm_branch, 'Davao') AS branch_name,
+         COALESCE(NULLIF(TRIM(c.full_name), ''), TRIM(CONCAT(COALESCE(w.bm_first_name, ''), ' ', COALESCE(w.bm_last_name, ''))), 'Valued Client') AS customer_name,
+         COALESCE(NULLIF(TRIM(c.mobile_number), ''), w.bm_phone, '') AS customer_mobile,
+         v.make AS vehicle_make,
+         v.model AS vehicle_model,
+         v.plate_no AS vehicle_plate,
+         (SELECT COALESCE(SUM(t.session_count), 0) FROM care_app_telemetry t WHERE t.customer_id = b.customer_id) AS app_sessions,
+         (SELECT MAX(t.last_seen_at) FROM care_app_telemetry t WHERE t.customer_id = b.customer_id) AS app_last_seen_at,
+         (SELECT COUNT(*) FROM care_app_activity_logs al WHERE al.customer_id = b.customer_id) AS activity_count
+       FROM care_wallet_cards_cache w
+       INNER JOIN loyalty_cards lc ON lc.card_no = w.card_no
+       LEFT JOIN bookings b ON b.booking_id = lc.booking_id
+       LEFT JOIN branches br ON br.branch_id = b.branch_id
+       LEFT JOIN customers c ON c.id = b.customer_id
+       LEFT JOIN vehicles v ON v.id = b.customer_vehicle_id
+       WHERE ${whereSql}
+       ORDER BY ${orderBySql}
+       LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    );
+
+    const formattedRows = rows.map((r) => {
+      const meta = WALLET_TEMPLATE_META[r.template_id] || {
+        service: 'MaskPro Care Card',
+        tier: 'Loyalty Card',
+        category: 'other',
+        defaultVisits: 0,
+        pointsPerVisit: 0,
+      };
+      const defaultTotal = meta.defaultVisits || 0;
+      const remaining = r.visits_remaining !== null && r.visits_remaining !== undefined ? Number(r.visits_remaining) : null;
+      const isUninitialized = remaining === 0 && r.stamps_total === null && defaultTotal > 0;
+      const visitsTotal = defaultTotal > 0 ? Math.max(defaultTotal, remaining || 0) : (remaining || 0);
+      const visitsUsed = isUninitialized ? 0 : (visitsTotal > 0 && remaining !== null ? Math.max(0, visitsTotal - remaining) : 0);
+
+      let expiresAt = r.expires_at;
+      if (!expiresAt && Number(r.template_id) === 1006938 && r.issued_at) {
+        const d = new Date(r.issued_at);
+        if (!isNaN(d.getTime())) {
+          d.setFullYear(d.getFullYear() + 12);
+          expiresAt = d.toISOString();
+        }
+      }
+
+      const unifyVehicle = [r.vehicle_make, r.vehicle_model].filter(Boolean).join(' ').trim();
+      const validPlate = r.vehicle_plate && !/^(to follow|no plate|for registration|none|n\/a|-|\.|tba|new)$/i.test(String(r.vehicle_plate).trim())
+        ? String(r.vehicle_plate).trim()
+        : '';
+
+      return {
+        ...r,
+        service_name: meta.service,
+        tier_name: meta.tier,
+        category: meta.category,
+        visits_total: visitsTotal,
+        visits_used: visitsUsed,
+        visits_remaining: remaining,
+        expires_at_resolved: expiresAt,
+        vehicle_display: unifyVehicle || r.bm_vehicle || 'Vehicle',
+        plate_display: validPlate,
+      };
+    });
+
+    const totalActive = Number(summaryRow?.total_active_cards || 0);
+    const totalInstalled = Number(summaryRow?.total_installed || 0);
+
+    return res.json({
+      success: true,
+      data: {
+        summary: {
+          total_active_cards: totalActive,
+          total_installed: totalInstalled,
+          install_rate_pct: totalActive > 0 ? Number(((totalInstalled / totalActive) * 100).toFixed(1)) : 0,
+          apple_wallet_count: Number(summaryRow?.apple_wallet_count || 0),
+          google_pay_count: Number(summaryRow?.google_pay_count || 0),
+          pwa_wallet_count: Number(summaryRow?.pwa_wallet_count || 0),
+          android_web_count: Number(summaryRow?.android_web_count || 0),
+          not_installed_count: Number(summaryRow?.not_installed_count || 0),
+          coating_installed_count: Number(summaryRow?.coating_installed_count || 0),
+          tint_installed_count: Number(summaryRow?.tint_installed_count || 0),
+          ppf_installed_count: Number(summaryRow?.ppf_installed_count || 0),
+          unique_installed_clients: Number(summaryRow?.unique_installed_clients || 0),
+          last_synced_at: summaryRow?.last_synced_at || null,
+        },
+        cards: formattedRows,
+        pagination: {
+          page,
+          limit,
+          total: Number(countRow?.total || 0),
+          totalPages: Math.max(1, Math.ceil(Number(countRow?.total || 0) / limit)),
+        },
+      },
+    });
+  } catch (err) {
+    console.error('[Admin] Wallet cards error:', err.message);
+    return res.status(500).json({ success: false, message: 'Failed to load wallet cards' });
+  }
+});
+
+// POST /api/admin/wallet-cards/sync — Sync recent or all cards from BoomerangMe API v2
+router.post('/wallet-cards/sync', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const apiKey = process.env.BOOMERANGME_API_KEY || '6f59f368388c29e4a01e704af6432d74';
+    const maxPages = req.body?.full ? 10 : 2; // Quick sync checks newest 2,000 cards; full sync checks all
+    let totalSynced = 0;
+
+    const toMysqlDt = (iso) => {
+      if (!iso) return null;
+      const d = new Date(iso);
+      return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 19).replace('T', ' ');
+    };
+
+    for (let p = 1; p <= maxPages; p += 1) {
+      const resp = await fetch(`https://api.digitalwallet.cards/api/v2/cards?itemsPerPage=1000&page=${p}`, {
+        headers: { 'X-API-Key': apiKey },
+      });
+      if (!resp.ok) break;
+      const json = await resp.json();
+      const items = json?.data || [];
+      if (items.length === 0) break;
+
+      const values = items.map((c) => {
+        let fn = c.customer?.firstName || '';
+        let ln = c.customer?.surname || '';
+        let em = c.customer?.email || '';
+        let veh = '';
+        let br = '';
+        for (const f of c.customFields || []) {
+          if (f.type === 'FName' && f.value) fn = f.value;
+          if (f.type === 'SName' && f.value) ln = f.value;
+          if (f.type === 'email' && f.value) em = f.value;
+          const nm = (f.name || '').toLowerCase();
+          if (nm.includes('vehicle') || nm.includes('plate')) veh = f.value || '';
+          if (nm.includes('branch')) br = f.value || '';
+        }
+        const bal = c.balance || {};
+        const dl = c.directInstallLink || {};
+        return [
+          c.id,
+          c.templateId || null,
+          c.type || null,
+          c.status || 'not_installed',
+          c.device || null,
+          c.customerId || c.customer?.id || null,
+          fn || null,
+          ln || null,
+          em || null,
+          c.customer?.phone || null,
+          veh || null,
+          br || null,
+          bal.currentNumberOfUses ?? null,
+          bal.numberStampsTotal ?? null,
+          bal.bonusBalance ?? null,
+          bal.discountPercentage ?? null,
+          bal.discountAmount ?? null,
+          c.countVisits ?? null,
+          toMysqlDt(c.lastStampEarnedAt),
+          c.installLink || null,
+          c.shareLink || null,
+          c.qrLink || null,
+          dl.apple || null,
+          dl.google || null,
+          dl.pwa || null,
+          toMysqlDt(c.createdAt),
+          toMysqlDt(c.updatedAt),
+          toMysqlDt(c.expiresAt),
+        ];
+      });
+
+      const chunkSize = 200;
+      for (let i = 0; i < values.length; i += chunkSize) {
+        const chunk = values.slice(i, i + chunkSize);
+        await pool.query(
+          `INSERT INTO care_wallet_cards_cache (
+             card_no, template_id, card_type, status, device, bm_customer_id,
+             bm_first_name, bm_last_name, bm_email, bm_phone, bm_vehicle, bm_branch,
+             visits_remaining, stamps_total, bonus_balance, discount_pct, discount_amount,
+             count_visits, last_stamp_at, install_link, share_link, qr_link,
+             apple_install_link, google_install_link, pwa_install_link,
+             bm_created_at, bm_updated_at, bm_expires_at, synced_at
+           ) VALUES ?
+           ON DUPLICATE KEY UPDATE
+             template_id = VALUES(template_id),
+             card_type = VALUES(card_type),
+             status = VALUES(status),
+             device = VALUES(device),
+             bm_customer_id = VALUES(bm_customer_id),
+             bm_first_name = VALUES(bm_first_name),
+             bm_last_name = VALUES(bm_last_name),
+             bm_email = VALUES(bm_email),
+             bm_phone = VALUES(bm_phone),
+             bm_vehicle = VALUES(bm_vehicle),
+             bm_branch = VALUES(bm_branch),
+             visits_remaining = VALUES(visits_remaining),
+             stamps_total = VALUES(stamps_total),
+             bonus_balance = VALUES(bonus_balance),
+             discount_pct = VALUES(discount_pct),
+             discount_amount = VALUES(discount_amount),
+             count_visits = VALUES(count_visits),
+             last_stamp_at = VALUES(last_stamp_at),
+             install_link = VALUES(install_link),
+             share_link = VALUES(share_link),
+             qr_link = VALUES(qr_link),
+             apple_install_link = VALUES(apple_install_link),
+             google_install_link = VALUES(google_install_link),
+             pwa_install_link = VALUES(pwa_install_link),
+             bm_created_at = VALUES(bm_created_at),
+             bm_updated_at = VALUES(bm_updated_at),
+             bm_expires_at = VALUES(bm_expires_at),
+             synced_at = NOW()`,
+          [chunk.map((r) => [...r, new Date()])]
+        );
+      }
+
+      totalSynced += items.length;
+      if (items.length < 1000) break;
+    }
+
+    return res.json({
+      success: true,
+      message: `Synced ${totalSynced.toLocaleString()} cards from BoomerangMe`,
+      data: { totalSynced },
+    });
+  } catch (err) {
+    console.error('[Admin] Wallet sync error:', err.message);
+    return res.status(500).json({ success: false, message: 'Failed to sync wallet cards from BoomerangMe' });
   }
 });
 

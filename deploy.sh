@@ -29,7 +29,7 @@ PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DOMAIN="https://care.maskpro.ph"
 PM2_PROCESS="maskpro-care"
 PORT="3004"
-SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10"
+SSH_OPTS="-o StrictHostKeyChecking=no -o PubkeyAuthentication=no -o ConnectTimeout=10"
 
 # Source credentials from .ssh_helper.sh (gitignored — never committed)
 if [ -f "$PROJECT_DIR/.ssh_helper.sh" ]; then

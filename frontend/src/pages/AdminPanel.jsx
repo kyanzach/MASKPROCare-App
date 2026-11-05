@@ -42,6 +42,7 @@ export default function AdminPanel() {
   const [confirmModal, setConfirmModal] = useState(null);
   const [smsPreviewModal, setSmsPreviewModal] = useState(null);
   const [journeyModal, setJourneyModal] = useState(null);
+  const [hoveredConversionRowId, setHoveredConversionRowId] = useState(null);
   const [impersonating, setImpersonating] = useState(false);
   const [secActionLoading, setSecActionLoading] = useState(null);
   const [secLogFilter, setSecLogFilter] = useState('all');
@@ -67,6 +68,36 @@ export default function AdminPanel() {
   const [usersPage, setUsersPage] = useState(1);
   const [usersLimit, setUsersLimit] = useState(20); // Prefetch 2 pages (10 per page = 20 items) initially
   const [lastSyncedAt, setLastSyncedAt] = useState(new Date());
+
+  // Care Card Wallet (BoomerangMe) Installed Clients state
+  const [walletData, setWalletData] = useState({
+    summary: {
+      total_active_cards: 0,
+      total_installed: 0,
+      install_rate_pct: 0,
+      apple_wallet_count: 0,
+      google_pay_count: 0,
+      pwa_wallet_count: 0,
+      android_web_count: 0,
+      not_installed_count: 0,
+      coating_installed_count: 0,
+      tint_installed_count: 0,
+      ppf_installed_count: 0,
+      unique_installed_clients: 0,
+      last_synced_at: null,
+    },
+    cards: [],
+    pagination: { page: 1, limit: 8, total: 0, totalPages: 1 },
+  });
+  const [walletLoading, setWalletLoading] = useState(false);
+  const [walletSyncing, setWalletSyncing] = useState(false);
+  const [walletFilter, setWalletFilter] = useState('all_installed'); // 'all_installed' | 'apple' | 'android_all' | 'google_pay' | 'pwa' | 'not_installed'
+  const [walletTier, setWalletTier] = useState('all'); // 'all' | 'coating' | 'diamond' | 'gold' | 'silver' | 'tint' | 'ppf'
+  const [walletBranch, setWalletBranch] = useState('all');
+  const [walletSearch, setWalletSearch] = useState('');
+  const [walletSort, setWalletSort] = useState('recent_installed');
+  const [walletPage, setWalletPage] = useState(1);
+  const walletSearchTimeoutRef = useRef(null);
   const modFilterRef = useRef('pending');
   const dashParamsRef = useRef({
     secLimit: 10, secFilter: 'all', secSearch: '', secSort: 'newest',
@@ -115,6 +146,7 @@ export default function AdminPanel() {
         if (res.data.data?.isAdmin) {
           setIsAdmin(true);
           loadDashboard(false);
+          loadWalletCards({ page: 1 }, false);
           loadModerationPosts('pending', false);
           loadCustomers(1, '');
         } else {
@@ -152,6 +184,44 @@ export default function AdminPanel() {
       // silent background handling
     } finally {
       if (!silent) setDashLoading(false);
+    }
+  };
+
+  const loadWalletCards = async (overrides = {}, silent = false) => {
+    if (!silent) setWalletLoading(true);
+    try {
+      const nextPage = overrides.page ?? walletPage;
+      const nextFilter = overrides.filter ?? walletFilter;
+      const nextTier = overrides.tier ?? walletTier;
+      const nextBranch = overrides.branch ?? walletBranch;
+      const nextSearch = overrides.search ?? walletSearch;
+      const nextSort = overrides.sort ?? walletSort;
+      const res = await api.get(
+        `/admin/wallet-cards?page=${nextPage}&limit=8&filter=${encodeURIComponent(nextFilter)}&tier=${encodeURIComponent(nextTier)}&branch=${encodeURIComponent(nextBranch)}&search=${encodeURIComponent(nextSearch)}&sort=${encodeURIComponent(nextSort)}`
+      );
+      if (res.data?.success && res.data?.data) {
+        setWalletData(res.data.data);
+      }
+    } catch (err) {
+      console.error('[Admin] Load wallet cards error:', err);
+    } finally {
+      if (!silent) setWalletLoading(false);
+    }
+  };
+
+  const handleSyncWalletCards = async (full = false) => {
+    if (walletSyncing) return;
+    setWalletSyncing(true);
+    try {
+      const res = await api.post('/admin/wallet-cards/sync', { full });
+      if (res.data?.success) {
+        showToast(res.data.message || 'BoomerangMe wallet cards synced');
+        await loadWalletCards({ page: 1 }, false);
+      }
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to sync BoomerangMe cards', 'error');
+    } finally {
+      setWalletSyncing(false);
     }
   };
 
@@ -475,35 +545,91 @@ export default function AdminPanel() {
   };
 
   const getRowBookingConversion = (row) => {
-    if (!row) return { status: 'not_booked', label: 'Not Booked', detail: '' };
+    if (!row) return { status: 'not_booked', label: 'Not Booked', detail: '', channelLabel: 'No Booking Yet' };
     const reqStatus = String(row.booked_request_status || '').toLowerCase();
+    const directStatus = String(row.direct_booking_status || '').toLowerCase();
     const hasActiveReq = Boolean(row.booked_request_id && ['pending', 'approved', 'negotiating', 'waitlisted'].includes(reqStatus));
-    const hasDirectBooking = Boolean(row.direct_booking_id);
-    const hasCancelledReq = !hasActiveReq && !hasDirectBooking && Boolean(row.booked_request_id && reqStatus === 'cancelled');
+    const hasActiveDirect = Boolean(row.direct_booking_id && directStatus !== 'cancelled');
+    const hasCancelledReq = !hasActiveReq && !hasActiveDirect && Boolean(row.booked_request_id && reqStatus === 'cancelled');
+    const hasCancelledDirect = !hasActiveReq && !hasActiveDirect && Boolean(row.direct_booking_id && directStatus === 'cancelled');
 
     const rawDate = row.booked_for_date || row.direct_booking_date || null;
     const formattedDate = rawDate
       ? new Date(rawDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
       : '';
-    const svc = row.booked_service || row.direct_booking_service || 'Maintenance (NanoFix)';
+    const rawCreated = row.booked_created_at || row.direct_booking_created_at || null;
+    const formattedCreated = rawCreated
+      ? new Date(rawCreated).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+      : '';
 
-    if (hasActiveReq || hasDirectBooking) {
+    let elapsedAfterSms = '';
+    if (rawCreated && row.created_at) {
+      const diffMins = Math.max(1, Math.round((new Date(rawCreated).getTime() - new Date(row.created_at).getTime()) / 60000));
+      if (diffMins < 60) elapsedAfterSms = `${diffMins}m after SMS`;
+      else if (diffMins < 1440) elapsedAfterSms = `${Math.floor(diffMins / 60)}h ${diffMins % 60}m after SMS`;
+      else elapsedAfterSms = `${Math.floor(diffMins / 1440)}d ${Math.floor((diffMins % 1440) / 60)}h after SMS`;
+    }
+
+    const svc = row.booked_service || row.direct_booking_service || 'Maintenance (NanoFix)';
+    const isOpened = Number(row.access_count || 0) > 0;
+    const viaApp = Boolean(row.booked_request_id);
+
+    if (hasActiveReq || hasActiveDirect) {
+      const isDirectOnly = !hasActiveReq && hasActiveDirect;
       return {
         status: 'booked',
-        label: 'Booked',
-        detail: `${svc}${formattedDate ? ` • For ${formattedDate}` : ''}${reqStatus === 'approved' || hasDirectBooking ? ' (Confirmed)' : ' (Pending Approval)'}`,
+        source: isDirectOnly ? 'branch' : 'app',
+        label: isDirectOnly ? 'Booked • Branch' : 'Booked',
+        channelLabel: isDirectOnly ? 'Booked via Branch / Call' : 'Booked via Care App',
+        channelNote: isDirectOnly
+          ? (isOpened ? 'Opened link, then booked via branch staff' : 'Saw SMS reminder & called/messaged branch')
+          : 'Submitted directly inside MaskPro Care App',
+        service: svc,
+        forDate: formattedDate || 'Scheduled',
+        bookedAt: formattedCreated,
+        elapsedAfterSms,
+        refLabel: hasActiveReq
+          ? `App Request #${row.booked_request_id}${row.direct_booking_id ? ` • Booking #${row.direct_booking_id}` : ''}`
+          : `Unify Booking #${row.direct_booking_id}`,
+        statusBadge: hasActiveReq
+          ? (reqStatus === 'approved' ? 'Confirmed' : 'Pending Approval')
+          : (row.direct_booking_status || 'Scheduled'),
+        note: row.direct_booking_notes || '',
+        detail: `${svc}${formattedDate ? ` • For ${formattedDate}` : ''}`,
       };
     }
-    if (hasCancelledReq) {
+
+    if (hasCancelledReq || hasCancelledDirect) {
       return {
         status: 'cancelled',
+        source: viaApp ? 'app' : 'branch',
         label: 'Booked • Cancelled',
-        detail: `Booked ${svc}${formattedDate ? ` for ${formattedDate}` : ''} — Cancelled${row.booked_cancel_reason ? `: "${row.booked_cancel_reason}"` : ''}`,
+        channelLabel: viaApp ? 'App Booking • Cancelled' : 'Branch Booking • Cancelled',
+        channelNote: viaApp ? 'Submitted in Care App, later cancelled' : 'Encoded in Unify, later marked Cancelled',
+        service: svc,
+        forDate: formattedDate || '—',
+        bookedAt: formattedCreated,
+        elapsedAfterSms,
+        refLabel: viaApp ? `App Request #${row.booked_request_id}` : `Unify Booking #${row.direct_booking_id}`,
+        statusBadge: 'Cancelled',
+        note: row.booked_cancel_reason || row.direct_booking_notes || '',
+        detail: `Booked ${svc}${formattedDate ? ` for ${formattedDate}` : ''} — Cancelled`,
       };
     }
+
     return {
       status: 'not_booked',
+      source: 'none',
       label: 'Not Booked',
+      channelLabel: 'Not Booked Yet',
+      channelNote: isOpened ? 'Opened magic link, no booking submitted yet' : 'Awaiting magic link click or branch call',
+      service: '6-Month NanoFix Maintenance',
+      forDate: 'Not scheduled yet',
+      bookedAt: '',
+      elapsedAfterSms: '',
+      refLabel: row.booking_id ? `Source Coating Booking #${row.booking_id}` : '',
+      statusBadge: 'Awaiting Booking',
+      note: '',
       detail: 'Has not submitted a booking yet',
     };
   };
@@ -1488,6 +1614,626 @@ export default function AdminPanel() {
             </div>
           </div>
 
+          {/* ─── FULL-WIDTH WIDGET: Care Card Wallet Installed Clients (Apple Wallet, Google Pay & Android Pass) ─── */}
+          {(() => {
+            const ws = walletData?.summary || {};
+            const wCards = walletData?.cards || [];
+            const wPag = walletData?.pagination || { page: 1, limit: 8, total: 0, totalPages: 1 };
+
+            const applyWalletFilter = (nextFilter) => {
+              setWalletFilter(nextFilter);
+              setWalletPage(1);
+              loadWalletCards({ filter: nextFilter, page: 1 });
+            };
+
+            const applyWalletTier = (nextTier) => {
+              setWalletTier(nextTier);
+              setWalletPage(1);
+              loadWalletCards({ tier: nextTier, page: 1 });
+            };
+
+            const applyWalletBranch = (nextBranch) => {
+              setWalletBranch(nextBranch);
+              setWalletPage(1);
+              loadWalletCards({ branch: nextBranch, page: 1 });
+            };
+
+            const applyWalletSort = (nextSort) => {
+              setWalletSort(nextSort);
+              setWalletPage(1);
+              loadWalletCards({ sort: nextSort, page: 1 });
+            };
+
+            const applyWalletSearch = (val) => {
+              setWalletSearch(val);
+              setWalletPage(1);
+              if (walletSearchTimeoutRef.current) clearTimeout(walletSearchTimeoutRef.current);
+              walletSearchTimeoutRef.current = setTimeout(() => {
+                loadWalletCards({ search: val, page: 1 });
+              }, 300);
+            };
+
+            const applyWalletPage = (nextPage) => {
+              const safeP = Math.max(1, Math.min(nextPage, wPag.totalPages || 1));
+              setWalletPage(safeP);
+              loadWalletCards({ page: safeP }, true);
+            };
+
+            const getTierStyle = (templateId, category) => {
+              const tid = Number(templateId);
+              if (tid === 43203 || tid === 1006938) {
+                return { bg: '#eff6ff', color: '#1d4ed8', border: '#93c5fd', icon: 'bi-gem' };
+              }
+              if (tid === 42605) {
+                return { bg: '#fef3c7', color: '#b45309', border: '#fcd34d', icon: 'bi-award-fill' };
+              }
+              if (tid === 41402) {
+                return { bg: '#f1f5f9', color: '#334155', border: '#cbd5e1', icon: 'bi-shield-shaded' };
+              }
+              if (category === 'tint' || tid === 147644) {
+                return { bg: '#ecfeff', color: '#0e7490', border: '#67e8f9', icon: 'bi-brightness-high-fill' };
+              }
+              if (category === 'ppf' || tid === 318553 || tid === 302979) {
+                return { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca', icon: 'bi-shield-fill-check' };
+              }
+              return { bg: '#f0fdf4', color: '#15803d', border: '#86efac', icon: 'bi-credit-card-2-front-fill' };
+            };
+
+            const getDeviceBadge = (status, device) => {
+              if (status !== 'installed') {
+                return {
+                  label: 'Not Installed Yet',
+                  sub: 'Link issued — awaiting wallet install',
+                  icon: 'bi-hourglass-split',
+                  bg: '#f1f5f9',
+                  color: '#64748b',
+                  border: '#cbd5e1',
+                };
+              }
+              if (device === 'Apple Wallet') {
+                return {
+                  label: 'Apple Wallet (iOS)',
+                  sub: 'Installed on iPhone Wallet',
+                  icon: 'bi-apple',
+                  bg: '#0f172a',
+                  color: '#ffffff',
+                  border: '#0f172a',
+                };
+              }
+              if (device === 'Google Pay') {
+                return {
+                  label: 'Google Wallet (Android)',
+                  sub: 'Installed on Google Pay',
+                  icon: 'bi-google',
+                  bg: '#dcfce7',
+                  color: '#15803d',
+                  border: '#86efac',
+                };
+              }
+              return {
+                label: 'Android / Web Pass (PWA)',
+                sub: 'Installed via Mobile Web Pass',
+                icon: 'bi-android2',
+                bg: '#e0f2fe',
+                color: '#0369a1',
+                border: '#7dd3fc',
+              };
+            };
+
+            return (
+              <div style={{
+                background: 'white', borderRadius: '18px', overflow: 'hidden',
+                border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.03)',
+                marginBottom: '24px',
+              }}>
+                {/* Header & Summary KPIs */}
+                <div style={{
+                  padding: '18px 22px', borderBottom: '1px solid #e2e8f0',
+                  background: 'linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%)',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <i className="bi bi-wallet2" style={{ color: '#2563eb' }}></i>
+                          Care Card Wallet Installed Clients (Apple Wallet & Android)
+                        </h3>
+                        <span style={{
+                          background: '#dcfce7', border: '1px solid #86efac', color: '#15803d',
+                          fontSize: '11px', fontWeight: 800, padding: '3px 10px', borderRadius: '20px', whiteSpace: 'nowrap',
+                        }}>
+                          {(ws.total_installed || 0).toLocaleString()} Installed / {(ws.total_active_cards || 0).toLocaleString()} Active Cards ({ws.install_rate_pct || 0}%)
+                        </span>
+                      </div>
+                      <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#64748b' }}>
+                        Complete directory of clients who installed their MaskPro Care Card in Apple Wallet, Google Wallet, or Android Pass — synced with BoomerangMe API v2 & Unify
+                      </p>
+                    </div>
+
+                    {/* Top Clickable Platform Summary Badges + Live Sync Button */}
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={() => applyWalletFilter(walletFilter === 'apple' ? 'all_installed' : 'apple')}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '6px',
+                          background: walletFilter === 'apple' ? '#0f172a' : '#f8fafc',
+                          color: walletFilter === 'apple' ? '#ffffff' : '#0f172a',
+                          border: '1px solid #0f172a', fontSize: '12px', fontWeight: 700,
+                          padding: '5px 11px', borderRadius: '20px', whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: 'inherit',
+                        }}
+                      >
+                        <i className="bi bi-apple"></i>
+                        <span>Apple Wallet: {(ws.apple_wallet_count || 0).toLocaleString()}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => applyWalletFilter(walletFilter === 'google_pay' ? 'all_installed' : 'google_pay')}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '6px',
+                          background: walletFilter === 'google_pay' ? '#15803d' : '#dcfce7',
+                          color: walletFilter === 'google_pay' ? '#ffffff' : '#15803d',
+                          border: '1px solid #86efac', fontSize: '12px', fontWeight: 700,
+                          padding: '5px 11px', borderRadius: '20px', whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: 'inherit',
+                        }}
+                      >
+                        <i className="bi bi-google"></i>
+                        <span>Google Wallet: {(ws.google_pay_count || 0).toLocaleString()}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => applyWalletFilter(walletFilter === 'pwa' ? 'all_installed' : 'pwa')}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '6px',
+                          background: walletFilter === 'pwa' ? '#0284c7' : '#e0f2fe',
+                          color: walletFilter === 'pwa' ? '#ffffff' : '#0369a1',
+                          border: '1px solid #7dd3fc', fontSize: '12px', fontWeight: 700,
+                          padding: '5px 11px', borderRadius: '20px', whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: 'inherit',
+                        }}
+                      >
+                        <i className="bi bi-android2"></i>
+                        <span>Android / PWA Pass: {(ws.pwa_wallet_count || 0).toLocaleString()}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSyncWalletCards(false)}
+                        disabled={walletSyncing}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '6px',
+                          background: '#eff6ff', color: '#1d4ed8', border: '1px solid #93c5fd',
+                          fontSize: '12px', fontWeight: 700, padding: '5px 12px', borderRadius: '20px',
+                          whiteSpace: 'nowrap', cursor: walletSyncing ? 'wait' : 'pointer', fontFamily: 'inherit',
+                        }}
+                      >
+                        <i className={`bi ${walletSyncing ? 'bi-arrow-repeat' : 'bi-cloud-arrow-down-fill'}`}></i>
+                        <span>{walletSyncing ? 'Syncing BoomerangMe...' : 'Sync BoomerangMe'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Filter Pills + Package Tier + Branch + Search + Sort */}
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', marginTop: '12px' }}>
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      {[
+                        { key: 'all_installed', label: `All Installed (${(ws.total_installed || 0).toLocaleString()})`, icon: 'bi-check2-circle' },
+                        { key: 'apple', label: `Apple Wallet (${(ws.apple_wallet_count || 0).toLocaleString()})`, icon: 'bi-apple' },
+                        { key: 'android_all', label: `All Android / PWA (${(ws.android_web_count || 0).toLocaleString()})`, icon: 'bi-android2' },
+                        { key: 'google_pay', label: `Google Wallet (${(ws.google_pay_count || 0).toLocaleString()})`, icon: 'bi-google' },
+                        { key: 'pwa', label: `PWA Pass (${(ws.pwa_wallet_count || 0).toLocaleString()})`, icon: 'bi-phone-fill' },
+                        { key: 'not_installed', label: `Not Installed (${(ws.not_installed_count || 0).toLocaleString()})`, icon: 'bi-hourglass-split' },
+                      ].map((f) => {
+                        const isActive = walletFilter === f.key;
+                        return (
+                          <button
+                            key={f.key}
+                            type="button"
+                            onClick={() => applyWalletFilter(f.key)}
+                            style={{
+                              padding: '5px 11px', borderRadius: '16px', fontSize: '11.5px', fontWeight: 700,
+                              cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                              display: 'inline-flex', alignItems: 'center', gap: '5px',
+                              border: isActive ? '1px solid #2563eb' : '1px solid #e2e8f0',
+                              background: isActive ? '#2563eb' : 'white',
+                              color: isActive ? 'white' : '#475569',
+                            }}
+                          >
+                            <i className={`bi ${f.icon}`} style={{ fontSize: '11px' }}></i>
+                            <span>{f.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Search Input */}
+                    <div style={{
+                      position: 'relative', display: 'flex', alignItems: 'center',
+                      minWidth: '220px', flex: '1 1 220px', maxWidth: '320px',
+                    }}>
+                      <i className="bi bi-search" style={{
+                        position: 'absolute', left: '11px', fontSize: '12.5px', color: '#64748b', pointerEvents: 'none',
+                      }}></i>
+                      <input
+                        type="text"
+                        value={walletSearch}
+                        onChange={(e) => applyWalletSearch(e.target.value)}
+                        placeholder="Search client, mobile, vehicle, plate, card #..."
+                        style={{
+                          width: '100%', padding: '6px 28px 6px 32px', borderRadius: '10px',
+                          border: '1px solid #cbd5e1', fontSize: '12px', fontWeight: 500,
+                          color: '#0f172a', background: 'white', fontFamily: 'inherit', outline: 'none',
+                        }}
+                      />
+                      {walletSearch && (
+                        <button
+                          type="button"
+                          onClick={() => applyWalletSearch('')}
+                          style={{
+                            position: 'absolute', right: '7px', border: 'none', background: 'transparent',
+                            color: '#64748b', cursor: 'pointer', fontSize: '13px', padding: '2px 4px',
+                          }}
+                        >
+                          <i className="bi bi-x-circle-fill"></i>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Package Tier Filter */}
+                    <select
+                      value={walletTier}
+                      onChange={(e) => applyWalletTier(e.target.value)}
+                      style={{
+                        padding: '6px 10px', borderRadius: '10px', border: '1px solid #cbd5e1',
+                        fontSize: '12px', fontWeight: 700, color: '#0f172a', background: 'white',
+                        fontFamily: 'inherit', cursor: 'pointer', outline: 'none',
+                      }}
+                    >
+                      <option value="all">All Card Packages</option>
+                      <option value="coating">Coating (Silver / Gold / Diamond)</option>
+                      <option value="diamond">Diamond Coating (24 Visits)</option>
+                      <option value="gold">Gold Coating (14 Visits)</option>
+                      <option value="silver">Silver Coating (10 Visits)</option>
+                      <option value="tint">Nano Ceramic Tint</option>
+                      <option value="ppf">PPF Warranty & Maintenance</option>
+                    </select>
+
+                    {/* Branch Filter */}
+                    <select
+                      value={walletBranch}
+                      onChange={(e) => applyWalletBranch(e.target.value)}
+                      style={{
+                        padding: '6px 10px', borderRadius: '10px', border: '1px solid #cbd5e1',
+                        fontSize: '12px', fontWeight: 700, color: '#0f172a', background: 'white',
+                        fontFamily: 'inherit', cursor: 'pointer', outline: 'none',
+                      }}
+                    >
+                      <option value="all">All Branches</option>
+                      <option value="Davao">Davao</option>
+                      <option value="Cagayan">Cagayan De Oro</option>
+                      <option value="General Santos">General Santos</option>
+                      <option value="Cebu">Cebu</option>
+                      <option value="Manila">Manila / Quezon City</option>
+                    </select>
+
+                    {/* Sort Dropdown */}
+                    <select
+                      value={walletSort}
+                      onChange={(e) => applyWalletSort(e.target.value)}
+                      style={{
+                        padding: '6px 10px', borderRadius: '10px', border: '1px solid #cbd5e1',
+                        fontSize: '12px', fontWeight: 700, color: '#0f172a', background: 'white',
+                        fontFamily: 'inherit', cursor: 'pointer', outline: 'none',
+                      }}
+                    >
+                      <option value="recent_installed">Sort: Recently Installed / Updated</option>
+                      <option value="newest_issued">Sort: Newest Card Issued</option>
+                      <option value="most_visits_used">Sort: Most Maintenance Visits Used</option>
+                      <option value="bonus_points">Sort: Highest Bonus Points</option>
+                      <option value="customer_az">Sort: Client Name (A–Z)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Table Body */}
+                {walletLoading && wCards.length === 0 ? (
+                  <div style={{ padding: '40px 20px', textAlign: 'center', color: '#64748b', fontSize: '13.5px' }}>
+                    Loading installed wallet cards...
+                  </div>
+                ) : wCards.length === 0 ? (
+                  <div style={{ padding: '40px 20px', textAlign: 'center', color: '#94a3b8', fontSize: '13.5px' }}>
+                    No Care Card wallet records match this filter.
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                        <thead>
+                          <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                            <th style={{ padding: '11px 16px' }}>Client & Branch</th>
+                            <th style={{ padding: '11px 12px' }}>Vehicle & Plate #</th>
+                            <th style={{ padding: '11px 12px' }}>Wallet Installed (Device)</th>
+                            <th style={{ padding: '11px 12px' }}>Card Package & Serial #</th>
+                            <th style={{ padding: '11px 12px' }}>Visits Balance & Warranty</th>
+                            <th style={{ padding: '11px 12px' }}>Care App Status</th>
+                            <th style={{ padding: '11px 16px', textAlign: 'right' }}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {wCards.map((row) => {
+                            const devBadge = getDeviceBadge(row.status, row.device);
+                            const tierStyle = getTierStyle(row.template_id, row.category);
+                            const hasVisits = Number(row.visits_total || 0) > 0;
+                            const usedPct = hasVisits
+                              ? Math.min(100, Math.round((Number(row.visits_used || 0) / Number(row.visits_total || 1)) * 100))
+                              : 0;
+                            const isAppActive = Number(row.app_sessions || 0) > 0;
+                            return (
+                              <tr key={row.card_no} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                {/* 1. Client & Branch */}
+                                <td style={{ padding: '12px 16px' }}>
+                                  <div style={{ fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                    <span>{row.customer_name}</span>
+                                    <span style={{
+                                      fontSize: '10px', fontWeight: 700, padding: '1px 7px', borderRadius: '10px',
+                                      background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', whiteSpace: 'nowrap',
+                                    }}>
+                                      {row.branch_name}
+                                    </span>
+                                  </div>
+                                  <div style={{ fontSize: '11.5px', color: '#64748b', fontFamily: 'monospace', marginTop: '2px' }}>
+                                    {row.customer_mobile || 'No mobile'} {row.customer_id ? `• ID #${row.customer_id}` : ''}
+                                  </div>
+                                </td>
+
+                                {/* 2. Vehicle & Plate # */}
+                                <td style={{ padding: '12px 12px' }}>
+                                  <div style={{ fontWeight: 700, color: '#1d4ed8', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                    <span>
+                                      <i className="bi bi-car-front-fill" style={{ marginRight: '5px' }}></i>
+                                      {row.vehicle_display}
+                                    </span>
+                                    {row.plate_display && (
+                                      <span style={{
+                                        fontSize: '10.5px', fontWeight: 800, padding: '1px 6px', borderRadius: '6px',
+                                        background: '#0f172a', color: '#ffffff', fontFamily: 'monospace', whiteSpace: 'nowrap',
+                                      }}>
+                                        {row.plate_display}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                                    Booking #{row.booking_id || '—'} • Issued {row.issued_at ? new Date(row.issued_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                                  </div>
+                                </td>
+
+                                {/* 3. Wallet Installed (Device) */}
+                                <td style={{ padding: '12px 12px' }}>
+                                  <span style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: '5px',
+                                    padding: '4px 10px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 700,
+                                    background: devBadge.bg, color: devBadge.color, border: `1px solid ${devBadge.border}`,
+                                    whiteSpace: 'nowrap',
+                                  }}>
+                                    <i className={`bi ${devBadge.icon}`}></i>
+                                    <span>{devBadge.label}</span>
+                                  </span>
+                                  <div style={{ fontSize: '10.5px', color: '#64748b', marginTop: '4px' }}>
+                                    {row.updated_at
+                                      ? `Updated ${new Date(row.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                                      : devBadge.sub}
+                                  </div>
+                                </td>
+
+                                {/* 4. Card Package & Serial # */}
+                                <td style={{ padding: '12px 12px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+                                    <span style={{
+                                      display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                      fontSize: '11px', fontWeight: 800, padding: '2px 8px', borderRadius: '12px',
+                                      background: tierStyle.bg, color: tierStyle.color, border: `1px solid ${tierStyle.border}`,
+                                      whiteSpace: 'nowrap',
+                                    }}>
+                                      <i className={`bi ${tierStyle.icon}`}></i>
+                                      <span>{row.tier_name}</span>
+                                    </span>
+                                  </div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+                                    <code style={{
+                                      fontSize: '11px', color: '#334155', background: '#f8fafc',
+                                      border: '1px solid #e2e8f0', borderRadius: '5px', padding: '1px 6px', fontWeight: 700,
+                                    }}>
+                                      {row.card_no}
+                                    </code>
+                                    {row.install_link && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          navigator.clipboard?.writeText(row.install_link);
+                                          showToast(`Copied wallet link for ${row.customer_name}`);
+                                        }}
+                                        style={{
+                                          border: 'none', background: '#e2e8f0', color: '#334155',
+                                          borderRadius: '5px', padding: '2px 5px', fontSize: '10.5px', cursor: 'pointer',
+                                        }}
+                                      >
+                                        <i className="bi bi-clipboard"></i>
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+
+                                {/* 5. Visits Balance & Warranty */}
+                                <td style={{ padding: '12px 12px', minWidth: '175px' }}>
+                                  {hasVisits ? (
+                                    <div>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', fontWeight: 700, color: '#0f172a', marginBottom: '4px' }}>
+                                        <span>{row.visits_remaining ?? row.visits_total} / {row.visits_total} Visits Left</span>
+                                        <span style={{ fontSize: '10.5px', color: row.visits_used > 0 ? '#0284c7' : '#64748b' }}>
+                                          {row.visits_used} Used
+                                        </span>
+                                      </div>
+                                      <div style={{ height: '5px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden', marginBottom: '4px' }}>
+                                        <div style={{
+                                          width: `${Math.max(usedPct, row.visits_used > 0 ? 10 : 0)}%`,
+                                          height: '100%', background: '#0284c7', borderRadius: '4px',
+                                        }} />
+                                      </div>
+                                      <div style={{ fontSize: '10.5px', color: '#64748b', display: 'flex', justifyContent: 'space-between', gap: '6px' }}>
+                                        <span>
+                                          {row.expires_at_resolved
+                                            ? `Exp: ${new Date(row.expires_at_resolved).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`
+                                            : 'Active Warranty'}
+                                        </span>
+                                        {Number(row.bonus_balance || 0) > 0 && (
+                                          <strong style={{ color: '#15803d' }}>{row.bonus_balance} pts</strong>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div>
+                                      <span style={{
+                                        display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                        fontSize: '11px', fontWeight: 700, color: '#0e7490', background: '#ecfeff',
+                                        padding: '2px 8px', borderRadius: '10px', border: '1px solid #a5f3fc', whiteSpace: 'nowrap',
+                                      }}>
+                                        <i className="bi bi-percent"></i>
+                                        {row.discount_pct ? `${row.discount_pct}% Member Discount` : 'Active Loyalty Pass'}
+                                      </span>
+                                      <div style={{ fontSize: '10.5px', color: '#64748b', marginTop: '4px' }}>
+                                        {row.service_name}
+                                      </div>
+                                    </div>
+                                  )}
+                                </td>
+
+                                {/* 6. Care App Status */}
+                                <td style={{ padding: '12px 12px' }}>
+                                  {isAppActive ? (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                      <span style={{
+                                        display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                        background: '#dbeafe', color: '#1d4ed8', padding: '2px 8px',
+                                        borderRadius: '14px', fontSize: '11px', fontWeight: 700, whiteSpace: 'nowrap',
+                                      }}>
+                                        <i className="bi bi-phone-fill"></i>
+                                        Used App ({row.app_sessions} sess)
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => openCustomerJourney(row.customer_id, row.customer_name, row)}
+                                        style={{
+                                          display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                          background: '#f0f9ff', color: '#0369a1', border: '1px solid #7dd3fc',
+                                          padding: '2px 8px', borderRadius: '14px', fontSize: '11px', fontWeight: 700,
+                                          cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                                        }}
+                                      >
+                                        <i className="bi bi-compass-fill"></i>
+                                        Explore ({row.activity_count || 1})
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <span style={{ fontSize: '11.5px', color: '#94a3b8', fontWeight: 600 }}>
+                                      Wallet Only (No App Login Yet)
+                                    </span>
+                                  )}
+                                </td>
+
+                                {/* 7. Actions */}
+                                <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
+                                    {row.install_link && (
+                                      <a
+                                        href={row.install_link}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        style={{
+                                          display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                          padding: '5px 9px', borderRadius: '8px', border: '1px solid #cbd5e1',
+                                          background: '#f8fafc', color: '#334155', fontSize: '11px', fontWeight: 700,
+                                          textDecoration: 'none', whiteSpace: 'nowrap',
+                                        }}
+                                      >
+                                        <i className="bi bi-box-arrow-up-right"></i>
+                                        <span>Pass</span>
+                                      </a>
+                                    )}
+                                    {row.customer_id && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleImpersonate(row.customer_id, row.customer_name)}
+                                        style={{
+                                          padding: '5px 10px', borderRadius: '8px', border: '1px solid #fde68a',
+                                          background: '#fffbeb', color: '#b45309', fontSize: '11px', fontWeight: 700,
+                                          cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                                        }}
+                                      >
+                                        <i className="bi bi-box-arrow-in-right" style={{ marginRight: '4px' }}></i>
+                                        Login as
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Pagination Footer */}
+                    <div style={{
+                      padding: '12px 20px', borderTop: '1px solid #e2e8f0', background: '#f8fafc',
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px',
+                    }}>
+                      <div style={{ fontSize: '12px', color: '#64748b' }}>
+                        Showing <strong>{((wPag.page - 1) * wPag.limit) + 1}–{Math.min(wPag.page * wPag.limit, wPag.total)}</strong> of <strong>{(wPag.total || 0).toLocaleString()}</strong> Care Card wallet records (8 per page)
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <button
+                          type="button"
+                          disabled={wPag.page <= 1}
+                          onClick={() => applyWalletPage(wPag.page - 1)}
+                          style={{
+                            padding: '5px 11px', borderRadius: '8px', border: '1px solid #cbd5e1',
+                            background: wPag.page <= 1 ? '#f1f5f9' : 'white',
+                            color: wPag.page <= 1 ? '#94a3b8' : '#0f172a',
+                            fontSize: '12px', fontWeight: 700, cursor: wPag.page <= 1 ? 'not-allowed' : 'pointer',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          Prev
+                        </button>
+                        <span style={{
+                          padding: '5px 12px', borderRadius: '8px', background: '#2563eb', color: 'white',
+                          fontSize: '12px', fontWeight: 700, whiteSpace: 'nowrap',
+                        }}>
+                          Page {wPag.page} of {(wPag.totalPages || 1).toLocaleString()}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={wPag.page >= wPag.totalPages}
+                          onClick={() => applyWalletPage(wPag.page + 1)}
+                          style={{
+                            padding: '5px 11px', borderRadius: '8px', border: '1px solid #cbd5e1',
+                            background: wPag.page >= wPag.totalPages ? '#f1f5f9' : 'white',
+                            color: wPag.page >= wPag.totalPages ? '#94a3b8' : '#0f172a',
+                            fontSize: '12px', fontWeight: 700, cursor: wPag.page >= wPag.totalPages ? 'not-allowed' : 'pointer',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
+
           {/* ─── NEW WIDGET: Maintenance Reminder SMS & Magic Link Delivery Tracker (8 per page + Lazy Prefetch) ─── */}
           {(() => {
             const SMS_PER_PAGE = 8;
@@ -2310,21 +3056,112 @@ export default function AdminPanel() {
                                           const conv = getRowBookingConversion(row);
                                           const isBookedOk = conv.status === 'booked';
                                           const isBookedCancelled = conv.status === 'cancelled';
+                                          const isBranchBooked = isBookedOk && conv.source === 'branch';
+                                          const isHovered = hoveredConversionRowId === row.id;
+                                          const badgeIcon = isBookedOk
+                                            ? (isBranchBooked ? 'bi-telephone-inbound-fill' : 'bi-calendar-check-fill')
+                                            : isBookedCancelled
+                                            ? 'bi-calendar-x-fill'
+                                            : 'bi-calendar-minus';
                                           return (
-                                            <span
-                                              title={conv.detail || conv.label}
-                                              style={{
-                                                display: 'inline-flex', alignItems: 'center', gap: '4px',
-                                                fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '14px',
-                                                background: isBookedOk ? '#dcfce7' : isBookedCancelled ? '#fef3c7' : '#f1f5f9',
-                                                color: isBookedOk ? '#15803d' : isBookedCancelled ? '#b45309' : '#64748b',
-                                                border: `1px solid ${isBookedOk ? '#86efac' : isBookedCancelled ? '#fde68a' : '#e2e8f0'}`,
-                                                whiteSpace: 'nowrap',
-                                              }}
+                                            <div
+                                              style={{ position: 'relative', display: 'inline-flex' }}
+                                              onMouseEnter={() => setHoveredConversionRowId(row.id)}
+                                              onMouseLeave={() => setHoveredConversionRowId((prev) => (prev === row.id ? null : prev))}
                                             >
-                                              <i className={`bi ${isBookedOk ? 'bi-calendar-check-fill' : isBookedCancelled ? 'bi-calendar-x-fill' : 'bi-calendar-minus'}`}></i>
-                                              {conv.label}
-                                            </span>
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  setHoveredConversionRowId((prev) => (prev === row.id ? null : row.id));
+                                                }}
+                                                style={{
+                                                  display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                                  fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '14px',
+                                                  background: isBookedOk ? (isBranchBooked ? '#ecfdf5' : '#dcfce7') : isBookedCancelled ? '#fef3c7' : '#f1f5f9',
+                                                  color: isBookedOk ? (isBranchBooked ? '#047857' : '#15803d') : isBookedCancelled ? '#b45309' : '#64748b',
+                                                  border: `1px solid ${isBookedOk ? (isBranchBooked ? '#6ee7b7' : '#86efac') : isBookedCancelled ? '#fde68a' : '#e2e8f0'}`,
+                                                  whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: 'inherit',
+                                                  boxShadow: isHovered ? '0 2px 8px rgba(15, 23, 42, 0.12)' : 'none',
+                                                  transition: 'all 0.12s ease',
+                                                }}
+                                              >
+                                                <i className={`bi ${badgeIcon}`}></i>
+                                                <span>{conv.label}</span>
+                                              </button>
+
+                                              {isHovered && (
+                                                <div
+                                                  onClick={(e) => e.stopPropagation()}
+                                                  style={{
+                                                    position: 'absolute',
+                                                    left: '0',
+                                                    bottom: 'calc(100% + 8px)',
+                                                    zIndex: 1050,
+                                                    width: '286px',
+                                                    background: '#0f172a',
+                                                    color: '#f8fafc',
+                                                    borderRadius: '12px',
+                                                    padding: '11px 13px',
+                                                    boxShadow: '0 14px 32px rgba(15, 23, 42, 0.32)',
+                                                    border: '1px solid #334155',
+                                                    textAlign: 'left',
+                                                    pointerEvents: 'auto',
+                                                  }}
+                                                >
+                                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', marginBottom: '6px' }}>
+                                                    <span style={{
+                                                      display: 'inline-flex', alignItems: 'center', gap: '5px',
+                                                      fontSize: '10.5px', fontWeight: 800, padding: '2px 8px', borderRadius: '10px',
+                                                      background: isBookedOk ? 'rgba(34, 197, 94, 0.2)' : isBookedCancelled ? 'rgba(245, 158, 11, 0.22)' : 'rgba(148, 163, 184, 0.2)',
+                                                      color: isBookedOk ? '#4ade80' : isBookedCancelled ? '#fbbf24' : '#cbd5e1',
+                                                      whiteSpace: 'nowrap',
+                                                    }}>
+                                                      <i className={`bi ${badgeIcon}`}></i>
+                                                      {conv.channelLabel}
+                                                    </span>
+                                                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                                                      {conv.statusBadge}
+                                                    </span>
+                                                  </div>
+
+                                                  <div style={{ fontSize: '12px', fontWeight: 800, color: '#ffffff', marginBottom: '3px' }}>
+                                                    {conv.service}
+                                                  </div>
+
+                                                  <div style={{ fontSize: '11px', color: '#cbd5e1', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                                    <div>
+                                                      <i className="bi bi-calendar-event" style={{ marginRight: '5px', color: '#38bdf8' }}></i>
+                                                      Appointment: <strong style={{ color: '#f8fafc' }}>{conv.forDate}</strong>
+                                                    </div>
+                                                    {conv.bookedAt && (
+                                                      <div>
+                                                        <i className="bi bi-clock-history" style={{ marginRight: '5px', color: '#38bdf8' }}></i>
+                                                        Encoded: <strong style={{ color: '#f8fafc' }}>{conv.bookedAt}</strong>
+                                                        {conv.elapsedAfterSms ? <span style={{ color: '#94a3b8' }}> ({conv.elapsedAfterSms})</span> : null}
+                                                      </div>
+                                                    )}
+                                                    {conv.refLabel && (
+                                                      <div style={{ fontSize: '10.5px', color: '#94a3b8' }}>
+                                                        <i className="bi bi-hash" style={{ marginRight: '3px' }}></i>
+                                                        {conv.refLabel}
+                                                      </div>
+                                                    )}
+                                                    <div style={{ fontSize: '10.5px', color: '#38bdf8', marginTop: '2px', paddingTop: '4px', borderTop: '1px solid #1e293b' }}>
+                                                      {conv.channelNote}
+                                                    </div>
+                                                    {conv.note && (
+                                                      <div style={{
+                                                        fontSize: '10.5px', color: isBookedCancelled ? '#fcd34d' : '#e2e8f0',
+                                                        background: 'rgba(255,255,255,0.06)', borderRadius: '6px', padding: '4px 7px', marginTop: '2px',
+                                                      }}>
+                                                        Note: "{conv.note}"
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              )}
+                                            </div>
                                           );
                                         })()}
                                         {Number(row.blocked_attempts || 0) > 0 && (

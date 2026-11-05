@@ -1,5 +1,15 @@
 # Changelog
 
+## [v1.18.0] — 2026-11-05
+### Added & Enhanced
+- **Full-Width Care Card Wallet Installed Clients Tracker (`server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`, `unify_maskpro.care_wallet_cards_cache`)**:
+  - Created `care_wallet_cards_cache` and synced all **7,835 BoomerangMe cards** (`3,196` active installed cards linked to Unify: **1,370 Apple Wallet**, **136 Google Wallet**, **1,690 Android/Web Pass PWA**, plus **3,872 Not Installed Yet**).
+  - Added `GET /api/admin/wallet-cards` and `POST /api/admin/wallet-cards/sync` joining BoomerangMe API v2 card telemetry (`device`, `status`, `template_id`, `visits_remaining`, `bonus_balance`, `discount_pct`, `expires_at`, `updated_at`, `install_link`) with Unify's `loyalty_cards`, `bookings`, `customers`, `vehicles`, `branches`, and `care_app_telemetry`.
+  - Built the full-width **Care Card Wallet Installed Clients (Apple Wallet & Android)** widget in the Admin Dashboard with 1-click platform filters (`All Installed`, `Apple Wallet`, `All Android / PWA`, `Google Wallet`, `PWA Pass`, `Not Installed`), card package tier filter (`Diamond`, `Gold`, `Silver`, `Nano Ceramic Tint`, `PPF`), branch filter, live search, sort, progress bars for remaining maintenance visits, Care App activity badges (`Explore` journey link), and live `Sync BoomerangMe` button.
+- **Instant Designed Booking Conversion Popover Card & App vs. Branch/Call Attribution (`server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`)**:
+  - Distinguished **`Booked`** (booked directly inside the MaskPro Care App) from **`Booked • Branch`** (saw the SMS reminder and called/messaged the branch to book without clicking the magic link, e.g., Johaira Sabal `#4456`, Jamel G. Pañares `#1584`, Grace Ebus `#5177`) and **`Booked • Cancelled`** (including direct bookings marked `Cancelled` in `bookings_service_types`, e.g., Karl Silagan `#4494`).
+  - Replaced the slow 5-second native browser `title=""` attribute with an instant (`0ms` delay) custom-designed hover/click **Booking Conversion Popover Card** showing the booking channel, service, appointment date, encoded timestamp (`Xh after SMS`), booking/request reference ID, and notes/cancellation reason.
+
 ## [v1.17.24] — 2026-11-05
 ### Added & Fixed
 - **Magic Link Booking Conversion Badge (`Booked` / `Booked • Cancelled` / `Not Booked`) & Full Customer Exploration Journey Tracker (`server/routes/admin.js`, `server/routes/dashboard.js`, `server/routes/auth.js`, `server/routes/bookings.js`, `server/middleware/auth.js`, `frontend/src/pages/AdminPanel.jsx`, `frontend/src/components/Layout.jsx`, `frontend/src/pages/Profile.jsx`, `frontend/src/api/client.js`, `frontend/src/context/AuthContext.jsx`, `mobile/app/_layout.tsx`, `mobile/app/admin.tsx`)**:
