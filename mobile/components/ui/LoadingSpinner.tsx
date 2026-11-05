@@ -8,7 +8,7 @@ interface LoadingSpinnerProps {
 export default function LoadingSpinner({ message = 'Loading...' }: LoadingSpinnerProps) {
   return (
     <View style={styles.container}>
-      <ActivityIndicator size="large" color="#4f46e5" />
+      <ActivityIndicator size="large" color="#2563eb" />
       {message ? <Text style={styles.message}>{message}</Text> : null}
     </View>
   );

@@ -101,7 +101,7 @@ export default function NotificationModal({
         {/* Content */}
         {loading ? (
           <View style={styles.centered}>
-            <ActivityIndicator size="large" color="#4f46e5" />
+            <ActivityIndicator size="large" color="#2563eb" />
             <Text style={styles.loadingText}>Loading notifications...</Text>
           </View>
         ) : notifications.length === 0 ? (

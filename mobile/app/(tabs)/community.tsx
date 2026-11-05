@@ -327,7 +327,7 @@ export default function CommunityScreen() {
         maxToRenderPerBatch={10}
         windowSize={7}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#4f46e5']} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#2563eb']} />
         }
         ListHeaderComponent={
           <View style={styles.communityHeader}>
@@ -339,7 +339,7 @@ export default function CommunityScreen() {
         }
         ListEmptyComponent={
           loading ? (
-            <ActivityIndicator size="large" color="#4f46e5" style={styles.loader} />
+            <ActivityIndicator size="large" color="#2563eb" style={styles.loader} />
           ) : (
             <EmptyState
               icon="users"
@@ -619,7 +619,7 @@ export default function CommunityScreen() {
                   </View>
 
                   {commentsLoading ? (
-                    <ActivityIndicator size="small" color="#4f46e5" style={{ marginVertical: 20 }} />
+                    <ActivityIndicator size="small" color="#2563eb" style={{ marginVertical: 20 }} />
                   ) : comments.length === 0 ? (
                     <Text style={styles.noCommentsText}>
                       No comments yet. Be the first to join the conversation!
@@ -881,10 +881,10 @@ const styles = StyleSheet.create({
     width: 54,
     height: 54,
     borderRadius: 27,
-    backgroundColor: '#4f46e5',
+    backgroundColor: '#2563eb',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#4f46e5',
+    shadowColor: '#2563eb',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 8,
@@ -1017,7 +1017,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 10,
-    backgroundColor: '#4f46e5',
+    backgroundColor: '#2563eb',
   },
   submitButtonSos: {
     paddingVertical: 12,
@@ -1175,7 +1175,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#4f46e5',
+    backgroundColor: '#2563eb',
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -1059,7 +1059,7 @@ export default function VehiclesScreen() {
             {/* Header */}
             <View style={styles.lightboxHeader}>
               <View style={styles.lightboxTitleWrap}>
-                <FontAwesome name="car" size={16} color="#6366f1" style={{ marginRight: 8 }} />
+                <FontAwesome name="car" size={16} color="#2563eb" style={{ marginRight: 8 }} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.lightboxTitle} numberOfLines={1}>
                     {viewingPhoto?.title}

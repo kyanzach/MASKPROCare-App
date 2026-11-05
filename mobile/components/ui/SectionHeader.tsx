@@ -36,6 +36,6 @@ const styles = StyleSheet.create({
   actionText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#4f46e5',
+    color: '#2563eb',
   },
 });

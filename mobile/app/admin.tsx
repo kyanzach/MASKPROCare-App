@@ -100,6 +100,22 @@ export default function AdminPanelScreen() {
     customerName: string;
     logs: any[];
   } | null>(null);
+  const [bookingInfoModal, setBookingInfoModal] = useState<{
+    customerName: string;
+    vehicleLabel: string;
+    label: string;
+    sourceLabel: string;
+    serviceLabel: string;
+    dateLabel: string;
+    statusLabel: string;
+    noteLabel: string;
+  } | null>(null);
+  const [walletData, setWalletData] = useState<any>({ summary: null, cards: [] });
+  const [walletLoading, setWalletLoading] = useState(false);
+  const [walletSyncing, setWalletSyncing] = useState(false);
+  const [walletFilter, setWalletFilter] = useState<'installed_all' | 'apple' | 'google' | 'pwa' | 'not_installed'>('installed_all');
+  const [walletSearch, setWalletSearch] = useState('');
+  const [walletPage, setWalletPage] = useState(1);
   const [impersonating, setImpersonating] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
 
@@ -140,6 +156,7 @@ export default function AdminPanelScreen() {
           if (res.data?.data?.isAdmin) {
             setIsAdmin(true);
             loadDashboard(false);
+            loadWalletCards(false);
             loadModerationPosts('pending', false);
             loadCustomers(1, '');
           } else {
@@ -188,6 +205,36 @@ export default function AdminPanelScreen() {
       // silent background error handling
     } finally {
       if (!silent) setDashLoading(false);
+    }
+  };
+
+  const loadWalletCards = async (silent = false) => {
+    if (!silent) setWalletLoading(true);
+    try {
+      const res = await client.get('/admin/wallet-cards');
+      if (res.data?.success && res.data?.data) {
+        setWalletData(res.data.data);
+      }
+    } catch {
+      // silent background error handling
+    } finally {
+      if (!silent) setWalletLoading(false);
+    }
+  };
+
+  const handleSyncWalletCards = async () => {
+    if (walletSyncing) return;
+    setWalletSyncing(true);
+    try {
+      const res = await client.post('/admin/wallet-cards/sync');
+      if (res.data?.success && res.data?.data) {
+        setWalletData(res.data.data);
+        showToast('BoomerangMe wallet passes synced');
+      }
+    } catch {
+      showToast('Failed to sync BoomerangMe wallet passes');
+    } finally {
+      setWalletSyncing(false);
     }
   };
 
@@ -602,6 +649,241 @@ export default function AdminPanelScreen() {
             </View>
           </View>
 
+          {/* Care Card Wallet Installed Clients (Verified Apple Wallet & Google Wallet vs Form/Browser Only) */}
+          <View style={styles.sectionCard}>
+            {(() => {
+              const WALLET_PER_PAGE = 8;
+              const wSummary = walletData?.summary || {};
+              const wCards: any[] = Array.isArray(walletData?.cards) ? walletData.cards : [];
+              const totalActiveCards = Number(wSummary.total_active_cards || wCards.length || 0);
+              const appleCount = Number(wSummary.apple_wallet_count || 0);
+              const googleCount = Number(wSummary.google_wallet_count || 0);
+              const verifiedWalletCount = Number(wSummary.verified_wallet_count || (appleCount + googleCount) || 0);
+              const pwaCount = Number(wSummary.android_pwa_count || 0);
+              const notInstalledCount = Number(wSummary.not_installed_count || 0);
+              const installPct = totalActiveCards > 0 ? Math.round((verifiedWalletCount / totalActiveCards) * 1000) / 10 : 0;
+
+              const qW = walletSearch.trim().toLowerCase();
+              const filteredWallets = wCards.filter((c: any) => {
+                const dev = String(c.device_type || '').toLowerCase();
+                const isApple = dev.includes('apple') || dev.includes('ios');
+                const isGoogle = dev.includes('google');
+                const isPwa = dev.includes('pwa') || dev.includes('android');
+                const isVerifiedNative = isApple || isGoogle;
+
+                if (walletFilter === 'installed_all' && !isVerifiedNative) return false;
+                if (walletFilter === 'apple' && !isApple) return false;
+                if (walletFilter === 'google' && !isGoogle) return false;
+                if (walletFilter === 'pwa' && !isPwa) return false;
+                if (walletFilter === 'not_installed' && (isVerifiedNative || isPwa)) return false;
+
+                if (!qW) return true;
+                const blob = [
+                  c.customer_name,
+                  c.customer_mobile,
+                  c.customer_id ? `#${c.customer_id}` : '',
+                  c.vehicle_make,
+                  c.vehicle_model,
+                  c.plate_no,
+                  c.serial_number,
+                  c.template_name,
+                  c.branch_name,
+                ]
+                  .filter(Boolean)
+                  .join(' ')
+                  .toLowerCase();
+                return blob.includes(qW);
+              });
+
+              const totalWCount = filteredWallets.length;
+              const totalWPages = Math.max(1, Math.ceil(totalWCount / WALLET_PER_PAGE));
+              const safeWPage = Math.min(walletPage, totalWPages);
+              const pagedWallets = filteredWallets.slice((safeWPage - 1) * WALLET_PER_PAGE, safeWPage * WALLET_PER_PAGE);
+
+              return (
+                <>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <Text style={[styles.sectionTitle, { marginBottom: 0, flex: 1 }]}>Care Card Wallet Installed Clients</Text>
+                    <TouchableOpacity
+                      onPress={handleSyncWalletCards}
+                      disabled={walletSyncing}
+                      style={{
+                        paddingHorizontal: 9,
+                        paddingVertical: 4,
+                        borderRadius: 10,
+                        borderWidth: 1,
+                        borderColor: '#38bdf8',
+                        backgroundColor: 'rgba(56, 189, 248, 0.16)',
+                      }}
+                    >
+                      <Text numberOfLines={1} adjustsFontSizeToFit style={{ fontSize: 10.5, fontWeight: '700', color: '#38bdf8' }}>
+                        {walletSyncing ? 'Syncing...' : 'Sync Now'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#34d399', marginBottom: 8 }}>
+                    {verifiedWalletCount.toLocaleString()} Verified Native Wallets / {totalActiveCards.toLocaleString()} Active ({installPct}%) • Auto-sync 15m
+                  </Text>
+
+                  <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                    {([
+                      { key: 'installed_all', label: `Verified Wallets (${verifiedWalletCount})` },
+                      { key: 'apple', label: `Apple (${appleCount})` },
+                      { key: 'google', label: `Google (${googleCount})` },
+                      { key: 'pwa', label: `Form / Browser (${pwaCount})` },
+                      { key: 'not_installed', label: `Not Scanned (${notInstalledCount})` },
+                    ] as const).map((wf) => {
+                      const active = walletFilter === wf.key;
+                      return (
+                        <TouchableOpacity
+                          key={wf.key}
+                          onPress={() => {
+                            setWalletFilter(wf.key);
+                            setWalletPage(1);
+                          }}
+                          style={{
+                            paddingHorizontal: 8,
+                            paddingVertical: 4,
+                            borderRadius: 10,
+                            borderWidth: 1,
+                            borderColor: active ? '#2563eb' : '#334155',
+                            backgroundColor: active ? '#2563eb' : '#0f172a',
+                          }}
+                        >
+                          <Text numberOfLines={1} adjustsFontSizeToFit style={{ fontSize: 10.5, fontWeight: '700', color: active ? '#ffffff' : '#94a3b8' }}>
+                            {wf.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  <View style={{
+                    flexDirection: 'row', alignItems: 'center', gap: 8,
+                    backgroundColor: '#0f172a', borderWidth: 1, borderColor: '#334155',
+                    borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 8,
+                  }}>
+                    <FontAwesome name="search" size={13} color="#94a3b8" />
+                    <TextInput
+                      value={walletSearch}
+                      onChangeText={(v) => {
+                        setWalletSearch(v);
+                        setWalletPage(1);
+                      }}
+                      placeholder="Search client, mobile, vehicle, plate, serial..."
+                      placeholderTextColor="#64748b"
+                      style={{ flex: 1, fontSize: 12, color: '#f8fafc', paddingVertical: 0 }}
+                    />
+                    {walletSearch.length > 0 && (
+                      <TouchableOpacity onPress={() => { setWalletSearch(''); setWalletPage(1); }}>
+                        <FontAwesome name="times-circle" size={16} color="#94a3b8" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  {walletLoading && wCards.length === 0 ? (
+                    <ActivityIndicator size="small" color="#38bdf8" style={{ marginVertical: 14 }} />
+                  ) : pagedWallets.length === 0 ? (
+                    <Text style={{ color: '#94a3b8', fontSize: 12.5 }}>No Care Card records match this filter.</Text>
+                  ) : (
+                    <>
+                      {pagedWallets.map((c: any) => {
+                        const dev = String(c.device_type || '').toLowerCase();
+                        const isApple = dev.includes('apple') || dev.includes('ios');
+                        const isGoogle = dev.includes('google');
+                        const isPwa = dev.includes('pwa') || dev.includes('android');
+                        const badgeLabel = isApple
+                          ? 'Apple Wallet (Verified)'
+                          : isGoogle
+                          ? 'Google Wallet (Verified)'
+                          : isPwa
+                          ? 'Form / Browser Only'
+                          : 'Not Scanned';
+                        const badgeColor = isApple ? '#f8fafc' : isGoogle ? '#34d399' : isPwa ? '#fbbf24' : '#94a3b8';
+                        const vehicleTitle = [c.vehicle_make, c.vehicle_model, c.vehicle_year].filter(Boolean).join(' ') || 'Vehicle on file';
+                        return (
+                          <View key={c.serial_number} style={[styles.activeUserRow, { flexDirection: 'column', alignItems: 'flex-start', gap: 4 }]}>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                              <Text style={[styles.activeUserName, { flex: 1, marginRight: 6 }]} numberOfLines={1}>
+                                {c.customer_name || 'Valued Client'} {c.branch_name ? `• ${c.branch_name}` : ''}
+                              </Text>
+                              <View style={{
+                                paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10,
+                                backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                                borderWidth: 1, borderColor: badgeColor,
+                              }}>
+                                <Text numberOfLines={1} adjustsFontSizeToFit style={{ fontSize: 10, fontWeight: '700', color: badgeColor }}>
+                                  {badgeLabel}
+                                </Text>
+                              </View>
+                            </View>
+                            <Text style={styles.activeUserSub}>
+                              {c.customer_mobile || '—'} • {vehicleTitle} {c.plate_no ? `(${c.plate_no})` : ''}
+                            </Text>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                              <Text style={styles.activeUserSub}>
+                                {c.template_name || 'Care Card'} • #{c.serial_number} • {Number(c.visits_used || 0)} of {Number(c.visits_total || 0)} Used ({Number(c.visits_remaining || 0)} Left)
+                              </Text>
+                              {c.customer_id ? (
+                                <TouchableOpacity
+                                  style={styles.miniImpBtn}
+                                  onPress={() => handleImpersonatePress(c.customer_id, c.customer_name)}
+                                >
+                                  <Text numberOfLines={1} adjustsFontSizeToFit style={styles.miniImpBtnText}>Login as</Text>
+                                </TouchableOpacity>
+                              ) : null}
+                            </View>
+                          </View>
+                        );
+                      })}
+
+                      <View style={{
+                        marginTop: 10,
+                        paddingTop: 8,
+                        borderTopWidth: 1,
+                        borderTopColor: 'rgba(148, 163, 184, 0.16)',
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}>
+                        <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '600' }}>
+                          Showing {(safeWPage - 1) * WALLET_PER_PAGE + 1}–{Math.min(safeWPage * WALLET_PER_PAGE, totalWCount)} of {totalWCount}
+                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <TouchableOpacity
+                            disabled={safeWPage <= 1}
+                            onPress={() => setWalletPage(Math.max(1, safeWPage - 1))}
+                            style={{
+                              paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
+                              borderWidth: 1, borderColor: safeWPage <= 1 ? '#1e293b' : '#334155',
+                              backgroundColor: safeWPage <= 1 ? '#0f172a' : '#1e293b',
+                              opacity: safeWPage <= 1 ? 0.5 : 1,
+                            }}
+                          >
+                            <Text numberOfLines={1} adjustsFontSizeToFit style={{ fontSize: 11, fontWeight: '700', color: '#e2e8f0' }}>Prev</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            disabled={safeWPage >= totalWPages}
+                            onPress={() => setWalletPage(Math.min(totalWPages, safeWPage + 1))}
+                            style={{
+                              paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
+                              borderWidth: 1, borderColor: safeWPage >= totalWPages ? '#1e293b' : '#334155',
+                              backgroundColor: safeWPage >= totalWPages ? '#0f172a' : '#1e293b',
+                              opacity: safeWPage >= totalWPages ? 0.5 : 1,
+                            }}
+                          >
+                            <Text numberOfLines={1} adjustsFontSizeToFit style={{ fontSize: 11, fontWeight: '700', color: '#e2e8f0' }}>Next</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </>
+                  )}
+                </>
+              );
+            })()}
+          </View>
+
           {/* Maintenance Reminder SMS & Magic Link Delivery Tracker (8 per page) */}
           <View style={styles.sectionCard}>
             {(() => {
@@ -841,19 +1123,65 @@ export default function AdminPanelScreen() {
                               </Text>
                               {(row.slug || row.short_url) && (() => {
                                 const reqStatus = String(row.booked_request_status || '').toLowerCase();
-                                const hasBooked = Boolean((row.booked_request_id && ['pending', 'approved', 'negotiating', 'waitlisted'].includes(reqStatus)) || row.direct_booking_id);
+                                const hasCareAppRequest = Boolean(row.booked_request_id && ['pending', 'approved', 'negotiating', 'waitlisted'].includes(reqStatus));
+                                const hasDirectUnifyBooking = Boolean(row.direct_booking_id);
+                                const hasBooked = hasCareAppRequest || hasDirectUnifyBooking;
                                 const hasCancelled = !hasBooked && Boolean(row.booked_request_id && reqStatus === 'cancelled');
+                                const bookedViaApp = hasCareAppRequest || (hasDirectUnifyBooking && isOpened);
+                                const badgeLabel = hasBooked
+                                  ? (bookedViaApp ? 'Booked' : 'Booked • Branch')
+                                  : hasCancelled
+                                  ? 'Booked • Cancelled'
+                                  : 'Not Booked';
+                                const sourceLabel = !hasBooked && !hasCancelled
+                                  ? 'No Booking Yet'
+                                  : hasCareAppRequest
+                                  ? 'Care App Booking Request'
+                                  : bookedViaApp
+                                  ? 'Opened Magic Link + Booked'
+                                  : 'Call / Branch Direct (Unify)';
+                                const serviceLabel = row.booked_request_service || row.direct_booking_services || '6-Month NanoFix Maintenance';
+                                const rawDate = row.booked_request_date || row.direct_booking_date;
+                                const dateLabel = rawDate
+                                  ? new Date(rawDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                                  : 'Scheduled';
+                                const statusLabel = row.booked_request_status
+                                  ? String(row.booked_request_status).toUpperCase()
+                                  : row.direct_booking_status || 'CONFIRMED';
+                                const noteLabel = !isOpened && hasBooked
+                                  ? 'Client did not click the magic link, but booked directly with the branch after receiving the SMS reminder.'
+                                  : isOpened && hasBooked
+                                  ? 'Client opened the magic link and completed a booking.'
+                                  : hasCancelled
+                                  ? 'Client submitted a booking request that was later cancelled.'
+                                  : 'Client has not booked their maintenance appointment yet.';
+
                                 return (
-                                  <View style={{
-                                    paddingHorizontal: 7, paddingVertical: 2, borderRadius: 10,
-                                    backgroundColor: hasBooked ? 'rgba(16, 185, 129, 0.18)' : hasCancelled ? 'rgba(245, 158, 11, 0.18)' : 'rgba(148, 163, 184, 0.15)',
-                                    borderWidth: 1,
-                                    borderColor: hasBooked ? 'rgba(52, 211, 153, 0.45)' : hasCancelled ? 'rgba(251, 191, 36, 0.45)' : 'rgba(148, 163, 184, 0.3)',
-                                  }}>
-                                    <Text numberOfLines={1} style={{ fontSize: 10.5, fontWeight: '700', color: hasBooked ? '#34d399' : hasCancelled ? '#fbbf24' : '#94a3b8' }}>
-                                      {hasBooked ? 'Booked' : hasCancelled ? 'Booked • Cancelled' : 'Not Booked'}
+                                  <TouchableOpacity
+                                    activeOpacity={0.75}
+                                    onPress={() =>
+                                      setBookingInfoModal({
+                                        customerName: row.customer_name || 'Valued Client',
+                                        vehicleLabel: [row.vehicle_make, row.vehicle_model].filter(Boolean).join(' ') || 'Vehicle',
+                                        label: badgeLabel,
+                                        sourceLabel,
+                                        serviceLabel,
+                                        dateLabel,
+                                        statusLabel,
+                                        noteLabel,
+                                      })
+                                    }
+                                    style={{
+                                      paddingHorizontal: 7, paddingVertical: 2, borderRadius: 10,
+                                      backgroundColor: hasBooked ? 'rgba(16, 185, 129, 0.18)' : hasCancelled ? 'rgba(245, 158, 11, 0.18)' : 'rgba(148, 163, 184, 0.15)',
+                                      borderWidth: 1,
+                                      borderColor: hasBooked ? 'rgba(52, 211, 153, 0.45)' : hasCancelled ? 'rgba(251, 191, 36, 0.45)' : 'rgba(148, 163, 184, 0.3)',
+                                    }}
+                                  >
+                                    <Text numberOfLines={1} adjustsFontSizeToFit style={{ fontSize: 10.5, fontWeight: '700', color: hasBooked ? '#34d399' : hasCancelled ? '#fbbf24' : '#94a3b8' }}>
+                                      {badgeLabel}
                                     </Text>
-                                  </View>
+                                  </TouchableOpacity>
                                 );
                               })()}
                               {(isOpened || Number(row.app_sessions || 0) > 0 || Number(row.activity_count || 0) > 0) && (
@@ -1750,6 +2078,69 @@ export default function AdminPanelScreen() {
             <TouchableOpacity
               style={[styles.cancelModalBtn, { flex: 0, width: '100%' }]}
               onPress={() => setJourneyModal(null)}
+              activeOpacity={0.8}
+            >
+              <Text numberOfLines={1} adjustsFontSizeToFit style={styles.cancelModalText}>
+                Close
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Booking Conversion Attribution Modal */}
+      <Modal
+        visible={!!bookingInfoModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setBookingInfoModal(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { alignItems: 'stretch' }]}>
+            <Text style={[styles.modalTitle, { textAlign: 'left', marginBottom: 4 }]}>
+              Booking Attribution
+            </Text>
+            <Text style={[styles.modalDescription, { textAlign: 'left', marginBottom: 12 }]}>
+              {bookingInfoModal?.customerName} • {bookingInfoModal?.vehicleLabel}
+            </Text>
+            <View
+              style={{
+                backgroundColor: '#0f172a',
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: '#334155',
+                padding: 14,
+                marginBottom: 16,
+                gap: 8,
+              }}
+            >
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ color: '#94a3b8', fontSize: 11.5 }}>Status Badge</Text>
+                <Text style={{ color: '#34d399', fontSize: 11.5, fontWeight: '800' }}>{bookingInfoModal?.label}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ color: '#94a3b8', fontSize: 11.5 }}>Channel</Text>
+                <Text style={{ color: '#f8fafc', fontSize: 11.5, fontWeight: '700' }}>{bookingInfoModal?.sourceLabel}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ color: '#94a3b8', fontSize: 11.5 }}>Service</Text>
+                <Text style={{ color: '#38bdf8', fontSize: 11.5, fontWeight: '700', flex: 1, textAlign: 'right', marginLeft: 10 }}>
+                  {bookingInfoModal?.serviceLabel}
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ color: '#94a3b8', fontSize: 11.5 }}>Appointment Date</Text>
+                <Text style={{ color: '#f8fafc', fontSize: 11.5, fontWeight: '700' }}>
+                  {bookingInfoModal?.dateLabel} ({bookingInfoModal?.statusLabel})
+                </Text>
+              </View>
+              <Text style={{ color: '#cbd5e1', fontSize: 11.5, lineHeight: 17, marginTop: 4 }}>
+                {bookingInfoModal?.noteLabel}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.cancelModalBtn, { flex: 0, width: '100%' }]}
+              onPress={() => setBookingInfoModal(null)}
               activeOpacity={0.8}
             >
               <Text numberOfLines={1} adjustsFontSizeToFit style={styles.cancelModalText}>

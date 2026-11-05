@@ -60,13 +60,13 @@ export default function ShopScreen() {
 
       {/* Hero Card */}
       <LinearGradient
-        colors={['#6366f1', '#8b5cf6', '#a78bfa']}
+        colors={['#0f172a', '#1d4ed8', '#2563eb']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.heroCard}
       >
         <View style={styles.bagIconContainer}>
-          <Text style={styles.bagEmoji}>🛍️</Text>
+          <FontAwesome name="shopping-bag" size={30} color="#ffffff" />
         </View>
 
         <View style={styles.comingSoonBadge}>
@@ -81,13 +81,13 @@ export default function ShopScreen() {
         {/* Feature Highlights */}
         <View style={styles.featuresRow}>
           {[
-            { icon: '💎', text: 'VIP Exclusive Discounts' },
-            { icon: '🔧', text: 'Premium Gadgets' },
-            { icon: '🎁', text: 'Loyalty Rewards' },
+            { icon: 'diamond', text: 'VIP Exclusive Discounts' },
+            { icon: 'wrench', text: 'Premium Gadgets' },
+            { icon: 'gift', text: 'Loyalty Rewards' },
           ].map((f, i) => (
             <View key={i} style={styles.featurePill}>
-              <Text style={styles.featureIcon}>{f.icon}</Text>
-              <Text style={styles.featureText}>{f.text}</Text>
+              <FontAwesome name={f.icon as any} size={11} color="#ffffff" />
+              <Text numberOfLines={1} adjustsFontSizeToFit style={styles.featureText}>{f.text}</Text>
             </View>
           ))}
         </View>
@@ -100,7 +100,7 @@ export default function ShopScreen() {
           {CATEGORIES.map((cat, i) => (
             <View key={i} style={styles.categoryCard}>
               <View style={styles.categoryIconBg}>
-                <FontAwesome name={cat.icon as any} size={20} color="#4f46e5" />
+                <FontAwesome name={cat.icon as any} size={20} color="#2563eb" />
               </View>
               <Text style={styles.categoryTitle}>{cat.title}</Text>
               <Text style={styles.categoryDesc}>{cat.desc}</Text>
@@ -111,7 +111,7 @@ export default function ShopScreen() {
 
       {/* Early Access Notification Card */}
       <View style={styles.notifyCard}>
-        <FontAwesome name="bell" size={24} color="#6366f1" style={{ marginBottom: 12 }} />
+        <FontAwesome name="bell" size={24} color="#2563eb" style={{ marginBottom: 12 }} />
         <Text style={styles.notifyTitle}>Get Notified at Launch</Text>
         <Text style={styles.notifySubtitle}>
           Be among the first 100 shoppers to receive an exclusive 20% discount on your first order.
@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
     padding: 32,
     alignItems: 'center',
     marginBottom: 24,
-    shadowColor: '#6366f1',
+    shadowColor: '#1d4ed8',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.25,
     shadowRadius: 20,
@@ -332,7 +332,7 @@ const styles = StyleSheet.create({
     color: '#1e293b',
   },
   notifyButton: {
-    backgroundColor: '#4f46e5',
+    backgroundColor: '#2563eb',
     borderRadius: 10,
     paddingHorizontal: 16,
     justifyContent: 'center',

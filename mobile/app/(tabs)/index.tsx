@@ -119,11 +119,11 @@ interface LoyaltyCard {
 }
 
 const CATEGORY_META: Record<string, { label: string; icon: React.ComponentProps<typeof FontAwesome>['name']; colors: [string, string] }> = {
-  coating: { label: 'Nano Ceramic Coating', icon: 'shield', colors: ['#3b82f6', '#6366f1'] },
+  coating: { label: 'Nano Ceramic Coating', icon: 'shield', colors: ['#1d4ed8', '#2563eb'] },
   ppf:     { label: 'Paint Protection Film', icon: 'fire', colors: ['#ef4444', '#f97316'] },
   tint:    { label: 'Nano Ceramic Tint',    icon: 'sun-o', colors: ['#0ea5e9', '#38bdf8'] },
   wash:    { label: 'Care Wash',             icon: 'star', colors: ['#10b981', '#34d399'] },
-  gift:    { label: 'Gift Card',             icon: 'gift', colors: ['#8b5cf6', '#a78bfa'] },
+  gift:    { label: 'Gift Card',             icon: 'gift', colors: ['#d97706', '#f59e0b'] },
   other:   { label: 'Other',                 icon: 'file-text-o', colors: ['#64748b', '#94a3b8'] },
 };
 const LOYALTY_CATEGORY_PRIORITY: Record<string, number> = {
@@ -678,7 +678,7 @@ export default function DashboardScreen() {
       style={styles.container}
       contentContainerStyle={styles.contentContainer}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#4f46e5']} tintColor="#4f46e5" />
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#2563eb']} tintColor="#2563eb" />
       }
     >
       {/* Welcome Header */}
@@ -693,7 +693,7 @@ export default function DashboardScreen() {
           activeOpacity={0.8}
         >
           <LinearGradient
-            colors={['#4f46e5', '#6366f1']}
+            colors={['#1d4ed8', '#2563eb']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.bookButtonGradient}
@@ -995,7 +995,7 @@ export default function DashboardScreen() {
                       activeOpacity={0.7}
                     >
                       <LinearGradient
-                        colors={['#4f46e5', '#6366f1']}
+                        colors={['#1d4ed8', '#2563eb']}
                         style={styles.vehicleCardBtnGradientBg}
                       >
                         <Text style={styles.vehicleCardBtnGradientText}>Service</Text>
@@ -1169,7 +1169,7 @@ export default function DashboardScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.confirmDeclineBtn, declineModal.counterDate?.trim() ? { backgroundColor: '#4f46e5' } : null]}
+                style={[styles.confirmDeclineBtn, declineModal.counterDate?.trim() ? { backgroundColor: '#2563eb' } : null]}
                 onPress={handleDeclineSubmit}
                 disabled={respondingOffer}
               >
@@ -1274,7 +1274,7 @@ const styles = StyleSheet.create({
   bookButton: {
     borderRadius: 12,
     overflow: 'hidden',
-    shadowColor: '#4f46e5',
+    shadowColor: '#2563eb',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
@@ -1892,7 +1892,7 @@ const styles = StyleSheet.create({
   sectionSeeAll: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#4f46e5',
+    color: '#2563eb',
   },
   loyaltyIconBox: {
     width: 40,

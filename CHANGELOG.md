@@ -1,5 +1,12 @@
 # Changelog
 
+## [v1.18.4] — 2026-11-06
+### Fixed & Enhanced
+- **Full 6-Pillar Mobile Native App Readiness Audit (`mobile-audit`), Mobile UX (`mobile-ux`), Anti-Vibe-Coding Standard & Web/Mobile Feature Parity (`mobile/v1.13.15`)**:
+  - **TypeScript Strict Compilation (`mobile/app/_layout.tsx`)**: Fixed `Property 'isAuthenticated' does not exist on type 'AuthContextType'` by destructuring `user` from `useAuth()`, bringing `npx tsc --noEmit` to `0` errors alongside `18/18` passed `expo-doctor` checks.
+  - **Rule 4 Anti-Vibe-Coding Purple & Emoji Cleanup (`mobile/app/(tabs)/index.tsx`, `vehicles.tsx`, `shop.tsx`, `services.tsx`, `bookings.tsx`, `profile.tsx`, `community.tsx`, `mobile/components/ui/*`, `mobile/constants/aftercareData.ts`)**: Replaced all remaining purple/indigo UI accents (`#6366f1`, `#8b5cf6`, `#a855f7`, `#7c3aed`, `#4f46e5`) with Royal Blue (`#1d4ed8` / `#2563eb`), Sky Blue (`#0284c7` / `#0ea5e9`), and Amber (`#d97706` / `#f59e0b`), and replaced Unicode emoji pills in `shop.tsx` with `FontAwesome` vector icons (`shopping-bag`, `diamond`, `wrench`, `gift`).
+  - **Web/Mobile Admin Dashboard Parity (`mobile/app/admin.tsx`)**: Added the **Care Card Wallet Installed Clients** card directory (`Verified Native Wallets: 1,506` — Apple Wallet + Google Wallet vs `Form / Browser Only: 1,690` vs `Not Scanned: 3,872` + `Sync Now` button) and upgraded the SMS Magic Link conversion badge to distinguish `Booked` vs `Booked • Branch` vs `Booked • Cancelled` with a tap-to-open **Booking Attribution Modal**.
+
 ## [v1.18.3] — 2026-11-06
 ### Improved
 - **Aligned Admin Care Card Wallet Visits Column with Customer Care Card Wording (`frontend/src/pages/AdminPanel.jsx`)**:

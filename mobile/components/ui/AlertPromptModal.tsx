@@ -37,7 +37,7 @@ export default function AlertPromptModal({
         return { name: 'exclamation-triangle' as const, color: '#d97706', bg: '#fef3c7', btnBg: '#d97706' };
       case 'info':
       default:
-        return { name: 'info-circle' as const, color: '#4f46e5', bg: '#e0e7ff', btnBg: '#4f46e5' };
+        return { name: 'info-circle' as const, color: '#2563eb', bg: '#e0e7ff', btnBg: '#2563eb' };
     }
   };
 

@@ -27,11 +27,11 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const CATEGORY_META: Record<string, { label: string; icon: React.ComponentProps<typeof FontAwesome>['name']; colors: [string, string] }> = {
-  coating: { label: 'Nano Ceramic Coating', icon: 'shield', colors: ['#3b82f6', '#6366f1'] },
+  coating: { label: 'Nano Ceramic Coating', icon: 'shield', colors: ['#1d4ed8', '#2563eb'] },
   tint:    { label: 'Nano Ceramic Tint',    icon: 'sun-o', colors: ['#0ea5e9', '#38bdf8'] },
   ppf:     { label: 'Paint Protection Film', icon: 'fire', colors: ['#ef4444', '#f97316'] },
   wash:    { label: 'Care Wash',             icon: 'star', colors: ['#10b981', '#34d399'] },
-  gift:    { label: 'Gift Card',             icon: 'gift', colors: ['#8b5cf6', '#a78bfa'] },
+  gift:    { label: 'Gift Card',             icon: 'gift', colors: ['#d97706', '#f59e0b'] },
   other:   { label: 'Other',                 icon: 'file-text-o', colors: ['#64748b', '#94a3b8'] },
 };
 
@@ -446,7 +446,7 @@ export default function ProfileScreen() {
               <View style={styles.avatarWrapper}>
                 {profilePhotoUploading ? (
                   <View style={styles.avatarLoading}>
-                    <ActivityIndicator size="small" color="#4f46e5" />
+                    <ActivityIndicator size="small" color="#2563eb" />
                   </View>
                 ) : getPhotoUrl(profile?.profile_photo) ? (
                   <Image source={{ uri: getPhotoUrl(profile?.profile_photo) || '' }} style={styles.avatar} />
@@ -589,7 +589,7 @@ export default function ProfileScreen() {
                 <View style={styles.detailsHeaderRow}>
                   <Text style={styles.detailsHeader}>Account Details</Text>
                   <TouchableOpacity style={styles.editDetailsBtn} onPress={() => setEditing(true)}>
-                    <FontAwesome name="pencil" size={14} color="#4f46e5" style={styles.editBtnIcon} />
+                    <FontAwesome name="pencil" size={14} color="#2563eb" style={styles.editBtnIcon} />
                     <Text style={styles.editDetailsBtnText}>Edit</Text>
                   </TouchableOpacity>
                 </View>
@@ -643,13 +643,13 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.versionFooter}>MASKPRO Care v1.12.3</Text>
+            <Text style={styles.versionFooter}>MASKPRO Care v1.13.15</Text>
           </View>
         ) : (
           /* ================= LOYALTY TAB ================= */
           <View style={styles.loyaltyTabContent}>
             {loyaltyLoading ? (
-              <ActivityIndicator size="large" color="#4f46e5" style={styles.loyaltyLoader} />
+              <ActivityIndicator size="large" color="#2563eb" style={styles.loyaltyLoader} />
             ) : loyaltyCards.length > 0 ? (
               <View style={styles.cardsContainer}>
                 {CATEGORY_ORDER.map((category) => {
@@ -906,7 +906,7 @@ const styles = StyleSheet.create({
     color: '#6b7280',
   },
   tabButtonTextActive: {
-    color: '#4f46e5',
+    color: '#2563eb',
     fontWeight: '700',
   },
   loyaltyTabTitle: {
@@ -915,7 +915,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   loyaltyBadge: {
-    backgroundColor: '#4f46e5',
+    backgroundColor: '#2563eb',
     borderRadius: 10,
     width: 20,
     height: 20,
@@ -975,13 +975,13 @@ const styles = StyleSheet.create({
   avatarInitialsText: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#4f46e5',
+    color: '#2563eb',
   },
   avatarEditBtn: {
     position: 'absolute',
     bottom: 0,
     right: 0,
-    backgroundColor: '#4f46e5',
+    backgroundColor: '#2563eb',
     width: 26,
     height: 26,
     borderRadius: 13,
@@ -1075,7 +1075,7 @@ const styles = StyleSheet.create({
   },
   editDetailsBtnText: {
     fontSize: 13,
-    color: '#4f46e5',
+    color: '#2563eb',
     fontWeight: '600',
   },
   infoField: {
@@ -1133,7 +1133,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 8,
-    backgroundColor: '#4f46e5',
+    backgroundColor: '#2563eb',
     minWidth: 60,
     alignItems: 'center',
   },
@@ -1614,7 +1614,7 @@ const styles = StyleSheet.create({
   },
   legalLinkText: {
     fontSize: 12,
-    color: '#6366f1',
+    color: '#2563eb',
     fontWeight: '600',
   },
   legalDivider: {

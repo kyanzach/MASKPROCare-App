@@ -548,14 +548,14 @@ export default function BookingsScreen() {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#4f46e5']} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#2563eb']} />
         }
       >
         <View style={styles.header}>
           <Text style={styles.headerTitle}>My Bookings</Text>
           <TouchableOpacity style={styles.addButton} onPress={openBookingModal} activeOpacity={0.8}>
             <LinearGradient
-              colors={['#4f46e5', '#6366f1']}
+              colors={['#1d4ed8', '#2563eb']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.addButtonGradient}
@@ -823,7 +823,7 @@ export default function BookingsScreen() {
                           style={styles.actionButtonOutline}
                           onPress={() => openEditModal(item)}
                         >
-                          <FontAwesome name="pencil" size={12} color="#4f46e5" style={styles.actionBtnIcon} />
+                          <FontAwesome name="pencil" size={12} color="#2563eb" style={styles.actionBtnIcon} />
                           <Text style={styles.actionButtonOutlineText}>Edit Date</Text>
                         </TouchableOpacity>
                       ) : null}
@@ -1282,7 +1282,7 @@ export default function BookingsScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.promptConfirmBtn, declineModal.counterDate.trim() && { backgroundColor: '#4f46e5' }]}
+                style={[styles.promptConfirmBtn, declineModal.counterDate.trim() && { backgroundColor: '#2563eb' }]}
                 onPress={handleDeclineSubmit}
                 disabled={respondingOffer}
               >
@@ -1629,7 +1629,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   submitButton: {
-    backgroundColor: '#4f46e5',
+    backgroundColor: '#2563eb',
     borderRadius: 10,
     height: 48,
     alignItems: 'center',

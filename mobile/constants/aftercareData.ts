@@ -154,7 +154,7 @@ export const AFTERCARE_DATA: Record<string, AftercareCategory> = {
     title: 'Nano Ceramic Tint',
     subtitle: 'Window Film Aftercare Guide',
     icon: '☀️',
-    colors: ['#8b5cf6', '#6d28d9'],
+    colors: ['#0284c7', '#0ea5e9'],
     serviceKeywords: ['Nano Ceramic Tint', 'Tint', 'Window', 'NCT'],
     topics: [
       {
@@ -361,7 +361,7 @@ export const AFTERCARE_DATA: Record<string, AftercareCategory> = {
     title: 'Detailing',
     subtitle: 'Post-Detail Maintenance',
     icon: '✨',
-    colors: ['#a855f7', '#7c3aed'],
+    colors: ['#0284c7', '#0ea5e9'],
     serviceKeywords: ['Detailing', 'Detail', 'Interior', 'Exterior', 'Full Detail'],
     topics: [
       {

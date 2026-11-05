@@ -154,7 +154,7 @@ export default function AftercareScreen() {
 
             <TouchableOpacity style={styles.quoteButton} onPress={handleGetQuote} activeOpacity={0.8}>
               <LinearGradient
-                colors={['#4f46e5', '#6366f1']}
+                colors={['#1d4ed8', '#2563eb']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.quoteButtonGradient}
@@ -457,7 +457,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   tabLabelActive: {
-    color: '#4f46e5',
+    color: '#2563eb',
   },
   articleContent: {
     padding: 16,

@@ -121,7 +121,7 @@ export default function CalendarPicker({
       {/* Days Grid */}
       {loadingDates ? (
         <View style={styles.loaderContainer}>
-          <ActivityIndicator size="small" color="#4f46e5" />
+          <ActivityIndicator size="small" color="#2563eb" />
           <Text style={styles.loaderText}>Checking availability...</Text>
         </View>
       ) : (
@@ -281,9 +281,9 @@ const styles = StyleSheet.create({
     borderColor: '#fca5a5',
   },
   selectedDayCell: {
-    backgroundColor: '#4f46e5',
+    backgroundColor: '#2563eb',
     borderColor: '#4338ca',
-    shadowColor: '#4f46e5',
+    shadowColor: '#2563eb',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
   },
   todayDayCell: {
     borderWidth: 2,
-    borderColor: '#4f46e5',
+    borderColor: '#2563eb',
   },
   disabledDayCell: {
     backgroundColor: '#f9fafb',

@@ -65,10 +65,10 @@ function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated } = useAuth();
+  const { user } = useAuth();
 
   useEffect(() => {
-    if (!isAuthenticated || !pathname || pathname.startsWith('/admin') || pathname.startsWith('/login')) return;
+    if (!user || !pathname || pathname.startsWith('/admin') || pathname.startsWith('/login')) return;
     let label = 'Dashboard';
     let detail = 'Viewed Dashboard on mobile app';
     if (pathname.includes('bookings')) {
@@ -99,7 +99,7 @@ function RootLayoutNav() {
       page_label: label,
       action_detail: detail,
     }).catch(() => {});
-  }, [pathname, isAuthenticated]);
+  }, [pathname, user]);
 
   useEffect(() => {
     registerForPushNotificationsAsync();
