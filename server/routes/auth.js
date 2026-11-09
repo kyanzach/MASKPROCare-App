@@ -497,12 +497,15 @@ router.post('/magic-verify', async (req, res) => {
 
     const cookies = parseCookies(req.headers.cookie);
     const cookieDeviceToken = cookies.mp_care_device_token || '';
+    const clientCookieDeviceToken = cookies.mp_care_device_token_client || '';
     const bodyDeviceToken = device_token && String(device_token).trim().length >= 16 ? String(device_token).trim() : '';
 
-    const candidateTokens = [bodyDeviceToken, cookieDeviceToken].filter(Boolean);
-    const candidateHashes = candidateTokens.map((t) =>
-      crypto.createHash('sha256').update(t).digest('hex')
-    );
+    const candidateTokens = [...new Set([bodyDeviceToken, cookieDeviceToken, clientCookieDeviceToken].filter(Boolean))];
+    const candidatePairs = candidateTokens.map((t) => ({
+      token: t,
+      hash: crypto.createHash('sha256').update(t).digest('hex'),
+    }));
+    const candidateHashes = candidatePairs.map((p) => p.hash);
     const primaryDeviceHash = candidateHashes[0] || null;
 
     const resolvedPlatform = detectPlatformLabel(ua, platform_label);
@@ -682,9 +685,40 @@ router.post('/magic-verify', async (req, res) => {
       }
     }
 
-    let activeDeviceToken = bodyDeviceToken || cookieDeviceToken;
+    let activeDeviceToken = bodyDeviceToken || cookieDeviceToken || clientCookieDeviceToken;
     let isFirstBind = false;
     const isDuplicateBurst = link.last_accessed_at && (Date.now() - new Date(link.last_accessed_at).getTime() < 10000);
+
+    // Check if iOS Safari ITP / Messages In-App WebView purged localStorage on the EXACT SAME physical phone:
+    // Requires valid cryptographic ?k= key + identical bound_platform + byte-for-byte identical User-Agent + matching Screen resolution (if recorded)
+    const isSameHardwareAfterStoragePurge = await (async () => {
+      if (!link.bound_device_token_hash || candidateHashes.includes(link.bound_device_token_hash)) return false;
+      const hasValidCryptoKey = Boolean(k && String(k).trim());
+      if (!hasValidCryptoKey) return false;
+      if (!link.bound_platform || link.bound_platform !== resolvedPlatform) return false;
+      const cleanBoundUa = String(link.bound_user_agent || '').trim();
+      const cleanIncomingUa = String(ua || '').trim().slice(0, 490);
+      if (!cleanBoundUa || cleanBoundUa.length < 30 || cleanBoundUa !== cleanIncomingUa) return false;
+
+      // Also verify Screen resolution (e.g. "Screen: 414x896 (@3x)") against initial first_bind event if both exist
+      const incomingScreenMatch = String(client_meta || '').match(/Screen:\s*([^•]+)/i);
+      const incomingScreen = incomingScreenMatch ? incomingScreenMatch[1].trim() : '';
+      if (incomingScreen) {
+        const [firstBindRows] = await pool.query(
+          `SELECT request_headers FROM care_magic_link_security_logs
+           WHERE magic_link_id = ? AND event_type = 'first_bind'
+           ORDER BY id ASC LIMIT 1`,
+          [link.id]
+        ).catch(() => [[]]);
+        const boundHeaders = firstBindRows[0]?.request_headers || '';
+        const boundScreenMatch = String(boundHeaders).match(/Screen:\s*([^•]+)/i);
+        const boundScreen = boundScreenMatch ? boundScreenMatch[1].trim() : '';
+        if (boundScreen && boundScreen !== incomingScreen) {
+          return false;
+        }
+      }
+      return true;
+    })();
 
     if (!link.bound_device_token_hash) {
       // ── CASE 1: FIRST OPEN (TOFU — Lock to this device!) ──
@@ -722,8 +756,27 @@ router.post('/magic-verify', async (req, res) => {
         requestHeaders: buildHeadersSummary('200 OK (First Open • Device Locked)'),
         isFailure: false,
       });
-    } else if (candidateHashes.includes(link.bound_device_token_hash)) {
-      // ── CASE 2: SUBSEQUENT OPEN FROM THE SAME LOCKED DEVICE ──
+    } else if (candidateHashes.includes(link.bound_device_token_hash) || isSameHardwareAfterStoragePurge) {
+      // ── CASE 2: SUBSEQUENT OPEN FROM THE SAME LOCKED DEVICE (or Same Hardware after iOS ITP Storage Purge) ──
+      const matchedPair = candidatePairs.find((p) => p.hash === link.bound_device_token_hash);
+      if (matchedPair) {
+        // Keep the exact token that matched bound_device_token_hash so cookie + localStorage stay in sync
+        activeDeviceToken = matchedPair.token;
+      } else {
+        // Same physical phone after iOS ITP localStorage purge — re-sync bound_device_token_hash to current token
+        if (!activeDeviceToken || activeDeviceToken.length < 16) {
+          activeDeviceToken = crypto.randomBytes(24).toString('hex');
+        }
+        const refreshedHash = crypto.createHash('sha256').update(activeDeviceToken).digest('hex');
+        await pool.query(
+          `UPDATE care_magic_links
+           SET bound_device_token_hash = ?
+           WHERE id = ?`,
+          [refreshedHash, link.id]
+        );
+        link.bound_device_token_hash = refreshedHash;
+      }
+
       // Deduplicate rapid double-requests within 10 seconds so 1 click = 1 count
       await pool.query(
         `UPDATE care_magic_links
@@ -740,14 +793,18 @@ router.post('/magic-verify', async (req, res) => {
           requestUrl: resolvedUrl,
           eventType: 'authorized_access',
           httpStatus: 200,
-          serverCode: 'AUTHORIZED_SAME_DEVICE',
+          serverCode: isSameHardwareAfterStoragePurge ? 'AUTHORIZED_SAME_HARDWARE_RESYNC' : 'AUTHORIZED_SAME_DEVICE',
           attemptedPlatform: resolvedPlatform,
           boundPlatform: link.bound_platform || resolvedPlatform,
           deviceTokenHash: link.bound_device_token_hash,
           deviceFingerprint: link.bound_device_token_hash,
           ip: clientIp,
           ua,
-          requestHeaders: buildHeadersSummary('200 OK (Verified Bound Device)'),
+          requestHeaders: buildHeadersSummary(
+            isSameHardwareAfterStoragePurge
+              ? '200 OK (Verified Same Hardware • iOS Storage Re-Synced)'
+              : '200 OK (Verified Bound Device)'
+          ),
           isFailure: false,
         });
       }

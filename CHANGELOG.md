@@ -1,5 +1,13 @@
 # Changelog
 
+## [v1.18.6] — 2026-11-09
+### Fixed & Hardened
+- **iOS Safari ITP Same-Hardware Storage Re-Sync & 4-Layer Device Token Persistence (`server/routes/auth.js`, `frontend/src/pages/MagicLinkGate.jsx`, `unify_maskpro.care_magic_links`, `unify_maskpro.care_magic_link_security_logs`)**:
+  - **Root Cause**: When a customer opens a cross-domain SMS magic link (`maskpro.link/...` → `care.maskpro.ph/m/...?k=...`) on iOS Safari, Apple's Intelligent Tracking Prevention (ITP) / Messages SFSafariViewController can purge client-side `localStorage` after 24–72 hours on "decorated" query-string redirect links, causing `MagicLinkGate.jsx` to generate a new `mp_care_device_token` on the exact same physical iPhone (e.g., Patrick Henry Lacson `#6545`, Events `#29` & `#30` on `iPhone Safari 26.6.1`, `iOS 18.7`, `Screen: 414x896 @3x`).
+  - **4-Layer Token Persistence**: Updated `MagicLinkGate.jsx` and `POST /api/auth/magic-verify` (`server/routes/auth.js`) to read/write `mp_care_device_token` across `localStorage`, `sessionStorage`, 1st-party JS cookie (`mp_care_device_token_client`), and 1-year `HttpOnly` cookie (`mp_care_device_token`), while preserving the exact matched token when any layer matches `bound_device_token_hash`.
+  - **Same-Hardware Storage Purge Recovery**: Added `isSameHardwareAfterStoragePurge` in `POST /api/auth/magic-verify` so if all browser storage layers were cleared on the **exact same physical phone** (verified via valid cryptographic `?k=` key + matching `bound_platform` + byte-for-byte identical `bound_user_agent` + matching `Screen: WxH (@Dx)` hardware viewport signature), the server automatically re-syncs `bound_device_token_hash` to the phone's new token and logs `authorized_access` (`AUTHORIZED_SAME_HARDWARE_RESYNC`) instead of falsely rejecting the owner with `403 DEVICE_LOCKED_ELSEWHERE`.
+  - **Reconciled Patrick Henry Lacson (`#6545`, `patrickl-fordeverest2-01`)**: Updated `care_magic_links` (`id = 74`) to his current iPhone token hash (`4202b64dab...`, `access_count = 3`, `blocked_attempts = 0`) and reclassified Events `#29` & `#30` as `authorized_access`.
+
 ## [v1.18.5] — 2026-11-09
 ### Added & Improved
 - **Grouped the 4 Large Admin Operational Trackers into a 4-Tab Workspace Bar (`frontend/src/pages/AdminPanel.jsx`)**:

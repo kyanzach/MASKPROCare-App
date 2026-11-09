@@ -3,9 +3,34 @@ import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext';
 import api from '../api/client';
 
+function readCookieToken(name) {
+  try {
+    const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+    return match ? decodeURIComponent(match[1]) : '';
+  } catch {
+    return '';
+  }
+}
+
+function persistBrowserDeviceToken(token) {
+  if (!token || token.length < 16) return;
+  try { localStorage.setItem('mp_care_device_token', token); } catch {}
+  try { sessionStorage.setItem('mp_care_device_token', token); } catch {}
+  try {
+    document.cookie = `mp_care_device_token_client=${encodeURIComponent(token)}; path=/; max-age=31536000; SameSite=Lax`;
+  } catch {}
+}
+
 function getOrCreateBrowserDeviceToken() {
   try {
-    let token = localStorage.getItem('mp_care_device_token');
+    let token = '';
+    try { token = localStorage.getItem('mp_care_device_token') || ''; } catch {}
+    if (!token || token.length < 16) {
+      try { token = sessionStorage.getItem('mp_care_device_token') || ''; } catch {}
+    }
+    if (!token || token.length < 16) {
+      token = readCookieToken('mp_care_device_token_client');
+    }
     if (!token || token.length < 16) {
       const arr = new Uint8Array(24);
       if (window.crypto && window.crypto.getRandomValues) {
@@ -14,8 +39,8 @@ function getOrCreateBrowserDeviceToken() {
       } else {
         token = Math.random().toString(36).slice(2) + Date.now().toString(36) + Math.random().toString(36).slice(2);
       }
-      localStorage.setItem('mp_care_device_token', token);
     }
+    persistBrowserDeviceToken(token);
     return token;
   } catch {
     return '';
@@ -89,7 +114,7 @@ export default function MagicLinkGate() {
         const data = res.data?.data;
         if (res.data?.success && data?.token) {
           if (data.device_token) {
-            try { localStorage.setItem('mp_care_device_token', data.device_token); } catch {}
+            persistBrowserDeviceToken(data.device_token);
           }
           login(data.token, data.customer);
           navigate(data.redirect_to || '/bookings?openBooking=true&service=NanoFix', { replace: true });

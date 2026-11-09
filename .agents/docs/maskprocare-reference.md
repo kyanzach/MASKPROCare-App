@@ -234,6 +234,10 @@ ssh root@167.71.217.49 'certbot --nginx -d care.maskpro.ph'
 
 ## 📝 Session Learnings Log
 
+### 2026-11-09: iOS Safari ITP Decorated Link Storage Purge & Same-Hardware Magic Link Recovery (v1.18.6)
+- **iOS ITP Gotcha on Cross-Domain `?k=` Magic Links:** Because SMS magic links redirect from `maskpro.link/{slug}` to `care.maskpro.ph/m/{slug}?k={key}`, Apple Safari Intelligent Tracking Prevention (ITP) classifies the entry URL as a "decorated cross-site redirect" and can purge script-writable `localStorage` after 24–72 hours (or isolate storage between iOS Messages `SFSafariViewController` and the full Safari app).
+- **4-Layer Client/Server Device Token Persistence + Same-Hardware Re-Sync:** `MagicLinkGate.jsx` and `POST /api/auth/magic-verify` (`server/routes/auth.js`) persist `mp_care_device_token` across `localStorage`, `sessionStorage`, `mp_care_device_token_client` cookie, and `mp_care_device_token` `HttpOnly` cookie. If all 4 layers are purged by iOS ITP on the **same physical phone**, `isSameHardwareAfterStoragePurge` verifies the cryptographic `?k=` key + `bound_platform` + byte-for-byte `bound_user_agent` + `Screen: WxH (@Dx)` viewport resolution and seamlessly re-binds the refreshed token (`AUTHORIZED_SAME_HARDWARE_RESYNC`) while still strictly blocking any real 2nd device.
+
 ### 2026-10-28: Option A Cancellation Sync to Unify & Anti-Headache UX (v1.14.3)
 - **Redundant Notice Removal:** Removed the multi-line `"Cancellation request submitted — Our branch will review..."` box from the `Service` column in `Bookings.jsx` and `bookings.tsx` since the `Status` column/header already shows the amber `Cancellation Requested` badge.
 - **Unify `booking_requests` Sync on Booking Cancel:** `POST /api/bookings/cancel` (`type: 'booking'`) now syncs `cancellation_reason` and `CANCEL_REQUESTED:` note to the corresponding `booking_requests` row (creating an approved request record if the booking originated directly in Unify).
