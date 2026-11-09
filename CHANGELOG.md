@@ -1,5 +1,14 @@
 # Changelog
 
+## [v1.18.5] — 2026-11-09
+### Added & Improved
+- **Grouped the 4 Large Admin Operational Trackers into a 4-Tab Workspace Bar (`frontend/src/pages/AdminPanel.jsx`)**:
+  - Added a high-contrast dark slate **4-Tab Operational Trackers & Audit Views** switcher directly below the 3 Login Method summary cards (`1-Click Magic Link Logins`, `SMS OTP Logins`, `AI Smart Verification`) so admins can switch between the 4 large tables in-place without vertical scrolling:
+    1. **1. SMS & Magic Links** (`Maintenance Reminder SMS & Magic Link Delivery Tracker`)
+    2. **2. Who Uses the App** (`Active Customers & Device Log`)
+    3. **3. Security & Intrusion Log** (`Magic Link Security & Intrusion Audit Log`)
+    4. **4. Care Card Wallets** (`Care Card Wallet Installed Clients — Apple Wallet & Google Wallet`, placed on the 4th / last tab)
+
 ## [v1.18.4] — 2026-11-06
 ### Fixed & Enhanced
 - **Full 6-Pillar Mobile Native App Readiness Audit (`mobile-audit`), Mobile UX (`mobile-ux`), Anti-Vibe-Coding Standard & Web/Mobile Feature Parity (`mobile/v1.13.15`)**:

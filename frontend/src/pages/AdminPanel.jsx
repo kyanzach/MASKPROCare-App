@@ -68,6 +68,7 @@ export default function AdminPanel() {
   const [usersPage, setUsersPage] = useState(1);
   const [usersLimit, setUsersLimit] = useState(20); // Prefetch 2 pages (10 per page = 20 items) initially
   const [lastSyncedAt, setLastSyncedAt] = useState(new Date());
+  const [dashWidgetTab, setDashWidgetTab] = useState('sms_tracker'); // 'sms_tracker' | 'active_users' | 'security_audit' | 'wallet_cards'
 
   // Care Card Wallet (BoomerangMe) Installed Clients state
   const [walletData, setWalletData] = useState({
@@ -1614,8 +1615,172 @@ export default function AdminPanel() {
             </div>
           </div>
 
-          {/* ─── FULL-WIDTH WIDGET: Care Card Wallet Installed Clients (Apple Wallet, Google Pay & Android Pass) ─── */}
+          {/* ─── OBVIOUS 4-TAB WORKSPACE SEPARATOR (Groups the 4 Big Operational Widgets) ─── */}
           {(() => {
+            const ws = walletData?.summary || {};
+            const todayManila = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+            const todaySmsTotal = smsReminderLogs.filter((r) => {
+              if (!r.created_at) return false;
+              return new Date(r.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }) === todayManila;
+            }).length;
+            const totalUserSessions = Math.max(Number(dashData?.active_users_total || 0), activeUsers.length);
+            const totalBlockedEvents = Number(securityOverview.blocked_attempts || 0);
+
+            const bigWidgetTabs = [
+              {
+                key: 'sms_tracker',
+                icon: 'bi-chat-dots-fill',
+                title: 'SMS & Magic Links',
+                subtitle: 'Maintenance Reminder Tracker',
+                badge: todaySmsTotal > 0 ? `${todaySmsTotal} Today` : `${smsReminderLogs.length} Sent`,
+                accent: '#2563eb',
+                activeBg: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
+                badgeBg: '#dbeafe',
+                badgeColor: '#1d4ed8',
+              },
+              {
+                key: 'active_users',
+                icon: 'bi-activity',
+                title: 'Who Uses the App',
+                subtitle: 'Active Customers & Device Log',
+                badge: (kpis.live_online_users || 0) > 0
+                  ? `${kpis.live_online_users} Online • ${totalUserSessions} Log`
+                  : `${totalUserSessions} Sessions`,
+                accent: '#10b981',
+                activeBg: 'linear-gradient(135deg, #047857 0%, #10b981 100%)',
+                badgeBg: '#dcfce7',
+                badgeColor: '#15803d',
+              },
+              {
+                key: 'security_audit',
+                icon: 'bi-shield-exclamation',
+                title: 'Security & Intrusion Log',
+                subtitle: '2nd-Device & Firewall Audit',
+                badge: `${totalBlockedEvents} Blocked`,
+                accent: '#dc2626',
+                activeBg: 'linear-gradient(135deg, #b91c1c 0%, #dc2626 100%)',
+                badgeBg: '#fef2f2',
+                badgeColor: '#dc2626',
+              },
+              {
+                key: 'wallet_cards',
+                icon: 'bi-wallet2',
+                title: 'Care Card Wallets',
+                subtitle: 'Apple Wallet & Google Wallet',
+                badge: `${(ws.total_installed || 0).toLocaleString()} Verified`,
+                accent: '#0284c7',
+                activeBg: 'linear-gradient(135deg, #0369a1 0%, #0284c7 100%)',
+                badgeBg: '#e0f2fe',
+                badgeColor: '#0369a1',
+              },
+            ];
+
+            return (
+              <div style={{
+                marginTop: '6px',
+                marginBottom: '16px',
+                padding: '10px',
+                background: '#0f172a',
+                borderRadius: '18px',
+                border: '1px solid #1e293b',
+                boxShadow: '0 10px 26px rgba(15, 23, 42, 0.14)',
+              }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '2px 8px 10px', borderBottom: '1px solid rgba(148, 163, 184, 0.18)',
+                  marginBottom: '10px', flexWrap: 'wrap', gap: '8px',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      width: '22px', height: '22px', borderRadius: '6px',
+                      background: 'rgba(56, 189, 248, 0.18)', color: '#38bdf8', fontSize: '12px',
+                    }}>
+                      <i className="bi bi-layers-fill"></i>
+                    </span>
+                    <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#f8fafc' }}>
+                      Operational Trackers & Audit Views
+                    </span>
+                    <span style={{ fontSize: '11.5px', color: '#94a3b8' }}>
+                      — Select a tab below to switch tables without scrolling
+                    </span>
+                  </div>
+                  <span style={{
+                    fontSize: '11px', fontWeight: 700, color: '#cbd5e1',
+                    background: 'rgba(255,255,255,0.08)', padding: '3px 10px', borderRadius: '12px',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    4 Live Trackers Grouped
+                  </span>
+                </div>
+
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                  gap: '8px',
+                }}>
+                  {bigWidgetTabs.map((t, idx) => {
+                    const isSel = dashWidgetTab === t.key;
+                    return (
+                      <button
+                        key={t.key}
+                        type="button"
+                        onClick={() => setDashWidgetTab(t.key)}
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px',
+                          padding: '11px 14px', borderRadius: '12px', cursor: 'pointer',
+                          fontFamily: 'inherit', textAlign: 'left', transition: 'all 0.15s ease',
+                          background: isSel ? t.activeBg : 'rgba(30, 41, 59, 0.85)',
+                          border: isSel ? '1.5px solid rgba(255,255,255,0.45)' : '1px solid rgba(148, 163, 184, 0.2)',
+                          color: isSel ? '#ffffff' : '#cbd5e1',
+                          boxShadow: isSel ? '0 6px 18px rgba(0, 0, 0, 0.28)' : 'none',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                          <div style={{
+                            width: '34px', height: '34px', borderRadius: '10px', flexShrink: 0,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            background: isSel ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.07)',
+                            color: isSel ? '#ffffff' : '#94a3b8', fontSize: '15px',
+                          }}>
+                            <i className={`bi ${t.icon}`}></i>
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{
+                              fontSize: '13px', fontWeight: 800,
+                              color: isSel ? '#ffffff' : '#f1f5f9',
+                              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                            }}>
+                              {idx + 1}. {t.title}
+                            </div>
+                            <div style={{
+                              fontSize: '11px', fontWeight: 500,
+                              color: isSel ? 'rgba(255,255,255,0.85)' : '#94a3b8',
+                              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                            }}>
+                              {t.subtitle}
+                            </div>
+                          </div>
+                        </div>
+
+                        <span style={{
+                          padding: '3px 9px', borderRadius: '14px', fontSize: '11px', fontWeight: 800,
+                          whiteSpace: 'nowrap', flexShrink: 0,
+                          background: isSel ? '#ffffff' : t.badgeBg,
+                          color: isSel ? '#0f172a' : t.badgeColor,
+                        }}>
+                          {t.badge}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* ─── TAB 4 (LAST TAB): Care Card Wallet Installed Clients (Apple Wallet & Google Wallet) ─── */}
+          {dashWidgetTab === 'wallet_cards' && (() => {
             const ws = walletData?.summary || {};
             const wCards = walletData?.cards || [];
             const wPag = walletData?.pagination || { page: 1, limit: 8, total: 0, totalPages: 1 };
@@ -2242,8 +2407,8 @@ export default function AdminPanel() {
             );
           })()}
 
-          {/* ─── NEW WIDGET: Maintenance Reminder SMS & Magic Link Delivery Tracker (8 per page + Lazy Prefetch) ─── */}
-          {(() => {
+          {/* ─── TAB 1: Maintenance Reminder SMS & Magic Link Delivery Tracker (8 per page + Lazy Prefetch) ─── */}
+          {dashWidgetTab === 'sms_tracker' && (() => {
             const SMS_PER_PAGE = 8;
             const smsQuery = smsSearch.trim().toLowerCase();
             const smsQueryId = smsQuery.replace(/^#/, '');
@@ -3376,8 +3541,8 @@ export default function AdminPanel() {
             );
           })()}
 
-          {/* ─── 2nd to Last: Who Uses the App (Active Customers & Device Log — 10 per page + Lazy Prefetch) ─── */}
-          {(() => {
+          {/* ─── TAB 2: Who Uses the App (Active Customers & Device Log — 10 per page + Lazy Prefetch) ─── */}
+          {dashWidgetTab === 'active_users' && (() => {
             const USERS_PER_PAGE = 10;
             const totalUserRows = Math.max(Number(dashData?.active_users_total || 0), activeUsers.length);
             const totalUserPages = Math.max(1, Math.ceil(totalUserRows / USERS_PER_PAGE));
@@ -3591,7 +3756,9 @@ export default function AdminPanel() {
             );
           })()}
 
-          {/* ─── Last Widget: Magic Link Security & Intrusion Audit Log (5 per page + Lazy Prefetch) ─── */}
+          {/* ─── TAB 3: Magic Link Security & Intrusion Audit Log (5 per page + Lazy Prefetch) ─── */}
+          {dashWidgetTab === 'security_audit' && (
+          <>
           <style>{`
             @keyframes mpLiveDotBlink {
               0%, 100% { opacity: 1; transform: scale(1); }
@@ -4277,6 +4444,8 @@ export default function AdminPanel() {
               );
             })()}
           </div>
+          </>
+          )}
         </div>
       )}
 
