@@ -43,6 +43,18 @@ export default function AdminPanel() {
   const [smsPreviewModal, setSmsPreviewModal] = useState(null);
   const [journeyModal, setJourneyModal] = useState(null);
   const [hoveredConversionRowId, setHoveredConversionRowId] = useState(null);
+  const [hoveredConversionPos, setHoveredConversionPos] = useState({ left: 0, top: 0, bottom: 0, openBelow: false });
+
+  useEffect(() => {
+    if (!hoveredConversionRowId) return undefined;
+    const handleDismissOnScroll = () => setHoveredConversionRowId(null);
+    window.addEventListener('scroll', handleDismissOnScroll, true);
+    window.addEventListener('resize', handleDismissOnScroll);
+    return () => {
+      window.removeEventListener('scroll', handleDismissOnScroll, true);
+      window.removeEventListener('resize', handleDismissOnScroll);
+    };
+  }, [hoveredConversionRowId]);
   const [impersonating, setImpersonating] = useState(false);
   const [secActionLoading, setSecActionLoading] = useState(null);
   const [secLogFilter, setSecLogFilter] = useState('all');
@@ -3239,14 +3251,40 @@ export default function AdminPanel() {
                                           return (
                                             <div
                                               style={{ position: 'relative', display: 'inline-flex' }}
-                                              onMouseEnter={() => setHoveredConversionRowId(row.id)}
+                                              onMouseEnter={(e) => {
+                                                const rect = e.currentTarget.getBoundingClientRect();
+                                                const popoverWidth = 286;
+                                                const clampedLeft = Math.max(12, Math.min(rect.left, window.innerWidth - popoverWidth - 16));
+                                                const openBelow = rect.top < 220;
+                                                setHoveredConversionPos({
+                                                  left: clampedLeft,
+                                                  top: rect.bottom + 8,
+                                                  bottom: window.innerHeight - rect.top + 8,
+                                                  openBelow,
+                                                });
+                                                setHoveredConversionRowId(row.id);
+                                              }}
                                               onMouseLeave={() => setHoveredConversionRowId((prev) => (prev === row.id ? null : prev))}
                                             >
                                               <button
                                                 type="button"
                                                 onClick={(e) => {
                                                   e.stopPropagation();
-                                                  setHoveredConversionRowId((prev) => (prev === row.id ? null : row.id));
+                                                  if (hoveredConversionRowId === row.id) {
+                                                    setHoveredConversionRowId(null);
+                                                  } else {
+                                                    const rect = e.currentTarget.getBoundingClientRect();
+                                                    const popoverWidth = 286;
+                                                    const clampedLeft = Math.max(12, Math.min(rect.left, window.innerWidth - popoverWidth - 16));
+                                                    const openBelow = rect.top < 220;
+                                                    setHoveredConversionPos({
+                                                      left: clampedLeft,
+                                                      top: rect.bottom + 8,
+                                                      bottom: window.innerHeight - rect.top + 8,
+                                                      openBelow,
+                                                    });
+                                                    setHoveredConversionRowId(row.id);
+                                                  }
                                                 }}
                                                 style={{
                                                   display: 'inline-flex', alignItems: 'center', gap: '4px',
@@ -3267,10 +3305,12 @@ export default function AdminPanel() {
                                                 <div
                                                   onClick={(e) => e.stopPropagation()}
                                                   style={{
-                                                    position: 'absolute',
-                                                    left: '0',
-                                                    bottom: 'calc(100% + 8px)',
-                                                    zIndex: 1050,
+                                                    position: 'fixed',
+                                                    left: `${hoveredConversionPos.left}px`,
+                                                    ...(hoveredConversionPos.openBelow
+                                                      ? { top: `${hoveredConversionPos.top}px` }
+                                                      : { bottom: `${hoveredConversionPos.bottom}px` }),
+                                                    zIndex: 9999,
                                                     width: '286px',
                                                     background: '#0f172a',
                                                     color: '#f8fafc',

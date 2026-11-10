@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.18.8] — 2026-11-10
+### Fixed
+- **Unclipped Booking Conversion Popover in SMS & Magic Link Delivery Tracker (`frontend/src/pages/AdminPanel.jsx`)**:
+  - **Root Cause**: The `Booked` / `Booked • Branch` hover/click popover inside the `Maintenance Reminder SMS & Magic Link Delivery Tracker` table used `position: 'absolute'`, `bottom: 'calc(100% + 8px)'` inside `<div style={{ overflowX: 'auto' }}>`. Because CSS forces `overflow-y: auto` whenever `overflow-x: auto` is set, hovering or clicking the 1st row's `Booked • Branch` badge clipped the top half of the dark popover card at the top edge of the scroll container.
+  - **Fix**: Switched the Booking Conversion Popover to `position: 'fixed'` (`zIndex: 9999`) anchored to the badge's live `getBoundingClientRect()` coordinates (with horizontal viewport clamping, automatic downward flip when near the top of the viewport, and scroll/resize auto-dismiss), completely escaping the table scroll container so the full popover card is always visible on row 1 and every row.
+
 ## [v1.18.7] — 2026-11-10
 ### Added & Updated
 - **Gensan (`branch_id = 2`) → Davao Main (`branch_id = 1`) Booking & Follow-Up Routing + Branded `MASKPROCare App` Copy (`server/routes/bookings.js`, `server/middleware/auth.js`, `server/routes/auth.js`, `server/routes/aiAuth.js`, `server/services/ltoReminderCron.js`, `frontend/src/pages/AdminPanel.jsx`, `frontend/src/pages/Aftercare.jsx`, `mobile/app/admin.tsx`)**:
