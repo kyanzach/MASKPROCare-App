@@ -125,7 +125,7 @@ export default function Aftercare() {
             5% OFF
           </div>
           <p style={{ margin: '0 0 24px', color: '#94a3b8', fontSize: '13px' }}>
-            Exclusive for MaskPro Care app users
+            Exclusive for MASKPROCare App users
           </p>
           <a
             href="https://gaq.maskpro.ph"

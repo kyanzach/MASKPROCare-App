@@ -126,8 +126,8 @@ async function runLtoRenewalCheck() {
       });
 
       const smsBody = milestone === '30d'
-        ? `Hi ${firstName}, friendly reminder from MaskPro Care: Your LTO registration renewal for your ${vehicleName}${plateLabel} is due in ${diffDays} days (${formattedDue}). We've got your back! - MaskPro Care`
-        : `Hi ${firstName}, heads up from MaskPro Care: Your LTO registration renewal for your ${vehicleName}${plateLabel} is due in ${diffDays} days on ${formattedDue}. Drive safe! - MaskPro Care`;
+        ? `Hi ${firstName}, friendly reminder from MASKPROCare App: Your LTO registration renewal for your ${vehicleName}${plateLabel} is due in ${diffDays} days (${formattedDue}). We've got your back! - MASKPROCare`
+        : `Hi ${firstName}, heads up from MASKPROCare App: Your LTO registration renewal for your ${vehicleName}${plateLabel} is due in ${diffDays} days on ${formattedDue}. Drive safe! - MASKPROCare`;
 
       const notifTitle = milestone === '30d'
         ? `LTO Renewal Due in ${diffDays} Days`

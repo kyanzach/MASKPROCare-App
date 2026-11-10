@@ -144,7 +144,14 @@ async function getAvailableSlots(date, serviceName, branchId) {
   return Math.max(0, capacity - confirmedCount);
 }
 
-// --- Helper: Resolve branch_id for capacity checks ---
+// --- Helper: Normalize closed partner branches (Gensan branch_id = 2 → Davao Main branch_id = 1) ---
+function normalizeOperatingBranchId(rawBranchId) {
+  const bId = parseInt(rawBranchId, 10) || 1;
+  // Gensan (branch_id = 2) no longer has a partner — route bookings, capacity, and staff alerts to Davao Main (branch_id = 1)
+  return bId === 2 ? 1 : bId;
+}
+
+// --- Helper: Resolve branch_id for capacity checks & booking routing ---
 async function getCustomerBranch(customerId, jwtBranchId, vehicleId) {
   const vehId = parseInt(vehicleId || 0, 10);
   if (vehId > 0) {
@@ -153,7 +160,7 @@ async function getCustomerBranch(customerId, jwtBranchId, vehicleId) {
         "SELECT branch_id FROM bookings WHERE customer_id = ? AND customer_vehicle_id = ? AND branch_id IS NOT NULL ORDER BY booking_date ASC LIMIT 1",
         [customerId, vehId]
       );
-      if (rows[0]?.branch_id) return rows[0].branch_id;
+      if (rows[0]?.branch_id) return normalizeOperatingBranchId(rows[0].branch_id);
     } catch { /* ignore */ }
 
     try {
@@ -161,13 +168,13 @@ async function getCustomerBranch(customerId, jwtBranchId, vehicleId) {
         "SELECT branch_id FROM booking_requests WHERE customer_id = ? AND customer_vehicle_id = ? AND branch_id IS NOT NULL ORDER BY time_added ASC LIMIT 1",
         [customerId, vehId]
       );
-      if (rows[0]?.branch_id) return rows[0].branch_id;
+      if (rows[0]?.branch_id) return normalizeOperatingBranchId(rows[0].branch_id);
     } catch { /* ignore */ }
   }
 
   try {
     const [rows] = await pool.query("SELECT branch_id FROM customers WHERE id = ?", [customerId]);
-    if (rows[0]?.branch_id) return rows[0].branch_id;
+    if (rows[0]?.branch_id) return normalizeOperatingBranchId(rows[0].branch_id);
   } catch { /* ignore */ }
 
   try {
@@ -175,7 +182,7 @@ async function getCustomerBranch(customerId, jwtBranchId, vehicleId) {
       "SELECT branch_id FROM bookings WHERE customer_id = ? AND branch_id IS NOT NULL ORDER BY booking_date DESC LIMIT 1",
       [customerId]
     );
-    if (rows[0]?.branch_id) return rows[0].branch_id;
+    if (rows[0]?.branch_id) return normalizeOperatingBranchId(rows[0].branch_id);
   } catch { /* ignore */ }
 
   try {
@@ -183,10 +190,10 @@ async function getCustomerBranch(customerId, jwtBranchId, vehicleId) {
       "SELECT branch_id FROM booking_requests WHERE customer_id = ? AND branch_id IS NOT NULL ORDER BY time_added DESC LIMIT 1",
       [customerId]
     );
-    if (rows[0]?.branch_id) return rows[0].branch_id;
+    if (rows[0]?.branch_id) return normalizeOperatingBranchId(rows[0].branch_id);
   } catch { /* ignore */ }
 
-  return jwtBranchId || 1;
+  return normalizeOperatingBranchId(jwtBranchId || 1);
 }
 
 // Time slots (8 AM to 3 PM)

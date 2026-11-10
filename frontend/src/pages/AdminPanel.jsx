@@ -581,10 +581,10 @@ export default function AdminPanel() {
         status: 'booked',
         source: isDirectOnly ? 'branch' : 'app',
         label: isDirectOnly ? 'Booked • Branch' : 'Booked',
-        channelLabel: isDirectOnly ? 'Booked via Branch / Call' : 'Booked via Care App',
+        channelLabel: isDirectOnly ? 'Booked via Branch / Call' : 'Booked via MASKPROCare App',
         channelNote: isDirectOnly
           ? (isOpened ? 'Opened link, then booked via branch staff' : 'Saw SMS reminder & called/messaged branch')
-          : 'Submitted directly inside MaskPro Care App',
+          : 'Submitted directly inside MASKPROCare App',
         service: svc,
         forDate: formattedDate || 'Scheduled',
         bookedAt: formattedCreated,
@@ -676,7 +676,7 @@ export default function AdminPanel() {
       '',
       "Now it's even easier and faster to book! 1 click to this link will log you in, hassle-free!",
       '',
-      'Book via our MaskPro Care app:',
+      'Book via our MASKPROCare App:',
       '',
       careLink,
       '',

@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.18.7] — 2026-11-10
+### Added & Updated
+- **Gensan (`branch_id = 2`) → Davao Main (`branch_id = 1`) Booking & Follow-Up Routing + Branded `MASKPROCare App` Copy (`server/routes/bookings.js`, `server/middleware/auth.js`, `server/routes/auth.js`, `server/routes/aiAuth.js`, `server/services/ltoReminderCron.js`, `frontend/src/pages/AdminPanel.jsx`, `frontend/src/pages/Aftercare.jsx`, `mobile/app/admin.tsx`)**:
+  - Added `normalizeOperatingBranchId()` in `server/routes/bookings.js` plus JWT/auth normalization (`branch_id = 2 → 1`) across Magic Link, OTP, AI Smart Verification, and `authenticateToken` middleware so all Gensan clients check Davao Main (`branch_id = 1`) slot capacity and closed dates, create `booking_requests` under `branch_id = 1`, and immediately notify Davao Main sales staff (`Dimple`, `Jhen`, `Jerrah`, `Jennelyn`, etc.) for follow-up and approval.
+  - Updated SMS preview and UI copy from `MaskPro Care app` to branded **`MASKPROCare App`** across `AdminPanel.jsx`, `Aftercare.jsx`, `mobile/app/admin.tsx`, and `ltoReminderCron.js`.
+
 ## [v1.18.6] — 2026-11-09
 ### Fixed & Hardened
 - **iOS Safari ITP Same-Hardware Storage Re-Sync & 4-Layer Device Token Persistence (`server/routes/auth.js`, `frontend/src/pages/MagicLinkGate.jsx`, `unify_maskpro.care_magic_links`, `unify_maskpro.care_magic_link_security_logs`)**:

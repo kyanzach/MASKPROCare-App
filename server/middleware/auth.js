@@ -185,10 +185,12 @@ function authenticateToken(req, res, next) {
 
   try {
     const payload = jwt.verify(token, JWT_SECRET);
+    const rawBranchId = parseInt(payload.branch_id, 10) || 1;
     req.user = {
       customer_id: parseInt(payload.sub || payload.customer_id, 10),
       mobile: payload.mobile || '',
-      branch_id: parseInt(payload.branch_id, 10) || 1,
+      // Remap Gensan (branch_id = 2, closed partner) to Davao Main (branch_id = 1)
+      branch_id: rawBranchId === 2 ? 1 : rawBranchId,
       impersonated_by: payload.impersonated_by || null,
     };
     recordAppTelemetry(req, payload, false);

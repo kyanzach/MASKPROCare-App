@@ -647,7 +647,7 @@ router.post('/message', async (req, res) => {
             sub: customer.id,
             customer_id: customer.id,
             mobile: customer.mobile_number,
-            branch_id: customer.branch_id || 1,
+            branch_id: parseInt(customer.branch_id, 10) === 2 ? 1 : (customer.branch_id || 1),
             auth_method: 'ai_helper'
           },
           JWT_SECRET,

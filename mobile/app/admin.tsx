@@ -1088,7 +1088,7 @@ export default function AdminPanelScreen() {
                                     '',
                                     "Now it's even easier and faster to book! 1 click to this link will log you in, hassle-free!",
                                     '',
-                                    'Book via our MaskPro Care app:',
+                                    'Book via our MASKPROCare App:',
                                     '',
                                     careLink,
                                     '',

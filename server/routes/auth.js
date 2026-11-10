@@ -131,7 +131,8 @@ router.post('/verify', async (req, res) => {
 
     const customer = customers[0];
     const customerId = customer.id;
-    const branchId = customer.branch_id || DEFAULT_BRANCH_ID;
+    const rawCustBranch = parseInt(customer.branch_id, 10) || DEFAULT_BRANCH_ID;
+    const branchId = rawCustBranch === 2 ? DEFAULT_BRANCH_ID : rawCustBranch;
     const formattedMobile = standardizeMobile(customer.mobile_number);
 
     const isReviewAccount = formattedMobile === '09852779777' || last10 === '9852779777';
@@ -871,7 +872,8 @@ router.post('/magic-verify', async (req, res) => {
     });
 
     const customerId = link.customer_id;
-    const branchId = link.branch_id || DEFAULT_BRANCH_ID;
+    const rawLinkBranch = parseInt(link.branch_id, 10) || DEFAULT_BRANCH_ID;
+    const branchId = rawLinkBranch === 2 ? DEFAULT_BRANCH_ID : rawLinkBranch;
     const formattedMobile = standardizeMobile(link.mobile_number || '');
     const magicJwtExpiry = 30 * 86400; // 30 days seamless access on locked device
 

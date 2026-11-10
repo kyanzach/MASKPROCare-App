@@ -234,6 +234,10 @@ ssh root@167.71.217.49 'certbot --nginx -d care.maskpro.ph'
 
 ## 📝 Session Learnings Log
 
+### 2026-11-10: Gensan (`branch_id = 2`) Routing to Davao Main (`branch_id = 1`) & `MASKPROCare App` Branding (v1.18.7)
+- **Gensan Partner Closure (`branch_id = 2 → 1`):** MaskPro no longer has a partner in Gensan (`branch_id = 2`). In Care App (`server/routes/bookings.js`, `server/middleware/auth.js`, `server/routes/auth.js`, `server/routes/aiAuth.js`), `branch_id === 2` is normalized to `1` (Davao Obrero / Davao Main Branch) so Gensan clients book against Davao Main's daily capacity/closed dates and their `booking_requests` route directly to Davao Main sales staff for follow-up.
+- **Branded App Name:** Always use **`MASKPROCare App`** (not `MaskPro Care app`) in SMS templates, previews, and customer-facing copy.
+
 ### 2026-11-09: iOS Safari ITP Decorated Link Storage Purge & Same-Hardware Magic Link Recovery (v1.18.6)
 - **iOS ITP Gotcha on Cross-Domain `?k=` Magic Links:** Because SMS magic links redirect from `maskpro.link/{slug}` to `care.maskpro.ph/m/{slug}?k={key}`, Apple Safari Intelligent Tracking Prevention (ITP) classifies the entry URL as a "decorated cross-site redirect" and can purge script-writable `localStorage` after 24–72 hours (or isolate storage between iOS Messages `SFSafariViewController` and the full Safari app).
 - **4-Layer Client/Server Device Token Persistence + Same-Hardware Re-Sync:** `MagicLinkGate.jsx` and `POST /api/auth/magic-verify` (`server/routes/auth.js`) persist `mp_care_device_token` across `localStorage`, `sessionStorage`, `mp_care_device_token_client` cookie, and `mp_care_device_token` `HttpOnly` cookie. If all 4 layers are purged by iOS ITP on the **same physical phone**, `isSameHardwareAfterStoragePurge` verifies the cryptographic `?k=` key + `bound_platform` + byte-for-byte `bound_user_agent` + `Screen: WxH (@Dx)` viewport resolution and seamlessly re-binds the refreshed token (`AUTHORIZED_SAME_HARDWARE_RESYNC`) while still strictly blocking any real 2nd device.
