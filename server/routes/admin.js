@@ -16,6 +16,7 @@ const bcrypt = require('bcryptjs');
 
 const pool = require('../db/connection');
 const { authenticateToken, recordAppTelemetry, JWT_SECRET } = require('../middleware/auth');
+const { getMotorizedVehicleEligibilitySql } = require('../utils/vehicleFilter');
 
 // ─── Helper: check if customer is admin ─────────────────────
 async function isAdminUser(customerId, mobile) {
@@ -568,7 +569,11 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
           pr.error_log AS sms_log_detail
         FROM care_magic_links ml
         LEFT JOIN sms_periodic_reminders pr ON pr.sms_periodic_reminders_id = ml.reminder_id
-        WHERE (ml.reminder_id IS NULL OR (pr.sms_status IN ('Sent', 'Failed') AND pr.sms_set_date_time <= NOW()))
+        LEFT JOIN vehicles v ON v.id = ml.vehicle_id
+        LEFT JOIN bookings b ON b.booking_id = ml.booking_id
+        WHERE ml.status != 'revoked'
+          AND (ml.reminder_id IS NULL OR (pr.sms_status IN ('Sent', 'Failed') AND pr.sms_set_date_time <= NOW()))
+          AND (v.id IS NULL OR ${getMotorizedVehicleEligibilitySql('v', 'b', null)})
 
         UNION ALL
 
@@ -598,8 +603,10 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
           MAX(pr.error_log) AS sms_log_detail
         FROM sms_periodic_reminders pr
         JOIN bookings b ON b.booking_id = pr.booking_id
+        JOIN vehicles v ON v.id = b.customer_vehicle_id
         WHERE pr.sms_status = 'Failed'
           AND pr.sms_set_date_time <= NOW()
+          AND ${getMotorizedVehicleEligibilitySql('v', 'b', null)}
           AND NOT EXISTS (
             SELECT 1 FROM care_magic_links ml2
             WHERE ml2.reminder_id = pr.sms_periodic_reminders_id

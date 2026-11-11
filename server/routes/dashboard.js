@@ -9,6 +9,7 @@ const router = express.Router();
 
 const pool = require('../db/connection');
 const { authenticateToken, logCustomerActivity } = require('../middleware/auth');
+const { getMotorizedVehicleEligibilitySql } = require('../utils/vehicleFilter');
 
 router.use(authenticateToken);
 
@@ -65,15 +66,18 @@ const addMonths = (date, n) => {
  *  - Every 6-month due date that passed without a visit counts as a missed visit.
  */
 async function getMaintenanceSummary(customerId) {
+  const motorizedSql = getMotorizedVehicleEligibilitySql('v', 'b', 's');
   const [visitRows] = await pool.query(`
     SELECT b.customer_vehicle_id AS vehicle_id, MAX(b.booking_date) AS last_visit
     FROM bookings b
+    JOIN vehicles v ON v.id = b.customer_vehicle_id
     JOIN bookings_service_types s ON s.booking_id = b.booking_id
     WHERE b.customer_id = ?
       AND (s.service_name LIKE '%Nano Ceramic Coating%' OR s.service_name = 'Nano Fix (Maintenance)')
       AND s.status IN ('Done', 'Scheduled', 'completed')
       AND b.booking_date <= NOW()
       AND (b.notes IS NULL OR b.notes NOT LIKE '%CANCELLED:%')
+      AND ${motorizedSql}
     GROUP BY b.customer_vehicle_id
   `, [customerId]);
 

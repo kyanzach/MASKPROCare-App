@@ -14,6 +14,7 @@ const router = express.Router();
 
 const pool = require('../db/connection');
 const { authenticateToken, logCustomerActivity } = require('../middleware/auth');
+const { isNonMotorizedOrSmallItem } = require('../utils/vehicleFilter');
 
 // All booking routes require authentication
 router.use(authenticateToken);
@@ -391,9 +392,23 @@ router.post('/create', async (req, res) => {
     }
 
     // Verify vehicle ownership
-    const [vehicles] = await pool.query("SELECT id FROM vehicles WHERE id = ? AND customer_id = ?", [parseInt(vehicle_id, 10), customerId]);
+    const [vehicles] = await pool.query("SELECT id, make, model FROM vehicles WHERE id = ? AND customer_id = ?", [parseInt(vehicle_id, 10), customerId]);
     if (vehicles.length === 0) {
       return res.status(404).json({ success: false, data: null, message: 'Vehicle not found', errors: [] });
+    }
+
+    // Gate 6-Month NanoFix Maintenance from non-motorized items (helmets, mechanical bicycles, small items)
+    const normalizedService = SERVICE_CAPACITY_MAP[String(service_type).trim()] || String(service_type).trim();
+    if (
+      (normalizedService === 'Nano Fix (Maintenance)' || /nanofix|maintenance/i.test(normalizedService))
+      && isNonMotorizedOrSmallItem({ make: vehicles[0].make, model: vehicles[0].model })
+    ) {
+      return res.status(422).json({
+        success: false,
+        data: null,
+        message: '6-Month NanoFix Maintenance is only applicable to motorized vehicles (4-wheel vehicles and motorcycles).',
+        errors: ['Non-motorized item not eligible for maintenance'],
+      });
     }
 
     // Check future date

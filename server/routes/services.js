@@ -9,6 +9,7 @@ const router = express.Router();
 
 const pool = require('../db/connection');
 const { authenticateToken } = require('../middleware/auth');
+const { getMotorizedVehicleEligibilitySql } = require('../utils/vehicleFilter');
 
 router.use(authenticateToken);
 
@@ -27,13 +28,16 @@ router.get('/list', async (req, res) => {
     const customerId = req.user.customer_id;
     let hasMncc = false;
 
-    // Check if customer has existing Coating or PPF booking (NanoFix is maintenance for these)
+    // Check if customer has existing Coating or PPF booking on a motorized vehicle (NanoFix is maintenance for these)
     try {
+      const motorizedVehicleOnlySql = getMotorizedVehicleEligibilitySql('v', 'b', null);
       const [rows] = await pool.query(`
-        SELECT COUNT(*) as cnt FROM bookings
-        WHERE customer_id = ?
-        AND (latest_service IN ('Nano Ceramic Coating', 'MNCC', 'PPF', 'Paint Protection Film (PPF)'))
-        AND (notes IS NULL OR notes NOT LIKE '%CANCELLED:%')
+        SELECT COUNT(*) as cnt FROM bookings b
+        JOIN vehicles v ON v.id = b.customer_vehicle_id
+        WHERE b.customer_id = ?
+        AND (b.latest_service IN ('Nano Ceramic Coating', 'MNCC', 'PPF', 'Paint Protection Film (PPF)'))
+        AND (b.notes IS NULL OR b.notes NOT LIKE '%CANCELLED:%')
+        AND ${motorizedVehicleOnlySql}
       `, [customerId]);
       hasMncc = (rows[0]?.cnt || 0) > 0;
     } catch { /* ignore */ }
@@ -41,12 +45,15 @@ router.get('/list', async (req, res) => {
     // If first query found nothing, also check bookings_service_types
     if (!hasMncc) {
       try {
+        const motorizedSql = getMotorizedVehicleEligibilitySql('v', 'b', 'bst');
         const [rows] = await pool.query(`
           SELECT COUNT(*) as cnt FROM bookings b
+          JOIN vehicles v ON v.id = b.customer_vehicle_id
           JOIN bookings_service_types bst ON b.booking_id = bst.booking_id
           WHERE b.customer_id = ?
           AND bst.service_name IN ('Nano Ceramic Coating', 'PPF')
           AND (b.notes IS NULL OR b.notes NOT LIKE '%CANCELLED:%')
+          AND ${motorizedSql}
         `, [customerId]);
         hasMncc = (rows[0]?.cnt || 0) > 0;
       } catch { /* ignore */ }

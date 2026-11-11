@@ -17,6 +17,7 @@
 
 const pool = require('../db/connection');
 const { sendSms, retrySms, writeToLog } = require('./sms');
+const { getMotorizedVehicleEligibilitySql } = require('../utils/vehicleFilter');
 
 async function ensureReminderLogTable() {
   await pool.query(`
@@ -89,6 +90,7 @@ async function runLtoRenewalCheck() {
       FROM vehicles v
       INNER JOIN customers c ON c.id = v.customer_id
       WHERE v.registration_date IS NOT NULL
+        AND ${getMotorizedVehicleEligibilitySql('v', null, null)}
     `);
 
     const now = new Date();
