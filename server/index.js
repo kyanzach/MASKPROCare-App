@@ -7,12 +7,19 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const { securityHeadersMiddleware } = require('./utils/security');
 
 const app = express();
 const PORT = process.env.PORT || 3004;
+const BIND_HOST = process.env.BIND_HOST || (process.env.NODE_ENV === 'production' ? '127.0.0.1' : '0.0.0.0');
+
+// --- Core Express Hardening ---
+app.disable('x-powered-by');
+app.set('trust proxy', 'loopback');
+app.use(securityHeadersMiddleware);
 
 // --- CORS ---
-const allowedOrigins = (process.env.CORS_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean);
+const allowedOrigins = (process.env.CORS_ORIGINS || 'https://care.maskpro.ph').split(',').map(o => o.trim()).filter(Boolean);
 app.use(cors({
   origin: (origin, cb) => {
     // Allow requests with no origin (mobile apps, curl, etc.)
@@ -21,19 +28,32 @@ app.use(cors({
     if (process.env.NODE_ENV !== 'production') return cb(null, true); // permissive in dev
     cb(new Error('Not allowed by CORS'));
   },
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Client-Platform'],
   maxAge: 86400
 }));
 
-// --- Body parsing ---
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// --- Body parsing (bounded to prevent memory exhaustion) ---
+app.use(express.json({ limit: '256kb' }));
+app.use(express.urlencoded({ extended: true, limit: '256kb' }));
 
 // --- Static files (vehicle photos) ---
-app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads'), {
+  dotfiles: 'deny',
+  setHeaders: (res) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox");
+  }
+}));
 // --- Static files (profile photos) ---
-app.use('/api/uploads/photos', express.static(path.join(__dirname, 'uploads', 'photos')));
+app.use('/api/uploads/photos', express.static(path.join(__dirname, 'uploads', 'photos'), {
+  dotfiles: 'deny',
+  setHeaders: (res) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox");
+  }
+}));
 
 // --- Routes ---
 const authRoutes = require('./routes/auth');
@@ -100,8 +120,8 @@ app.use((err, req, res, next) => {
 });
 
 // --- Start ---
-app.listen(PORT, () => {
-  console.log(`✅ MaskPro Care API running on port ${PORT} (${process.env.NODE_ENV || 'development'})`);
+app.listen(PORT, BIND_HOST, () => {
+  console.log(`✅ MaskPro Care API running on ${BIND_HOST}:${PORT} (${process.env.NODE_ENV || 'development'})`);
   startLtoReminderScheduler();
 });
 

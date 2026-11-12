@@ -10,8 +10,13 @@
 
 const jwt = require('jsonwebtoken');
 const pool = require('../db/connection');
+const { getTrustedClientIp } = require('../utils/security');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'mpc_jwt_s3cr3t_k3y_2026_xK9pLm2nQ7rT';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('❌ CRITICAL: JWT_SECRET environment variable is missing in .env');
+  process.exit(1);
+}
 
 // In-memory throttle map so telemetry writes at most once every 2 minutes per user+platform
 const telemetryThrottle = new Map();
@@ -82,7 +87,7 @@ function logCustomerActivity(req, payload, { eventType = 'page_view', pagePath =
     if (payload?.impersonated_by) return;
 
     const { appType, deviceLabel } = detectPlatformInfo(req);
-    const ip = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim().slice(0, 64);
+    const ip = getTrustedClientIp(req);
 
     const dedupKey = `${customerId}:${eventType}:${pagePath}:${actionDetail || ''}`;
     const now = Date.now();
@@ -129,7 +134,7 @@ function recordAppTelemetry(req, payload, forceNewSession = false) {
     else if (payload.magic_slug) authMethod = 'magic_link';
     else if (payload.auth_method) authMethod = String(payload.auth_method);
 
-    const ip = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim().slice(0, 64);
+    const ip = getTrustedClientIp(req);
 
     if (forceNewSession) {
       pool.query(
@@ -184,7 +189,7 @@ function authenticateToken(req, res, next) {
   }
 
   try {
-    const payload = jwt.verify(token, JWT_SECRET);
+    const payload = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     const rawBranchId = parseInt(payload.branch_id, 10) || 1;
     req.user = {
       customer_id: parseInt(payload.sub || payload.customer_id, 10),
@@ -192,6 +197,8 @@ function authenticateToken(req, res, next) {
       // Remap Gensan (branch_id = 2, closed partner) to Davao Main (branch_id = 1)
       branch_id: rawBranchId === 2 ? 1 : rawBranchId,
       impersonated_by: payload.impersonated_by || null,
+      is_admin: Boolean(payload.is_admin),
+      admin_user_id: payload.admin_user_id ? parseInt(payload.admin_user_id, 10) : null,
     };
     recordAppTelemetry(req, payload, false);
 

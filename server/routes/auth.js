@@ -16,6 +16,9 @@ const pool = require('../db/connection');
 const { authenticateToken, recordAppTelemetry, logCustomerActivity, JWT_SECRET } = require('../middleware/auth');
 const { sendOtpSms } = require('../services/sms');
 const { standardizeMobile, getLast10, isValidPhMobile } = require('../utils/mobile');
+const { getTrustedClientIp, checkRateLimit, recordRateLimitHit, clearRateLimit } = require('../utils/security');
+
+const SAFE_CUSTOMER_COLS = 'id, title, full_name, mobile_number, email, address, branch_id, profile_photo, created_at';
 
 const JWT_EXPIRY = parseInt(process.env.JWT_EXPIRY, 10) || 86400;
 const OTP_EXPIRY_SECONDS = 900; // 15 minutes
@@ -24,6 +27,17 @@ const DEFAULT_BRANCH_ID = 1;
 // ─── POST /api/auth/login ─────────────────────────────────────────
 router.post('/login', async (req, res) => {
   try {
+    const clientIp = getTrustedClientIp(req);
+    const ipLimit = checkRateLimit('otp_request_ip', clientIp, { maxAttempts: 15, windowMs: 15 * 60 * 1000 });
+    if (!ipLimit.allowed) {
+      return res.status(429).json({
+        success: false,
+        data: null,
+        message: 'Too many OTP requests from this network. Please wait 15 minutes before trying again.',
+        errors: []
+      });
+    }
+
     const { mobile } = req.body;
     if (!mobile || !String(mobile).trim()) {
       return res.status(422).json({ success: false, data: null, message: 'Validation failed', errors: ['mobile is required'] });
@@ -35,6 +49,7 @@ router.post('/login', async (req, res) => {
     }
 
     const last10 = getLast10(mobileTrimmed);
+    recordRateLimitHit('otp_request_ip', clientIp, { maxAttempts: 15, windowMs: 15 * 60 * 1000, lockoutMs: 15 * 60 * 1000 });
 
     // Find customer by last 10 digits
     const [customers] = await pool.query(
@@ -63,8 +78,9 @@ router.post('/login', async (req, res) => {
       }
     }
 
-    // Generate 6-digit OTP
-    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    // Generate 6-digit OTP using cryptographically secure PRNG
+    const otp = String(crypto.randomInt(100000, 1000000));
+    clearRateLimit('otp_verify_mobile', formattedMobile);
 
     // Store OTP — update if exists, insert if new
     // Use MySQL DATE_ADD(NOW(), ...) for timezone-consistent expiry (Asia/Manila)
@@ -109,6 +125,17 @@ router.post('/login', async (req, res) => {
 // ─── POST /api/auth/verify ────────────────────────────────────────
 router.post('/verify', async (req, res) => {
   try {
+    const clientIp = getTrustedClientIp(req);
+    const ipVerifyLimit = checkRateLimit('otp_verify_ip', clientIp, { maxAttempts: 10, windowMs: 15 * 60 * 1000 });
+    if (!ipVerifyLimit.allowed) {
+      return res.status(429).json({
+        success: false,
+        data: null,
+        message: 'Too many failed verification attempts. Please wait 15 minutes before trying again.',
+        errors: []
+      });
+    }
+
     const { mobile, otp } = req.body;
     const errors = [];
     if (!mobile) errors.push('mobile is required');
@@ -126,6 +153,7 @@ router.post('/verify', async (req, res) => {
     );
 
     if (customers.length === 0) {
+      recordRateLimitHit('otp_verify_ip', clientIp, { maxAttempts: 10, windowMs: 15 * 60 * 1000, lockoutMs: 15 * 60 * 1000 });
       return res.status(404).json({ success: false, data: null, message: 'Mobile number not found', errors: [] });
     }
 
@@ -135,7 +163,18 @@ router.post('/verify', async (req, res) => {
     const branchId = rawCustBranch === 2 ? DEFAULT_BRANCH_ID : rawCustBranch;
     const formattedMobile = standardizeMobile(customer.mobile_number);
 
-    const isReviewAccount = formattedMobile === '09852779777' || last10 === '9852779777';
+    const mobileVerifyLimit = checkRateLimit('otp_verify_mobile', formattedMobile, { maxAttempts: 5, windowMs: 15 * 60 * 1000 });
+    if (!mobileVerifyLimit.allowed) {
+      return res.status(429).json({
+        success: false,
+        data: null,
+        message: 'Maximum OTP attempts exceeded. Please request a new OTP code.',
+        errors: []
+      });
+    }
+
+    const reviewerBypassEnabled = process.env.ENABLE_REVIEWER_DEMO_ACCOUNT !== 'false';
+    const isReviewAccount = reviewerBypassEnabled && (formattedMobile === '09852779777' || last10 === '9852779777');
     const isReviewOtp = isReviewAccount && String(otp).trim() === '777777';
 
     // Verify OTP
@@ -144,15 +183,27 @@ router.post('/verify', async (req, res) => {
       isValidOtp = true;
     } else {
       const [otpRecords] = await pool.query(
-        "SELECT * FROM login_otp WHERE mobile_number = ? AND otp_code = ? AND otp_expires > NOW()",
+        "SELECT * FROM login_otp WHERE mobile_number = ? AND otp_code = ? AND otp_code != '' AND otp_expires > NOW()",
         [formattedMobile, String(otp).trim()]
       );
       if (otpRecords.length > 0) isValidOtp = true;
     }
 
     if (!isValidOtp) {
+      recordRateLimitHit('otp_verify_ip', clientIp, { maxAttempts: 10, windowMs: 15 * 60 * 1000, lockoutMs: 15 * 60 * 1000 });
+      const mobHit = recordRateLimitHit('otp_verify_mobile', formattedMobile, { maxAttempts: 5, windowMs: 15 * 60 * 1000, lockoutMs: 15 * 60 * 1000 });
+      if (mobHit.locked) {
+        // Burn the active OTP immediately after 5 wrong guesses so it cannot be brute-forced across IPs
+        await pool.query(
+          "UPDATE login_otp SET otp_code = '', otp_expires = '2000-01-01 00:00:00', updated_at = NOW() WHERE mobile_number = ?",
+          [formattedMobile]
+        ).catch(() => {});
+      }
       return res.status(401).json({ success: false, data: null, message: 'Invalid or expired OTP. Please request a new one.', errors: [] });
     }
+
+    clearRateLimit('otp_verify_ip', clientIp);
+    clearRateLimit('otp_verify_mobile', formattedMobile);
 
     // Generate JWT (same payload as PHP)
     const token = jwt.sign(
@@ -190,8 +241,8 @@ router.post('/verify', async (req, res) => {
       dedupWindowMs: 5000,
     });
 
-    // Get full customer profile
-    const [customerData] = await pool.query("SELECT * FROM customers WHERE id = ?", [customerId]);
+    // Get safe customer profile columns
+    const [customerData] = await pool.query(`SELECT ${SAFE_CUSTOMER_COLS} FROM customers WHERE id = ?`, [customerId]);
 
     return res.json({
       success: true,
@@ -462,7 +513,7 @@ router.post('/magic-verify', async (req, res) => {
     }
 
     const cleanSlug = String(slug).trim().toLowerCase();
-    const clientIp = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim();
+    const clientIp = getTrustedClientIp(req);
     const resolvedUrl = String(
       request_url ||
       req.headers.referer ||
@@ -912,7 +963,7 @@ router.post('/magic-verify', async (req, res) => {
       });
     }
 
-    const [customerData] = await pool.query('SELECT * FROM customers WHERE id = ?', [customerId]);
+    const [customerData] = await pool.query(`SELECT ${SAFE_CUSTOMER_COLS} FROM customers WHERE id = ?`, [customerId]);
     const redirectUrl = link.vehicle_id
       ? `/bookings?openBooking=true&vehicle_id=${link.vehicle_id}&service=NanoFix`
       : '/bookings?openBooking=true&service=NanoFix';

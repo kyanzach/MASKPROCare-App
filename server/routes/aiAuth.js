@@ -20,16 +20,13 @@ const router = express.Router();
 const pool = require('../db/connection');
 const { recordAppTelemetry, JWT_SECRET } = require('../middleware/auth');
 const { getLast10, standardizeMobile } = require('../utils/mobile');
+const { getTrustedClientIp } = require('../utils/security');
 
 const JWT_EXPIRY = parseInt(process.env.JWT_EXPIRY, 10) || 86400;
 
-// Helper: Extract real client IP behind reverse proxies (Nginx)
+// Helper: Extract real client IP behind reverse proxies (Nginx X-Real-IP priority)
 function getClientIp(req) {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (forwarded) {
-    return forwarded.split(',')[0].trim();
-  }
-  return req.headers['x-real-ip'] || req.socket.remoteAddress || '127.0.0.1';
+  return getTrustedClientIp(req);
 }
 
 // Helper: Parse device/platform summary from User-Agent

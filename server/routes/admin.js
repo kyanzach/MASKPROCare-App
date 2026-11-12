@@ -17,28 +17,45 @@ const bcrypt = require('bcryptjs');
 const pool = require('../db/connection');
 const { authenticateToken, recordAppTelemetry, JWT_SECRET } = require('../middleware/auth');
 const { getMotorizedVehicleEligibilitySql } = require('../utils/vehicleFilter');
+const { getTrustedClientIp, checkRateLimit, recordRateLimitHit, clearRateLimit } = require('../utils/security');
+
+// Immutable allowlist of customer IDs linked to Unify super-admins (Ryan Paco = #1924)
+const VERIFIED_ADMIN_CUSTOMER_IDS = new Set([1924]);
 
 // ─── Helper: check if customer is admin ─────────────────────
-async function isAdminUser(customerId, mobile) {
-  // Method 1: Direct mobile match in users table
-  if (mobile) {
-    const [byMobile] = await pool.query(
-      "SELECT id, full_name, access_level FROM users WHERE mobile_number = ? AND access_level = 'admin' LIMIT 1",
-      [mobile]
+async function isAdminUser(customerId, mobile, userClaims = {}) {
+  // Method 0: Explicit bcrypt-verified admin token from POST /api/admin/login
+  if (userClaims?.is_admin && userClaims?.admin_user_id) {
+    const [byAdminId] = await pool.query(
+      "SELECT id, full_name, access_level FROM users WHERE id = ? AND access_level = 'admin' LIMIT 1",
+      [parseInt(userClaims.admin_user_id, 10)]
     );
-    if (byMobile.length > 0) return byMobile[0];
+    if (byAdminId.length > 0) return byAdminId[0];
   }
 
-  // Method 2: Cross-reference by customer full_name → users full_name
-  // (handles case where admin has different phone in users vs customers table)
-  if (customerId) {
+  // Method 1: Direct verified mobile match in users table
+  if (mobile) {
+    const cleanLast10 = String(mobile).replace(/\D/g, '').slice(-10);
+    if (cleanLast10.length === 10) {
+      const [byMobile] = await pool.query(
+        "SELECT id, full_name, access_level FROM users WHERE RIGHT(REPLACE(mobile_number, ' ', ''), 10) = ? AND access_level = 'admin' LIMIT 1",
+        [cleanLast10]
+      );
+      if (byMobile.length > 0) return byMobile[0];
+    }
+  }
+
+  // Method 2: Cross-reference strictly restricted to immutable verified admin customer_id (#1924)
+  // Prevents privilege escalation via mutable customers.full_name updates
+  const numericCustId = parseInt(customerId, 10);
+  if (numericCustId && VERIFIED_ADMIN_CUSTOMER_IDS.has(numericCustId)) {
     const [byName] = await pool.query(
       `SELECT u.id, u.full_name, u.access_level
        FROM users u
        JOIN customers c ON TRIM(u.full_name) = TRIM(c.full_name)
        WHERE c.id = ? AND u.access_level = 'admin'
        LIMIT 1`,
-      [customerId]
+      [numericCustId]
     );
     if (byName.length > 0) return byName[0];
   }
@@ -49,7 +66,7 @@ async function isAdminUser(customerId, mobile) {
 // ─── Admin check middleware ──────────────────────────────────
 async function requireAdmin(req, res, next) {
   try {
-    const admin = await isAdminUser(req.user.customer_id, req.user.mobile);
+    const admin = await isAdminUser(req.user.customer_id, req.user.mobile, req.user);
     if (!admin) {
       return res.status(403).json({ success: false, message: 'Admin access required' });
     }
@@ -65,7 +82,7 @@ async function requireAdmin(req, res, next) {
 // Quick check if the logged-in user is an admin
 router.get('/check', authenticateToken, async (req, res) => {
   try {
-    const admin = await isAdminUser(req.user.customer_id, req.user.mobile);
+    const admin = await isAdminUser(req.user.customer_id, req.user.mobile, req.user);
     return res.json({
       success: true,
       data: { isAdmin: !!admin, adminName: admin?.full_name || null },
@@ -179,21 +196,41 @@ router.post('/impersonate', authenticateToken, requireAdmin, async (req, res) =>
 
 // ─── POST /api/admin/login ───────────────────────────────────
 // Dedicated admin login (username + password from Unify users table)
-// No OTP required — used for /admin page
+// Rate-limited: 5 failed attempts / 15 mins -> 15-min lockout
 router.post('/login', async (req, res) => {
   try {
+    const clientIp = getTrustedClientIp(req);
+    const ipLimit = checkRateLimit('admin_login_ip', clientIp, { maxAttempts: 5, windowMs: 15 * 60 * 1000 });
+    if (!ipLimit.allowed) {
+      return res.status(429).json({
+        success: false,
+        message: 'Too many failed admin login attempts. Please wait 15 minutes before trying again.',
+      });
+    }
+
     const { username, password } = req.body;
     if (!username || !password) {
       return res.status(400).json({ success: false, message: 'Username and password are required' });
     }
 
+    const cleanUsername = String(username).trim().toLowerCase();
+    const userLimit = checkRateLimit('admin_login_user', cleanUsername, { maxAttempts: 5, windowMs: 15 * 60 * 1000 });
+    if (!userLimit.allowed) {
+      return res.status(429).json({
+        success: false,
+        message: 'Account temporarily locked due to repeated failed attempts. Please wait 15 minutes.',
+      });
+    }
+
     // Find user with admin access_level
     const [users] = await pool.query(
       "SELECT id, full_name, username, password, mobile_number, access_level FROM users WHERE username = ? AND access_level = 'admin' LIMIT 1",
-      [username.trim()]
+      [String(username).trim()]
     );
 
     if (users.length === 0) {
+      recordRateLimitHit('admin_login_ip', clientIp, { maxAttempts: 5, windowMs: 15 * 60 * 1000, lockoutMs: 15 * 60 * 1000 });
+      recordRateLimitHit('admin_login_user', cleanUsername, { maxAttempts: 5, windowMs: 15 * 60 * 1000, lockoutMs: 15 * 60 * 1000 });
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
@@ -201,10 +238,15 @@ router.post('/login', async (req, res) => {
 
     // Verify bcrypt password (PHP $2y$ is compatible with bcryptjs $2a$)
     const passwordHash = String(adminUser.password).replace(/^\$2y\$/, '$2a$');
-    const isValid = await bcrypt.compare(password, passwordHash);
+    const isValid = await bcrypt.compare(String(password), passwordHash);
     if (!isValid) {
+      recordRateLimitHit('admin_login_ip', clientIp, { maxAttempts: 5, windowMs: 15 * 60 * 1000, lockoutMs: 15 * 60 * 1000 });
+      recordRateLimitHit('admin_login_user', cleanUsername, { maxAttempts: 5, windowMs: 15 * 60 * 1000, lockoutMs: 15 * 60 * 1000 });
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
+
+    clearRateLimit('admin_login_ip', clientIp);
+    clearRateLimit('admin_login_user', cleanUsername);
 
     // Find a matching customer record (by full_name or mobile) — needed for JWT sub
     let customerId = null;
@@ -1560,7 +1602,11 @@ async function syncWalletCardsFromBoomerangMe(maxPages = 2) {
   isWalletSyncRunning = true;
   let totalSynced = 0;
   try {
-    const apiKey = process.env.BOOMERANGME_API_KEY || '6f59f368388c29e4a01e704af6432d74';
+    const apiKey = process.env.BOOMERANGME_API_KEY;
+    if (!apiKey) {
+      console.warn('[Admin] BOOMERANGME_API_KEY not set in .env — skipping wallet sync');
+      return 0;
+    }
     const toMysqlDt = (iso) => {
       if (!iso) return null;
       const d = new Date(iso);

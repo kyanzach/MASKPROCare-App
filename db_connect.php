@@ -8,11 +8,11 @@ $isProduction = (
 ) || (isset($_ENV['APP_ENV']) && $_ENV['APP_ENV'] === 'production');
 
 if ($isProduction) {
-    // Production Database Configuration
-    $servername = 'sdb-56.hosting.stackcp.net';
-    $dbname = 'appv2_unify-35303133165e';
-    $username = 'appv2_unify-admin';
-    $password = 'Godisgood777!';
+    // Production Database Configuration (loaded from environment)
+    $servername = getenv('DB_HOST') ?: 'localhost';
+    $dbname = getenv('DB_NAME') ?: 'unify_maskpro';
+    $username = getenv('DB_USER') ?: '';
+    $password = getenv('DB_PASS') ?: '';
 } else {
     // Local Development Database Configuration
     $servername = 'localhost';

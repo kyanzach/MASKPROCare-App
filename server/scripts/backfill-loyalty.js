@@ -11,15 +11,17 @@
  *   node backfill-loyalty.js --execute    # actually insert records
  */
 
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 const mysql = require('mysql2/promise');
 const axios = require('axios');
 
 // Config
 const DB_CONFIG = {
-  host: 'localhost',
-  user: 'unify_user',
-  password: 'UnifyM@skpr0_2026!',
-  database: 'unify_maskpro',
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'unify_user',
+  password: process.env.DB_PASS || '',
+  database: process.env.DB_NAME || 'unify_maskpro',
   charset: 'utf8mb4',
   typeCast: function (field, next) {
     if (field.type === 'VAR_STRING' || field.type === 'STRING' ||
@@ -33,7 +35,7 @@ const DB_CONFIG = {
 };
 
 const BOOMERANG_API = 'https://api.digitalwallet.cards/api/v2';
-const BOOMERANG_KEY = '6f59f368388c29e4a01e704af6432d74';
+const BOOMERANG_KEY = process.env.BOOMERANGME_API_KEY || '';
 
 // Template ID → card_type mapping (matches Unify's card_type format)
 const TEMPLATE_CARD_TYPE = {

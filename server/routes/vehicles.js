@@ -18,6 +18,7 @@ const router = express.Router();
 
 const pool = require('../db/connection');
 const { authenticateToken } = require('../middleware/auth');
+const { validateImageBuffer, safeUploadPath } = require('../utils/security');
 
 // All vehicle routes require authentication
 router.use(authenticateToken);
@@ -232,6 +233,12 @@ router.post('/upload-photo', upload.single('photo'), async (req, res) => {
       return res.status(422).json({ success: false, data: null, message: 'No file uploaded', errors: [] });
     }
 
+    // Magic-byte & anti-polyglot validation before image processing
+    const imgCheck = validateImageBuffer(req.file.buffer);
+    if (!imgCheck.valid) {
+      return res.status(422).json({ success: false, data: null, message: imgCheck.reason, errors: [] });
+    }
+
     const vehicleId = parseInt(req.body.vehicle_id || 0, 10);
     if (!vehicleId || vehicleId <= 0) {
       return res.status(422).json({ success: false, data: null, message: 'Vehicle ID is required', errors: [] });
@@ -269,11 +276,11 @@ router.post('/upload-photo', upload.single('photo'), async (req, res) => {
       fileSize = fs.statSync(outputPath).size;
     }
 
-    // Delete old photo
+    // Delete old photo safely inside uploadDir
     const oldPhoto = existing[0].photo;
     if (oldPhoto) {
-      const oldPath = path.join(__dirname, '..', '..', path.basename(path.dirname(oldPhoto)), path.basename(oldPhoto));
-      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+      const oldPath = safeUploadPath(uploadDir, path.basename(oldPhoto));
+      if (oldPath && fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
     }
 
     // Update DB

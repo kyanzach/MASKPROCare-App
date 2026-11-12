@@ -11,9 +11,13 @@ use Firebase\JWT\Key;
 use Firebase\JWT\ExpiredException;
 use Firebase\JWT\SignatureInvalidException;
 
-// JWT Secret — in production, move this to an environment variable
-// For now, using a strong random string
-define('JWT_SECRET', getenv('JWT_SECRET') ?: 'mpc_jwt_s3cr3t_k3y_2026_xK9pLm2nQ7rT');
+// JWT Secret — loaded strictly from environment variable
+$envJwtSecret = getenv('JWT_SECRET');
+if (!$envJwtSecret) {
+    http_response_code(500);
+    die(json_encode(['success' => false, 'message' => 'Server configuration error: missing JWT_SECRET']));
+}
+define('JWT_SECRET', $envJwtSecret);
 define('JWT_ALGORITHM', 'HS256');
 define('JWT_EXPIRY_SECONDS', 86400); // 24 hours
 define('JWT_REFRESH_THRESHOLD', 3600); // Refresh if less than 1 hour remaining

@@ -14,6 +14,9 @@ const fs = require('fs');
 
 const pool = require('../db/connection');
 const { authenticateToken } = require('../middleware/auth');
+const { validateImageBuffer, safeUploadPath } = require('../utils/security');
+
+const SAFE_CUSTOMER_COLS = 'id, title, full_name, mobile_number, email, address, branch_id, profile_photo, created_at';
 
 // Ensure uploads directory exists
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads', 'photos');
@@ -55,7 +58,7 @@ async function getCustomerStats(customerId) {
 // ─── GET /api/profile/get ─────────────────────────────────────────
 router.get('/get', async (req, res) => {
   try {
-    const [customers] = await pool.query("SELECT * FROM customers WHERE id = ?", [req.user.customer_id]);
+    const [customers] = await pool.query(`SELECT ${SAFE_CUSTOMER_COLS} FROM customers WHERE id = ?`, [req.user.customer_id]);
     if (customers.length === 0) {
       return res.status(404).json({ success: false, data: null, message: 'Customer not found', errors: [] });
     }
@@ -75,7 +78,7 @@ router.put('/update', handleProfileUpdate);
 
 async function handleProfileUpdate(req, res) {
   try {
-    const [customers] = await pool.query("SELECT * FROM customers WHERE id = ?", [req.user.customer_id]);
+    const [customers] = await pool.query(`SELECT ${SAFE_CUSTOMER_COLS} FROM customers WHERE id = ?`, [req.user.customer_id]);
     if (customers.length === 0) {
       return res.status(404).json({ success: false, data: null, message: 'Customer not found', errors: [] });
     }
@@ -85,6 +88,26 @@ async function handleProfileUpdate(req, res) {
     const email = String(req.body.email ?? customer.email ?? '').trim();
     const address = String(req.body.address ?? customer.address ?? '').trim();
 
+    if (!fullName || fullName.length > 120) {
+      return res.status(422).json({ success: false, data: null, message: 'Please provide a valid full name', errors: [] });
+    }
+
+    // Security guard: prevent non-admin customers from renaming themselves to an admin/staff full_name
+    if (fullName.toLowerCase() !== String(customer.full_name || '').trim().toLowerCase() && Number(req.user.customer_id) !== 1924) {
+      const [staffMatch] = await pool.query(
+        "SELECT id FROM users WHERE LOWER(TRIM(full_name)) = LOWER(TRIM(?)) LIMIT 1",
+        [fullName]
+      );
+      if (staffMatch.length > 0) {
+        return res.status(403).json({
+          success: false,
+          data: null,
+          message: 'This name is reserved for verified MaskPro staff accounts.',
+          errors: []
+        });
+      }
+    }
+
     // Validate email if provided
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(422).json({ success: false, data: null, message: 'Invalid email address', errors: [] });
@@ -92,7 +115,7 @@ async function handleProfileUpdate(req, res) {
 
     await pool.query("UPDATE customers SET full_name = ?, email = ?, address = ? WHERE id = ?", [fullName, email, address, req.user.customer_id]);
 
-    const [updated] = await pool.query("SELECT * FROM customers WHERE id = ?", [req.user.customer_id]);
+    const [updated] = await pool.query(`SELECT ${SAFE_CUSTOMER_COLS} FROM customers WHERE id = ?`, [req.user.customer_id]);
     return res.json({ success: true, data: { customer: updated[0] }, message: 'Profile updated successfully', errors: [] });
   } catch (err) {
     console.error('Profile update error:', err);
@@ -107,6 +130,12 @@ router.post('/photo', upload.single('photo'), async (req, res) => {
       return res.status(400).json({ success: false, data: null, message: 'No image file provided', errors: [] });
     }
 
+    // Magic-byte & anti-polyglot validation before image processing
+    const imgCheck = validateImageBuffer(req.file.buffer);
+    if (!imgCheck.valid) {
+      return res.status(422).json({ success: false, data: null, message: imgCheck.reason, errors: [] });
+    }
+
     const customerId = req.user.customer_id;
     const filename = `profile_${customerId}_${Date.now()}.webp`;
     const outputPath = path.join(UPLOAD_DIR, filename);
@@ -117,11 +146,11 @@ router.post('/photo', upload.single('photo'), async (req, res) => {
       .webp({ quality: 80 })
       .toFile(outputPath);
 
-    // Delete old photo if exists
+    // Delete old photo if exists (using path-traversal-safe resolver)
     const [existing] = await pool.query("SELECT profile_photo FROM customers WHERE id = ?", [customerId]);
     if (existing[0]?.profile_photo) {
-      const oldFile = path.join(UPLOAD_DIR, existing[0].profile_photo);
-      if (fs.existsSync(oldFile)) fs.unlinkSync(oldFile);
+      const oldFile = safeUploadPath(UPLOAD_DIR, existing[0].profile_photo);
+      if (oldFile && fs.existsSync(oldFile)) fs.unlinkSync(oldFile);
     }
 
     // Update DB
@@ -146,8 +175,8 @@ router.delete('/photo', async (req, res) => {
     const [existing] = await pool.query("SELECT profile_photo FROM customers WHERE id = ?", [customerId]);
 
     if (existing[0]?.profile_photo) {
-      const filePath = path.join(UPLOAD_DIR, existing[0].profile_photo);
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      const filePath = safeUploadPath(UPLOAD_DIR, existing[0].profile_photo);
+      if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
     }
 
     await pool.query("UPDATE customers SET profile_photo = NULL WHERE id = ?", [customerId]);
@@ -169,8 +198,8 @@ router.post('/delete-account', async (req, res) => {
     // Remove profile photo file
     const [existing] = await pool.query("SELECT profile_photo FROM customers WHERE id = ?", [customerId]);
     if (existing[0]?.profile_photo) {
-      const filePath = path.join(UPLOAD_DIR, existing[0].profile_photo);
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      const filePath = safeUploadPath(UPLOAD_DIR, existing[0].profile_photo);
+      if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
     }
 
     // Anonymize customer data & remove PII

@@ -85,12 +85,17 @@ async function sendSms(number, message, customerId = null) {
   const formattedNumber = formatPhoneForSms(number);
   const cleanMessage = stripNonGsmCharacters(message.trim());
 
+  if (!process.env.ITEXMO_PASSWORD || !process.env.ITEXMO_API_CODE) {
+    writeToLog('ITEXMO - Missing ITEXMO_PASSWORD or ITEXMO_API_CODE in .env');
+    return { status: 'Failed', error: 'Missing iTexMo configuration' };
+  }
+
   const data = {
     Email: process.env.ITEXMO_EMAIL || 'ryan@maskpro.ph',
-    Password: process.env.ITEXMO_PASSWORD || 'Godisgood21!',
+    Password: process.env.ITEXMO_PASSWORD,
     Recipients: [formattedNumber],
     Message: cleanMessage,
-    ApiCode: process.env.ITEXMO_API_CODE || 'PR-RYANP221047_30CYC',
+    ApiCode: process.env.ITEXMO_API_CODE,
     SenderId: process.env.ITEXMO_SENDER_ID || 'MASKPRO'
   };
 
@@ -132,7 +137,11 @@ async function retrySms(number, message, customerId = null, appendDisclaimer = t
 
   const formattedNumber = formatPhoneForSms(number);
   const encodedMessage = encodeURIComponent(message);
-  const apiKey = process.env.SMSIT_API_KEY || 'SMSIT_eedd3ff7f99d05260861705be7650a4b439feae08f8e06bf818ea478179af4fa';
+  const apiKey = process.env.SMSIT_API_KEY;
+  if (!apiKey) {
+    writeToLog('SMS-it - Missing SMSIT_API_KEY in .env');
+    return { status: 'Failed', error: 'Missing SMS-it configuration' };
+  }
   const fromNumber = process.env.SMSIT_FROM_NUMBER || '639511047777';
 
   const url = `${process.env.SMSIT_URL || 'https://aicpanel.smsit.ai/api/v2/smscontact'}?apikey=${apiKey}&from=${fromNumber}&to=${formattedNumber}&message=${encodedMessage}`;

@@ -161,15 +161,17 @@ deploy_backend() {
   # Ensure remote directories exist
   ssh_cmd "mkdir -p $APP_DIR/server $APP_DIR/uploads"
 
-  # Upload server code (NOT node_modules, NOT .env)
+  # Upload server code (NOT node_modules, NOT .env*)
   SSHPASS="$SSH_PASS" sshpass -e rsync -avz --progress \
     --exclude 'node_modules' \
+    --exclude '.env*' \
     -e "ssh $SSH_OPTS" \
     "${PROJECT_DIR}/server/" "${REMOTE_USER}@${DROPLET_IP}:$APP_DIR/server/"
 
-  # Upload package files
+  # Upload package files & changelog
   rsync_safe "${PROJECT_DIR}/package.json" "$APP_DIR/package.json"
   [ -f "${PROJECT_DIR}/package-lock.json" ] && rsync_safe "${PROJECT_DIR}/package-lock.json" "$APP_DIR/package-lock.json"
+  [ -f "${PROJECT_DIR}/CHANGELOG.md" ] && rsync_safe "${PROJECT_DIR}/CHANGELOG.md" "$APP_DIR/CHANGELOG.md"
 
   log "Installing production dependencies..."
   ssh_cmd "cd $APP_DIR && npm install --production --silent 2>&1 | tail -3"
@@ -212,6 +214,24 @@ server {
     root /var/www/care/frontend/dist;
     index index.html;
 
+    # Security Headers
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    # Block dotfiles (.env, .git, .htaccess)
+    location ~ /\. {
+        deny all;
+        return 403;
+    }
+
+    # 100% PHP2Shell / Webshell Prevention: Never execute or serve scripts
+    location ~* \.(php|php\d*|phtml|phar|inc|sh|pl|py|cgi)$ {
+        deny all;
+        return 403;
+    }
+
     location /api/ {
         proxy_pass http://127.0.0.1:3004;
         proxy_http_version 1.1;
@@ -222,13 +242,24 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_cache_bypass $http_upgrade;
+        proxy_hide_header Strict-Transport-Security;
+        proxy_hide_header X-Content-Type-Options;
+        proxy_hide_header X-Frame-Options;
+        proxy_hide_header Referrer-Policy;
     }
 
     # Uploads directory — ^~ gives prefix priority over regex
     location ^~ /uploads/ {
         alias /var/www/care/uploads/;
         expires 30d;
-        add_header Cache-Control "public, immutable";
+        add_header Cache-Control "public, immutable" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Content-Security-Policy "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox" always;
+
+        location ~* \.(php|php\d*|phtml|phar|inc|sh|pl|py|cgi|html|htm|svg|js)$ {
+            deny all;
+            return 403;
+        }
     }
 
     # API-served uploads — ^~ gives prefix priority over regex

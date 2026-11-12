@@ -144,18 +144,18 @@ PORT=3004
 NODE_ENV=production
 DB_HOST=localhost
 DB_USER=unify_user
-DB_PASS=UnifyM@skpr0_2026!
+DB_PASS=<SET_FROM_CREDENTIALS_REFERENCE>
 DB_NAME=unify_maskpro
 DB_PORT=3306
-JWT_SECRET=mpc_jwt_s3cr3t_k3y_2026_xK9pLm2nQ7rT
+JWT_SECRET=<SET_FROM_CREDENTIALS_REFERENCE>
 JWT_EXPIRY=86400
 ITEXMO_URL=https://api.itexmo.com/api/broadcast
 ITEXMO_EMAIL=ryan@maskpro.ph
-ITEXMO_PASSWORD=Godisgood21!
-ITEXMO_API_CODE=PR-RYANP221047_30CYC
+ITEXMO_PASSWORD=<SET_FROM_CREDENTIALS_REFERENCE>
+ITEXMO_API_CODE=<SET_FROM_CREDENTIALS_REFERENCE>
 ITEXMO_SENDER_ID=MASKPROCare
 SMSIT_URL=https://aicpanel.smsit.ai/api/v2/smscontact
-SMSIT_API_KEY=SMSIT_eedd3ff7f99d05260861705be7650a4b439feae08f8e06bf818ea478179af4fa
+SMSIT_API_KEY=<SET_FROM_CREDENTIALS_REFERENCE>
 SMSIT_FROM_NUMBER=639511047777
 CORS_ORIGINS=https://care.maskpro.ph
 EOF
@@ -233,6 +233,13 @@ ssh root@167.71.217.49 'certbot --nginx -d care.maskpro.ph'
 ---
 
 ## 📝 Session Learnings Log
+
+### 2026-11-12: Full-Stack Security & Anti-PHP2Shell Hardening (`v1.19.0`)
+- **Zero Hardcoded Fallbacks:** Removed all hardcoded production secret fallbacks (`JWT_SECRET`, `ITEXMO_PASSWORD`, `ITEXMO_API_CODE`, `SMSIT_API_KEY`, `BOOMERANGME_API_KEY`) from `server/` and legacy PHP files (`db_connect.php`, `api/v2/config/jwt.php`); consolidated all production keys into `/var/www/care/.env` (`chmod 600`) and updated `deploy.sh` to exclude `.env*`.
+- **Trusted IP & Brute-Force Rate Limiting (`server/utils/security.js`):** Added `getTrustedClientIp()` prioritizing Nginx's `X-Real-IP` (`$remote_addr`) so spoofed `X-Forwarded-For` headers cannot bypass `care_blocked_ips`. Added sliding-window brute-force lockouts on `POST /api/auth/verify` (invalidating active OTP after 5 failed guesses + IP rate limit), `POST /api/auth/login`, and `POST /api/admin/login` (5 attempts / 15 min lockout).
+- **Admin Privilege Escalation Prevention (`server/routes/admin.js`, `server/routes/profile.js`, `server/routes/community.js`):** Restricted `isAdminUser()` name cross-reference strictly to immutable verified admin customer IDs (`VERIFIED_ADMIN_CUSTOMER_IDS = { 1924 }`) or bcrypt-verified `is_admin` JWT claims, and blocked non-admin customers from renaming `full_name` to match any staff/admin account in `users`.
+- **Magic-Byte Upload Validation & Anti-PHP2Shell Nginx Shield:** Added `validateImageBuffer()` in `vehicles.js` and `profile.js` to verify binary magic bytes (`JPEG`, `PNG`, `WebP`, `HEIC`) and reject embedded `<?php`/`<script` polyglots before `sharp` processing, plus hardened `/etc/nginx/sites-available/care` with HSTS, `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, dotfile blocking (`location ~ /\.`), and `403` script blocking (`\.(php|phtml|phar|inc|sh|pl|py|cgi)$`).
+- **Automated Security Audit Suite:** Added `npm run security:audit` (`server/scripts/security-audit.js`) and resolved all backend & frontend `npm audit` CVEs (`0` vulnerabilities).
 
 ### 2026-11-11: Non-Motorized Item Gate for 6-Month Maintenance Reminders (`v1.18.9`)
 - **Non-Motorized Exclusion Rule:** Helmets (`Arai`, `Shoei`, `AGV`, `HJC`, `Nomad`, `LS2`, `Spyder`, `KYT`, `Bell`, `Nolan`, `Schuberth`, `Helmet`, `RPHA`, `Visor`), Mechanical Bicycles (`MTB`, `Mountain Bike`, `Road Bike`, `Trek`, `Colnago`, `Cervelo`, `Cannondale`, `Giant`, `Specialized`, `S-Works`, `Santa Cruz`, `Pinarello`, `Bianchi`, etc.), Small Non-Motorized Items (`Rimowa Bag`, `Pickleball Paddle`, `Fender Flare`, `Orion Headlights`, `SUV Mags`), and Partial Accessory-Only Bookings (`Helmet only`, `Mags only`, `Rims only`, `Tank only`, `Dashboard only`, `Headlights only` at `<= ₱4,000`) do NOT receive 6-month NanoFix maintenance reminders.
