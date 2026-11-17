@@ -68,6 +68,7 @@ export default function AdminPanel() {
   const [smsDateFrom, setSmsDateFrom] = useState(manilaTodayInit);
   const [smsDateTo, setSmsDateTo] = useState(manilaTodayInit);
   const [smsDatePickerOpen, setSmsDatePickerOpen] = useState(false);
+  const [smsDatePickerPos, setSmsDatePickerPos] = useState({ left: 300, top: 220 });
   const [smsCalMonth, setSmsCalMonth] = useState(() => {
     const [y, m] = manilaTodayInit.split('-').map(Number);
     return { year: y, month: m - 1 };
@@ -2818,7 +2819,19 @@ export default function AdminPanel() {
                     <div style={{ position: 'relative' }}>
                       <button
                         type="button"
-                        onClick={() => setSmsDatePickerOpen((prev) => !prev)}
+                        onClick={(e) => {
+                          if (smsDatePickerOpen) {
+                            setSmsDatePickerOpen(false);
+                          } else {
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            const pickerWidth = Math.min(360, window.innerWidth - 24);
+                            const minLeft = window.innerWidth > 768 ? 296 : 12;
+                            const clampedLeft = Math.max(minLeft, Math.min(rect.left, window.innerWidth - pickerWidth - 16));
+                            const clampedTop = Math.max(16, Math.min(rect.bottom + 8, window.innerHeight - 430));
+                            setSmsDatePickerPos({ left: clampedLeft, top: clampedTop });
+                            setSmsDatePickerOpen(true);
+                          }
+                        }}
                         style={{
                           display: 'inline-flex', alignItems: 'center', gap: '8px',
                           padding: '5px 12px', borderRadius: '10px',
@@ -2848,15 +2861,23 @@ export default function AdminPanel() {
                         <>
                           <div
                             onClick={() => setSmsDatePickerOpen(false)}
-                            style={{ position: 'fixed', inset: 0, zIndex: 998 }}
+                            style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
                           />
                           <div
                             onClick={(e) => e.stopPropagation()}
                             style={{
-                              position: 'absolute', right: 0, top: 'calc(100% + 8px)', zIndex: 999,
-                              width: '360px', maxWidth: '92vw', background: 'white',
-                              borderRadius: '16px', border: '1px solid #cbd5e1',
-                              boxShadow: '0 20px 50px rgba(15, 23, 42, 0.18)',
+                              position: 'fixed',
+                              left: `${smsDatePickerPos.left}px`,
+                              top: `${smsDatePickerPos.top}px`,
+                              zIndex: 9999,
+                              width: '360px',
+                              maxWidth: 'calc(100vw - 24px)',
+                              maxHeight: 'calc(100vh - 32px)',
+                              overflowY: 'auto',
+                              background: 'white',
+                              borderRadius: '16px',
+                              border: '1px solid #cbd5e1',
+                              boxShadow: '0 20px 50px rgba(15, 23, 42, 0.22)',
                               padding: '14px',
                             }}
                           >

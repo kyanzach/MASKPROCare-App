@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.19.1] — 2026-11-17
+### Fixed
+- **Unclipped Date Range Picker Popover in SMS & Magic Link Delivery Tracker (`frontend/src/pages/AdminPanel.jsx`)**:
+  - **Root Cause**: The Date Range Picker popover used `position: 'absolute'`, `right: 0`, `zIndex: 999`. When the `Today's 7AM Batch` button wrapped onto the left edge of the card next to the `280px` sidebar, `right: 0` pushed the `360px`-wide popover `~140px` to the left across the boundary of `.main-content` (`overflow-x: hidden`), clipping the left side of the calendar.
+  - **Fix**: Switched the Date Range Picker popover to `position: 'fixed'` (`zIndex: 9999`) anchored to the trigger button's left edge (`getBoundingClientRect().left`) with sidebar/viewport clamping (`minLeft = 296px` on desktop, `12px` on mobile, and vertical viewport clamping), keeping the entire calendar on top and 100% visible at all times.
+
 ## [v1.19.0] — 2026-11-12
 ### Security & Hardening
 - **Full-Stack Security, Brute-Force Shield & Anti-PHP2Shell Hardening (`server/utils/security.js`, `server/index.js`, `server/middleware/auth.js`, `server/routes/auth.js`, `server/routes/aiAuth.js`, `server/routes/admin.js`, `server/routes/profile.js`, `server/routes/vehicles.js`, `server/routes/community.js`, `server/services/sms.js`, `server/services/straico.js`, `server/scripts/security-audit.js`, `deploy.sh`, `/etc/nginx/sites-available/care`)**:
