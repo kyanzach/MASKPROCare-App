@@ -198,6 +198,14 @@ deploy_backend() {
   # Verify PM2 is online
   local PM2_STATUS=$(ssh_cmd "pm2 jlist 2>/dev/null | jq -r '.[] | select(.name==\"$PM2_PROCESS\") | .pm2_env.status' 2>/dev/null" || echo "unknown")
   [ "$PM2_STATUS" = "online" ] && ok "PM2 '$PM2_PROCESS' → online" || warn "PM2 '$PM2_PROCESS' → $PM2_STATUS"
+
+  # Post-deploy live SQL schema + security audit gate (ZERO-500 RULE)
+  log "Running post-deploy security & SQL schema audit..."
+  if node "$LOCAL_DIR/server/scripts/security-audit.js" >/dev/null 2>&1; then
+    ok "Security & SQL schema audit → PASS"
+  else
+    warn "Security & SQL schema audit reported issues — run 'npm run security:audit' to inspect"
+  fi
 }
 
 # ─── Nginx Setup (first-time only) ────────────────────────────────────

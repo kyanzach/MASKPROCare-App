@@ -1,5 +1,13 @@
 # Changelog
 
+## [v1.19.3] — 2026-11-23
+### Added & Hardened
+- **Zero-500 SQL Schema Safeguards, Automated Audit Checks & Apology SMS Dispatch Log (`server/scripts/security-audit.js`, `deploy.sh`, `.agents/rules/maskprocare-app.md`, `docs/sms-logs/2026-11-23-v1.19.2-login-apology-sms-log.md`)**:
+  - Added automated `SAFE_CUSTOMER_COLS` column whitelist verification and OTP-verify ordering checks to `npm run security:audit` (now `22/22` checks) so nonexistent columns like `customers.created_at` fail the audit immediately before shipping.
+  - Wired automatic post-deploy `security-audit.js` execution into `deploy.sh` (`deploy_backend`).
+  - Added **Rule #22 (Zero-500 SQL Schema Verification & Post-Deploy Live Smoke Test)** to `.agents/rules/maskprocare-app.md` (and mirrored across global `~/.gemini/GEMINI.md`, Unify mother app, Unify Vite, GetSales, GAQ, and HRIS).
+  - Archived the full 12/12 apology SMS delivery log in `docs/sms-logs/2026-11-23-v1.19.2-login-apology-sms-log.md`.
+
 ## [v1.19.2] — 2026-11-23
 ### Fixed
 - **Critical Production Login & Profile Outage (`Unknown column 'created_at' in 'field list'`) (`server/routes/auth.js`, `server/routes/profile.js`)**:

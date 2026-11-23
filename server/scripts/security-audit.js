@@ -103,6 +103,23 @@ function fetchHeaders(url) {
   check('OTP verification enforces brute-force lockout & burns OTP after 5 failed guesses', authContent.includes('otp_verify_mobile') && authContent.includes('otp_verify_ip'));
   check('Profile update blocks spoofing staff/admin full_name', profileContent.includes('reserved for verified MaskPro staff accounts'));
 
+  // 3b. SQL Schema Guard (prevent ER_BAD_FIELD_ERROR regressions on shared unify_maskpro.customers)
+  const VALID_CUSTOMER_COLS = new Set([
+    'id', 'branch_id', 'title', 'full_name', 'mobile_number', 'address', 'email',
+    'birth_date', 'company_name', 'company_address', 'company_contact_number',
+    'company_email', 'notes', 'created_by', 'profile_photo'
+  ]);
+  for (const [label, src] of [['server/routes/auth.js', authContent], ['server/routes/profile.js', profileContent]]) {
+    const match = src.match(/const\s+SAFE_CUSTOMER_COLS\s*=\s*['"]([^'"]+)['"]/);
+    const cols = match ? match[1].split(',').map((c) => c.trim()).filter(Boolean) : [];
+    const invalidCols = cols.filter((c) => !VALID_CUSTOMER_COLS.has(c));
+    check(`${label} SAFE_CUSTOMER_COLS contains only verified customers columns`, cols.length > 0 && invalidCols.length === 0, invalidCols.length ? `Invalid: ${invalidCols.join(', ')}` : `${cols.length} valid cols`);
+  }
+  const verifyStart = authContent.indexOf("router.post('/verify'");
+  const selectPos = authContent.indexOf('SELECT ${SAFE_CUSTOMER_COLS} FROM customers', verifyStart);
+  const burnOtpPos = authContent.indexOf('verified_count = COALESCE(verified_count, 0) + 1', verifyStart);
+  check('OTP verify fetches customer row BEFORE burning OTP & logging activity', selectPos > verifyStart && burnOtpPos > selectPos);
+
   // 4. Live Endpoint Security Headers & Anti-PHP2Shell Probe
   console.log('\n[4/4] Live Production Endpoint & Nginx Shield Check (https://care.maskpro.ph)');
   const healthRes = await fetchHeaders('https://care.maskpro.ph/api/health');
