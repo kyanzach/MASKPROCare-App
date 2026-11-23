@@ -18,7 +18,7 @@ const { sendOtpSms } = require('../services/sms');
 const { standardizeMobile, getLast10, isValidPhMobile } = require('../utils/mobile');
 const { getTrustedClientIp, checkRateLimit, recordRateLimitHit, clearRateLimit } = require('../utils/security');
 
-const SAFE_CUSTOMER_COLS = 'id, title, full_name, mobile_number, email, address, branch_id, profile_photo, created_at';
+const SAFE_CUSTOMER_COLS = 'id, title, full_name, mobile_number, email, address, branch_id, profile_photo';
 
 const JWT_EXPIRY = parseInt(process.env.JWT_EXPIRY, 10) || 86400;
 const OTP_EXPIRY_SECONDS = 900; // 15 minutes
@@ -205,6 +205,9 @@ router.post('/verify', async (req, res) => {
     clearRateLimit('otp_verify_ip', clientIp);
     clearRateLimit('otp_verify_mobile', formattedMobile);
 
+    // Get safe customer profile columns BEFORE burning OTP or logging successful login
+    const [customerData] = await pool.query(`SELECT ${SAFE_CUSTOMER_COLS} FROM customers WHERE id = ?`, [customerId]);
+
     // Generate JWT (same payload as PHP)
     const token = jwt.sign(
       {
@@ -240,9 +243,6 @@ router.post('/verify', async (req, res) => {
       actionDetail: `Verified OTP login (${formattedMobile})`,
       dedupWindowMs: 5000,
     });
-
-    // Get safe customer profile columns
-    const [customerData] = await pool.query(`SELECT ${SAFE_CUSTOMER_COLS} FROM customers WHERE id = ?`, [customerId]);
 
     return res.json({
       success: true,
@@ -949,6 +949,8 @@ router.post('/magic-verify', async (req, res) => {
       path: '/',
     });
 
+    const [customerData] = await pool.query(`SELECT ${SAFE_CUSTOMER_COLS} FROM customers WHERE id = ?`, [customerId]);
+
     if (!isDuplicateBurst) {
       recordAppTelemetry(req, { sub: customerId, magic_slug: link.slug, auth_method: 'magic_link' }, true);
       const vehName = [link.vehicle_make, link.vehicle_model].filter(Boolean).join(' ') || 'Vehicle';
@@ -963,7 +965,6 @@ router.post('/magic-verify', async (req, res) => {
       });
     }
 
-    const [customerData] = await pool.query(`SELECT ${SAFE_CUSTOMER_COLS} FROM customers WHERE id = ?`, [customerId]);
     const redirectUrl = link.vehicle_id
       ? `/bookings?openBooking=true&vehicle_id=${link.vehicle_id}&service=NanoFix`
       : '/bookings?openBooking=true&service=NanoFix';

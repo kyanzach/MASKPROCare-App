@@ -16,7 +16,7 @@ const pool = require('../db/connection');
 const { authenticateToken } = require('../middleware/auth');
 const { validateImageBuffer, safeUploadPath } = require('../utils/security');
 
-const SAFE_CUSTOMER_COLS = 'id, title, full_name, mobile_number, email, address, branch_id, profile_photo, created_at';
+const SAFE_CUSTOMER_COLS = 'id, title, full_name, mobile_number, email, address, branch_id, profile_photo';
 
 // Ensure uploads directory exists
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads', 'photos');

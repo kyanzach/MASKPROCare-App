@@ -375,4 +375,9 @@ ssh root@167.71.217.49 'certbot --nginx -d care.maskpro.ph'
   - Every card in `booking_requests.php` / `booking_request_card.php` renders a compact collapsible 1-line summary bar (`.br-card-summary`) and collapsible timeline (`> 2` events) with an **Expand All / Collapse All** toolbar button.
   - `Negotiating` tab badge uses dedicated `$nego_action_count` instead of `$followup_count` to prevent false `Need Action` badges when `Negotiating` is empty.
 
+### 2026-11-23: `customers` Table Schema Gotcha & Auth Query Ordering (`v1.19.2`)
+- **`unify_maskpro.customers` has NO `created_at` column.** Its actual columns are: `id, branch_id, title, full_name, mobile_number, address, email, birth_date, company_name, company_address, company_contact_number, company_email, notes, created_by, profile_photo`. Never include `created_at` in `SAFE_CUSTOMER_COLS` or any `SELECT` against `customers`.
+- **Auth ordering rule:** In `POST /api/auth/verify` and `POST /api/auth/magic-verify`, always query the `customers` row **before** clearing `login_otp` or calling `recordAppTelemetry()` / `logCustomerActivity()`, so a DB error can never burn a valid OTP or log a misleading successful-login entry in `care_app_activity_logs`.
+
+
 

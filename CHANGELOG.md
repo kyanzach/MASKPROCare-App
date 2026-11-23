@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.19.2] — 2026-11-23
+### Fixed
+- **Critical Production Login & Profile Outage (`Unknown column 'created_at' in 'field list'`) (`server/routes/auth.js`, `server/routes/profile.js`)**:
+  - **Root Cause**: In `v1.19.0`, `SAFE_CUSTOMER_COLS` was introduced with `created_at` (`id, title, full_name, mobile_number, email, address, branch_id, profile_photo, created_at`), but `unify_maskpro.customers` does not have a `created_at` column. This caused `POST /api/auth/magic-verify`, `POST /api/auth/verify`, `GET /api/profile/get`, and `POST|PUT /api/profile/update` to fail with HTTP `500` (`ER_BAD_FIELD_ERROR`), affecting 12 customers (39 failed auth/profile requests) since Nov 12, 2026. Because activity/device-lock logging ran before the `customers` query, the Admin App Exploration Journey recorded `Opened Smart Magic Link` / `Signed In via Mobile OTP` even though the response crashed with `500`, forcing customers like Brian Perez (`#6605`), Eleazar Domingo (`#4550`), and Noel Almendrala (`#1277`) into repeated Magic Link / OTP retry loops.
+  - **Fix**: Removed nonexistent `created_at` from `SAFE_CUSTOMER_COLS` in both `server/routes/auth.js` and `server/routes/profile.js`, and moved the `SELECT ${SAFE_CUSTOMER_COLS} FROM customers` query **before** OTP clearing and `recordAppTelemetry` / `logCustomerActivity` calls in `POST /api/auth/verify` and `POST /api/auth/magic-verify` so a DB failure can never burn a valid OTP or record a false login event.
+
 ## [v1.19.1] — 2026-11-17
 ### Fixed
 - **Unclipped Date Range Picker Popover in SMS & Magic Link Delivery Tracker (`frontend/src/pages/AdminPanel.jsx`)**:
