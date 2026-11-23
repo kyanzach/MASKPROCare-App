@@ -1,5 +1,12 @@
 # Changelog
 
+## [v1.20.0] — 2026-11-23
+### Added
+- **Instant HTTP 500 Admin Alerting, Daily 6:55 AM Pre-Batch Canary & Admin Health Monitor Pill (`server/services/healthMonitor.js`, `server/index.js`, `server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`, `package.json`)**:
+  - **Automatic HTTP 500+ Interceptor & Alerting**: Added `monitorApiErrorsMiddleware` in `server/services/healthMonitor.js` to automatically log every `/api/*` HTTP `500+` error into `care_api_error_logs` and immediately alert via **Email** (`i.ryanpaco@gmail.com`, `ryan@maskpro.ph` via Google Workspace SMTP) and **SMS** (`09852779777` via iTexMo + SMS-it fallback), throttled to max 1 alert per 30 minutes per endpoint.
+  - **Automated Daily 6:55 AM PHT Pre-Batch Canary**: Added `startPreBatchCanaryScheduler()` running automatically 5 minutes before the 7:00 AM SMS reminder blast — probes live `POST /api/auth/magic-verify` + `GET /api/profile/get` using a disposable test link (cleaned up immediately), logs results to `care_canary_runs`, stays silent on `PASS`, and immediately alerts via Email + SMS on `FAIL`.
+  - **Admin Control Center Health Pill & Modal**: Added `GET /api/admin/health-status`, `POST /api/admin/run-canary`, and a live `API Healthy • 0 Errors` / `X Server 500s (24h)` header pill in `AdminPanel.jsx` opening a Server Health & Canary Modal with an on-demand **Run Canary Now** button.
+
 ## [v1.19.3] — 2026-11-23
 ### Added & Hardened
 - **Zero-500 SQL Schema Safeguards, Automated Audit Checks & Apology SMS Dispatch Log (`server/scripts/security-audit.js`, `deploy.sh`, `.agents/rules/maskprocare-app.md`, `docs/sms-logs/2026-11-23-v1.19.2-login-apology-sms-log.md`)**:

@@ -68,6 +68,10 @@ const loyaltyRoutes = require('./routes/loyalty');
 const adminRoutes = require('./routes/admin');
 const communityRoutes = require('./routes/community');
 const { startLtoReminderScheduler } = require('./services/ltoReminderCron');
+const { monitorApiErrorsMiddleware, startPreBatchCanaryScheduler } = require('./services/healthMonitor');
+
+// Monitor HTTP 500+ responses across all API routes (DB log + throttled Email/SMS alerts)
+app.use(monitorApiErrorsMiddleware);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/auth/ai-login', aiAuthRoutes);
@@ -123,6 +127,7 @@ app.use((err, req, res, next) => {
 app.listen(PORT, BIND_HOST, () => {
   console.log(`✅ MaskPro Care API running on ${BIND_HOST}:${PORT} (${process.env.NODE_ENV || 'development'})`);
   startLtoReminderScheduler();
+  startPreBatchCanaryScheduler();
 });
 
 module.exports = app;

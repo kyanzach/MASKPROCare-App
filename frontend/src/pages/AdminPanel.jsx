@@ -113,6 +113,11 @@ export default function AdminPanel() {
   const [walletPage, setWalletPage] = useState(1);
   const walletSearchTimeoutRef = useRef(null);
   const modFilterRef = useRef('pending');
+
+  // Server Health (24h 500s + Daily 6:55 AM Pre-Batch Canary) state
+  const [healthStatus, setHealthStatus] = useState(null);
+  const [healthModalOpen, setHealthModalOpen] = useState(false);
+  const [canaryRunning, setCanaryRunning] = useState(false);
   const dashParamsRef = useRef({
     secLimit: 10, secFilter: 'all', secSearch: '', secSort: 'newest',
     smsLimit: 500, smsFilter: 'all', smsSearch: '', smsSort: 'newest',
@@ -160,6 +165,7 @@ export default function AdminPanel() {
         if (res.data.data?.isAdmin) {
           setIsAdmin(true);
           loadDashboard(false);
+          loadHealthStatus();
           loadWalletCards({ page: 1 }, false);
           loadModerationPosts('pending', false);
           loadCustomers(1, '');
@@ -182,6 +188,35 @@ export default function AdminPanel() {
     }, 5000);
     return () => clearInterval(interval);
   }, [isAdmin]);
+
+  const loadHealthStatus = async () => {
+    try {
+      const res = await api.get('/admin/health-status');
+      if (res.data?.success) {
+        setHealthStatus(res.data.data);
+      }
+    } catch {
+      // silent
+    }
+  };
+
+  const handleRunCanaryNow = async () => {
+    setCanaryRunning(true);
+    try {
+      const res = await api.post('/admin/run-canary');
+      if (res.data?.data?.status) {
+        setHealthStatus(res.data.data.status);
+      } else {
+        await loadHealthStatus();
+      }
+      const passed = res.data?.data?.run?.status === 'pass';
+      showToast(res.data?.message || (passed ? 'Canary probe passed' : 'Canary probe failed'), passed ? 'success' : 'error');
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to run canary probe', 'error');
+    } finally {
+      setCanaryRunning(false);
+    }
+  };
 
   const loadDashboard = async (silent = false, customParams = null) => {
     if (!silent) setDashLoading(true);
@@ -1304,20 +1339,60 @@ export default function AdminPanel() {
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            loadDashboard();
-            loadModerationPosts(modFilter);
-          }}
-          style={{
-            background: 'white', border: '1px solid #e2e8f0', borderRadius: '10px',
-            padding: '8px 14px', fontSize: '13px', fontWeight: 600, color: '#334155',
-            cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px',
-            fontFamily: 'inherit', whiteSpace: 'nowrap',
-          }}
-        >
-          <i className="bi bi-arrow-clockwise"></i> Refresh Data
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          {(() => {
+            const errs = healthStatus?.errors24h ?? 0;
+            const canaryFailed = healthStatus?.lastCanary?.status === 'fail';
+            const isAlert = errs > 0 || canaryFailed;
+            return (
+              <button
+                onClick={() => {
+                  loadHealthStatus();
+                  setHealthModalOpen(true);
+                }}
+                style={{
+                  background: isAlert ? '#fef2f2' : '#f0fdf4',
+                  border: `1px solid ${isAlert ? '#fecaca' : '#bbf7d0'}`,
+                  borderRadius: '10px',
+                  padding: '8px 13px',
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  color: isAlert ? '#b91c1c' : '#15803d',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontFamily: 'inherit',
+                  whiteSpace: 'nowrap',
+                }}
+                title="View 24h Server 500s & Daily 6:55 AM Pre-Batch Canary status"
+              >
+                <i className={`bi ${isAlert ? 'bi-exclamation-octagon-fill' : 'bi-heart-pulse-fill'}`}></i>
+                {canaryFailed
+                  ? 'Canary Failed'
+                  : errs > 0
+                    ? `${errs} Server 500${errs === 1 ? '' : 's'} (24h)`
+                    : 'API Healthy • 0 Errors'}
+              </button>
+            );
+          })()}
+
+          <button
+            onClick={() => {
+              loadDashboard();
+              loadHealthStatus();
+              loadModerationPosts(modFilter);
+            }}
+            style={{
+              background: 'white', border: '1px solid #e2e8f0', borderRadius: '10px',
+              padding: '8px 14px', fontSize: '13px', fontWeight: 600, color: '#334155',
+              cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px',
+              fontFamily: 'inherit', whiteSpace: 'nowrap',
+            }}
+          >
+            <i className="bi bi-arrow-clockwise"></i> Refresh Data
+          </button>
+        </div>
       </div>
 
       {/* ─── 3-Tab Navigation Bar ──────────────────────────────────── */}
@@ -4821,6 +4896,132 @@ export default function AdminPanel() {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Server Health & 6:55 AM Pre-Batch Canary Modal */}
+      {healthModalOpen && (
+        <div
+          onClick={() => setHealthModalOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 10000,
+            background: 'rgba(15, 23, 42, 0.55)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%', maxWidth: '640px', maxHeight: '86vh', overflowY: 'auto',
+              background: '#ffffff', borderRadius: '18px', border: '1px solid #e2e8f0',
+              boxShadow: '0 24px 60px rgba(15, 23, 42, 0.25)', padding: '22px',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <i className="bi bi-heart-pulse-fill" style={{ color: (healthStatus?.errors24h ?? 0) > 0 ? '#dc2626' : '#16a34a' }}></i>
+                  Server Health &amp; Canary Monitor
+                </h2>
+                <p style={{ margin: '3px 0 0', fontSize: '12.5px', color: '#64748b' }}>
+                  Automatic 500 alerts &amp; daily 6:55 AM pre-batch login check
+                </p>
+              </div>
+              <button
+                onClick={() => setHealthModalOpen(false)}
+                style={{
+                  border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569',
+                  width: '32px', height: '32px', borderRadius: '8px', cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                <i className="bi bi-x-lg"></i>
+              </button>
+            </div>
+
+            {/* Summary Row */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', marginBottom: '16px' }}>
+              <div style={{
+                padding: '12px 14px', borderRadius: '12px',
+                background: (healthStatus?.errors24h ?? 0) > 0 ? '#fef2f2' : '#f0fdf4',
+                border: `1px solid ${(healthStatus?.errors24h ?? 0) > 0 ? '#fecaca' : '#bbf7d0'}`,
+              }}>
+                <div style={{ fontSize: '11.5px', fontWeight: 600, color: '#64748b' }}>HTTP 500s (Last 24h)</div>
+                <div style={{ fontSize: '22px', fontWeight: 800, color: (healthStatus?.errors24h ?? 0) > 0 ? '#b91c1c' : '#15803d', marginTop: '2px' }}>
+                  {healthStatus?.errors24h ?? 0}
+                </div>
+              </div>
+
+              <div style={{
+                padding: '12px 14px', borderRadius: '12px',
+                background: healthStatus?.lastCanary?.status === 'fail' ? '#fef2f2' : '#f8fafc',
+                border: `1px solid ${healthStatus?.lastCanary?.status === 'fail' ? '#fecaca' : '#e2e8f0'}`,
+              }}>
+                <div style={{ fontSize: '11.5px', fontWeight: 600, color: '#64748b' }}>Latest Canary Probe</div>
+                <div style={{ fontSize: '14px', fontWeight: 800, color: healthStatus?.lastCanary?.status === 'fail' ? '#b91c1c' : '#0f172a', marginTop: '4px' }}>
+                  {healthStatus?.lastCanary
+                    ? `${healthStatus.lastCanary.status === 'pass' ? 'PASS' : 'FAILED'} • ${healthStatus.lastCanary.magic_verify_ms ?? '—'}ms`
+                    : 'Not run yet'}
+                </div>
+                {healthStatus?.lastCanary?.created_at && (
+                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                    {new Date(healthStatus.lastCanary.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ padding: '12px 14px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '8px' }}>
+                <div style={{ fontSize: '11.5px', fontWeight: 600, color: '#64748b' }}>Pre-Batch Schedule</div>
+                <button
+                  onClick={handleRunCanaryNow}
+                  disabled={canaryRunning}
+                  style={{
+                    background: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '8px',
+                    padding: '7px 12px', fontSize: '12px', fontWeight: 700, cursor: canaryRunning ? 'default' : 'pointer',
+                    whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                    opacity: canaryRunning ? 0.7 : 1, fontFamily: 'inherit',
+                  }}
+                >
+                  <i className="bi bi-play-fill"></i> {canaryRunning ? 'Running...' : 'Run Canary Now'}
+                </button>
+              </div>
+            </div>
+
+            {/* Active Alert Channels */}
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '10px 14px', marginBottom: '16px', fontSize: '12px', color: '#475569' }}>
+              <div style={{ fontWeight: 700, color: '#0f172a', marginBottom: '4px' }}>Active Alert Channels (Daily 6:55 AM PHT + Instant 500s)</div>
+              <div>
+                <strong>Email:</strong> {(healthStatus?.alertChannels?.emails || ['i.ryanpaco@gmail.com', 'ryan@maskpro.ph']).join(', ')}
+                {' • '}
+                <strong>SMS:</strong> {healthStatus?.alertChannels?.sms || '09852779777'}
+              </div>
+            </div>
+
+            {/* Recent 500 Errors */}
+            <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a', marginBottom: '8px' }}>
+              Recent HTTP 500 Errors
+            </div>
+            {(!healthStatus?.recentErrors || healthStatus.recentErrors.length === 0) ? (
+              <div style={{ padding: '16px', borderRadius: '10px', background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#15803d', fontSize: '13px', fontWeight: 600, textAlign: 'center' }}>
+                <i className="bi bi-check-circle-fill" style={{ marginRight: '6px' }}></i>
+                Zero HTTP 500 errors recorded.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {healthStatus.recentErrors.map((err) => (
+                  <div key={err.id} style={{ padding: '10px 12px', borderRadius: '10px', background: '#fef2f2', border: '1px solid #fecaca', fontSize: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontWeight: 700, color: '#991b1b' }}>
+                      <span>{err.method} {err.path} ({err.status_code})</span>
+                      <span style={{ fontWeight: 500, color: '#64748b' }}>
+                        {new Date(err.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <div style={{ color: '#7f1d1d', marginTop: '3px' }}>{err.error_message}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -1747,4 +1747,33 @@ router.post('/wallet-cards/sync', authenticateToken, requireAdmin, async (req, r
   }
 });
 
+// GET /api/admin/health-status — Server 500s (24h) + Daily 6:55 AM Pre-Batch Canary status
+router.get('/health-status', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { getAdminHealthStatus } = require('../services/healthMonitor');
+    const data = await getAdminHealthStatus();
+    return res.json({ success: true, data });
+  } catch (err) {
+    console.error('[Admin] Health status error:', err.message);
+    return res.status(500).json({ success: false, message: 'Failed to load server health status' });
+  }
+});
+
+// POST /api/admin/run-canary — Run live magic-verify + profile/get canary probe on demand
+router.post('/run-canary', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { runPreBatchCanary, getAdminHealthStatus } = require('../services/healthMonitor');
+    const run = await runPreBatchCanary('manual');
+    const status = await getAdminHealthStatus();
+    return res.json({
+      success: true,
+      message: run.status === 'pass' ? `Canary passed (${run.detail})` : `Canary failed: ${run.detail}`,
+      data: { run, status },
+    });
+  } catch (err) {
+    console.error('[Admin] Run canary error:', err.message);
+    return res.status(500).json({ success: false, message: 'Failed to run canary probe' });
+  }
+});
+
 module.exports = router;
