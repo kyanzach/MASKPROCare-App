@@ -201,7 +201,7 @@ deploy_backend() {
 
   # Post-deploy live SQL schema + security audit gate (ZERO-500 RULE)
   log "Running post-deploy security & SQL schema audit..."
-  if node "$LOCAL_DIR/server/scripts/security-audit.js" >/dev/null 2>&1; then
+  if node "$PROJECT_DIR/server/scripts/security-audit.js" >/dev/null 2>&1; then
     ok "Security & SQL schema audit → PASS"
   else
     warn "Security & SQL schema audit reported issues — run 'npm run security:audit' to inspect"
