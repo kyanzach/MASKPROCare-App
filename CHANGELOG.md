@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.21.1] — 2026-11-24
+### Added
+- **Gensan Branch Origin Badge in Maintenance Reminder SMS Tracker (`server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`, `package.json`)**:
+  - Included `COALESCE(tr.booking_branch_id, c.branch_id) AS branch_id` in the Admin Panel Maintenance Reminder SMS tracker query.
+  - Added a compact amber `Gensan` pill badge above the customer name for Gensan clients (`branch_id = 2`), matching Unify's `Gensan` badge style while keeping Davao mother branch clients clean with no badge.
+
 ## [v1.21.0] — 2026-11-24
 ### Added
 - **Clickable Unify Customer Profile Links & One-Click Retry for Failed Maintenance Reminder SMS (`frontend/src/pages/AdminPanel.jsx`, `server/routes/admin.js`, `server/services/magicLinkService.js`, `server/services/sms.js`, `package.json`)**:

@@ -3287,6 +3287,26 @@ export default function AdminPanel() {
                               <tr key={row.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                                 {/* 1. Customer & Mobile */}
                                 <td style={{ padding: '12px 16px' }}>
+                                  {Number(row.branch_id) === 2 && (
+                                    <div style={{ marginBottom: '3px' }}>
+                                      <span
+                                        style={{
+                                          display: 'inline-block',
+                                          fontSize: '10px',
+                                          fontWeight: 700,
+                                          lineHeight: 1.3,
+                                          padding: '1px 8px',
+                                          borderRadius: '999px',
+                                          background: '#fef3c7',
+                                          color: '#92400e',
+                                          border: '1px solid #fcd34d',
+                                          whiteSpace: 'nowrap',
+                                        }}
+                                      >
+                                        Gensan
+                                      </span>
+                                    </div>
+                                  )}
                                   {row.customer_id ? (
                                     <a
                                       href={`https://unify.maskpro.ph/customers_view_details.php?id=${row.customer_id}`}
