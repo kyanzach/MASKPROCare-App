@@ -78,6 +78,7 @@ export default function AdminPanel() {
   const [smsSort, setSmsSort] = useState('newest');
   const [smsPage, setSmsPage] = useState(1);
   const [smsLimit, setSmsLimit] = useState(500); // Prefetch full tracker dataset (8 per page)
+  const [retryingReminderId, setRetryingReminderId] = useState(null);
   const [usersPage, setUsersPage] = useState(1);
   const [usersLimit, setUsersLimit] = useState(20); // Prefetch 2 pages (10 per page = 20 items) initially
   const [lastSyncedAt, setLastSyncedAt] = useState(new Date());
@@ -404,6 +405,22 @@ export default function AdminPanel() {
     const updated = { ...dashParamsRef.current, smsSort: nextSort, smsFilter: effectiveFilter, smsLimit: needed };
     dashParamsRef.current = updated;
     loadDashboard(true, updated);
+  };
+
+  const handleRetryMaintenanceReminder = async (row) => {
+    const reminderId = Number(row?.reminder_id || 0);
+    if (!reminderId || retryingReminderId !== null) return;
+    setRetryingReminderId(reminderId);
+    try {
+      const res = await api.post('/admin/retry-maintenance-reminder', { reminder_id: reminderId });
+      showToast(res.data?.message || `Maintenance reminder sent to ${row.customer_name || 'customer'}`, 'success');
+      await loadDashboard(true, dashParamsRef.current);
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to retry maintenance reminder', 'error');
+      loadDashboard(true, dashParamsRef.current);
+    } finally {
+      setRetryingReminderId(null);
+    }
   };
 
   // Smart lazy-prefetching for Magic Link Security Log (5 per page):
@@ -2226,7 +2243,31 @@ export default function AdminPanel() {
                                 {/* 1. Client & Branch */}
                                 <td style={{ padding: '12px 16px' }}>
                                   <div style={{ fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                    <span>{row.customer_name}</span>
+                                    {row.customer_id ? (
+                                      <a
+                                        href={`https://unify.maskpro.ph/customers_view_details.php?id=${row.customer_id}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        title="Open customer profile in Unify (new tab)"
+                                        style={{
+                                          display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                          color: '#0f172a', textDecoration: 'none', fontWeight: 700,
+                                        }}
+                                        onMouseEnter={(e) => {
+                                          e.currentTarget.style.color = '#1d4ed8';
+                                          e.currentTarget.style.textDecoration = 'underline';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          e.currentTarget.style.color = '#0f172a';
+                                          e.currentTarget.style.textDecoration = 'none';
+                                        }}
+                                      >
+                                        <span>{row.customer_name}</span>
+                                        <i className="bi bi-box-arrow-up-right" style={{ fontSize: '10px', color: '#2563eb', opacity: 0.85 }}></i>
+                                      </a>
+                                    ) : (
+                                      <span>{row.customer_name}</span>
+                                    )}
                                     <span style={{
                                       fontSize: '10px', fontWeight: 700, padding: '1px 7px', borderRadius: '10px',
                                       background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', whiteSpace: 'nowrap',
@@ -3246,7 +3287,38 @@ export default function AdminPanel() {
                               <tr key={row.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                                 {/* 1. Customer & Mobile */}
                                 <td style={{ padding: '12px 16px' }}>
-                                  <div style={{ fontWeight: 700, color: '#0f172a' }}>{row.customer_name || 'Unknown'}</div>
+                                  {row.customer_id ? (
+                                    <a
+                                      href={`https://unify.maskpro.ph/customers_view_details.php?id=${row.customer_id}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      title="Open customer profile in Unify (new tab)"
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '5px',
+                                        fontWeight: 700,
+                                        color: '#0f172a',
+                                        textDecoration: 'none',
+                                        padding: '2px 0',
+                                        borderRadius: '6px',
+                                        transition: 'color 0.12s ease',
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        e.currentTarget.style.color = '#1d4ed8';
+                                        e.currentTarget.style.textDecoration = 'underline';
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.currentTarget.style.color = '#0f172a';
+                                        e.currentTarget.style.textDecoration = 'none';
+                                      }}
+                                    >
+                                      <span>{row.customer_name || 'Unknown'}</span>
+                                      <i className="bi bi-box-arrow-up-right" style={{ fontSize: '10.5px', color: '#2563eb', opacity: 0.85 }}></i>
+                                    </a>
+                                  ) : (
+                                    <div style={{ fontWeight: 700, color: '#0f172a' }}>{row.customer_name || 'Unknown'}</div>
+                                  )}
                                   <div style={{ fontSize: '11.5px', color: '#64748b', fontFamily: 'monospace' }}>
                                     {row.customer_mobile || 'No mobile'} • ID #{row.customer_id}
                                   </div>
@@ -3265,24 +3337,56 @@ export default function AdminPanel() {
 
                                 {/* 3. SMS Delivery */}
                                 <td style={{ padding: '12px 12px' }}>
-                                  <button
-                                    type="button"
-                                    onClick={() => setSmsPreviewModal(row)}
-                                    title="Click to view actual formatted SMS content"
-                                    style={{
-                                      display: 'inline-flex', alignItems: 'center', gap: '5px',
-                                      padding: '4px 10px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 700,
-                                      background: isSent ? '#dcfce7' : isFailed ? '#fef2f2' : '#f1f5f9',
-                                      color: isSent ? '#15803d' : isFailed ? '#dc2626' : '#475569',
-                                      border: `1px solid ${isSent ? '#86efac' : isFailed ? '#fecaca' : '#cbd5e1'}`,
-                                      whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: 'inherit',
-                                      boxShadow: '0 1px 2px rgba(15, 23, 42, 0.05)',
-                                    }}
-                                  >
-                                    <i className={`bi ${isSent ? 'bi-check-circle-fill' : isFailed ? 'bi-x-circle-fill' : 'bi-clock-history'}`}></i>
-                                    <span>{isSent ? 'Sent & Delivered' : isFailed ? 'Failed (Invalid #)' : 'Scheduled (Pending)'}</span>
-                                    <i className="bi bi-chat-text-fill" style={{ fontSize: '10.5px', opacity: 0.75, marginLeft: '2px' }}></i>
-                                  </button>
+                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => setSmsPreviewModal(row)}
+                                      title="Click to view actual formatted SMS content"
+                                      style={{
+                                        display: 'inline-flex', alignItems: 'center', gap: '5px',
+                                        padding: '4px 10px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 700,
+                                        background: isSent ? '#dcfce7' : isFailed ? '#fef2f2' : '#f1f5f9',
+                                        color: isSent ? '#15803d' : isFailed ? '#dc2626' : '#475569',
+                                        border: `1px solid ${isSent ? '#86efac' : isFailed ? '#fecaca' : '#cbd5e1'}`,
+                                        whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: 'inherit',
+                                        boxShadow: '0 1px 2px rgba(15, 23, 42, 0.05)',
+                                      }}
+                                    >
+                                      <i className={`bi ${isSent ? 'bi-check-circle-fill' : isFailed ? 'bi-x-circle-fill' : 'bi-clock-history'}`}></i>
+                                      <span>{isSent ? 'Sent & Delivered' : isFailed ? 'Failed (Invalid #)' : 'Scheduled (Pending)'}</span>
+                                      <i className="bi bi-chat-text-fill" style={{ fontSize: '10.5px', opacity: 0.75, marginLeft: '2px' }}></i>
+                                    </button>
+                                    {isFailed && row.reminder_id && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRetryMaintenanceReminder(row)}
+                                        disabled={retryingReminderId !== null}
+                                        title="Re-check mobile number in Unify, generate Magic Link, and send SMS"
+                                        style={{
+                                          display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                          padding: '4px 10px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 700,
+                                          background: retryingReminderId === row.reminder_id ? '#dbeafe' : '#eff6ff',
+                                          color: '#1d4ed8',
+                                          border: '1px solid #93c5fd',
+                                          whiteSpace: 'nowrap',
+                                          cursor: retryingReminderId !== null ? 'wait' : 'pointer',
+                                          opacity: retryingReminderId !== null && retryingReminderId !== row.reminder_id ? 0.55 : 1,
+                                          fontFamily: 'inherit',
+                                          boxShadow: '0 1px 2px rgba(37, 99, 235, 0.08)',
+                                          transition: 'all 0.12s ease',
+                                        }}
+                                        onMouseEnter={(e) => {
+                                          if (retryingReminderId === null) e.currentTarget.style.background = '#dbeafe';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          if (retryingReminderId === null) e.currentTarget.style.background = '#eff6ff';
+                                        }}
+                                      >
+                                        <i className={`bi ${retryingReminderId === row.reminder_id ? 'bi-hourglass-split' : 'bi-arrow-clockwise'}`}></i>
+                                        <span>{retryingReminderId === row.reminder_id ? 'Sending...' : 'Retry'}</span>
+                                      </button>
+                                    )}
+                                  </div>
                                   <div style={{ fontSize: '10.5px', color: '#64748b', marginTop: '4px', fontFamily: 'monospace' }}>
                                     {row.created_at ? new Date(row.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' }) : ''}
                                   </div>
@@ -4193,9 +4297,33 @@ export default function AdminPanel() {
                             >
                               {/* 1. Target Account & Vehicle */}
                               <td style={{ padding: '13px 12px', minWidth: '150px' }}>
-                                <div style={{ fontWeight: 800, fontSize: '13.5px', color: '#0f172a' }}>
-                                  {log.customer_name || 'Unknown / Guessed Link'}
-                                </div>
+                                {log.customer_id ? (
+                                  <a
+                                    href={`https://unify.maskpro.ph/customers_view_details.php?id=${log.customer_id}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title="Open customer profile in Unify (new tab)"
+                                    style={{
+                                      display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                      fontWeight: 800, fontSize: '13.5px', color: '#0f172a', textDecoration: 'none',
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.color = '#1d4ed8';
+                                      e.currentTarget.style.textDecoration = 'underline';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.color = '#0f172a';
+                                      e.currentTarget.style.textDecoration = 'none';
+                                    }}
+                                  >
+                                    <span>{log.customer_name || 'Unknown / Guessed Link'}</span>
+                                    <i className="bi bi-box-arrow-up-right" style={{ fontSize: '10px', color: '#2563eb', opacity: 0.85 }}></i>
+                                  </a>
+                                ) : (
+                                  <div style={{ fontWeight: 800, fontSize: '13.5px', color: '#0f172a' }}>
+                                    {log.customer_name || 'Unknown / Guessed Link'}
+                                  </div>
+                                )}
                                 <div style={{ fontSize: '12px', color: '#475569', marginTop: '2px' }}>
                                   {log.customer_mobile ? (
                                     <>

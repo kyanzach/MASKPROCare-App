@@ -108,17 +108,19 @@ async function sendSms(number, message, customerId = null) {
 
     const result = response.data;
     if (result && result.Error === false && result.Failed === 0) {
+      const referenceId = result.ReferenceId || null;
+      const creditsUsed = Number.isFinite(Number(result.TotalCreditUsed)) ? Number(result.TotalCreditUsed) : 0;
       writeToLog(`ITEXMO - SMS successfully sent to: ${formattedNumber}. Response: ${JSON.stringify(result)}`);
-      return { status: 'Sent', error: '' };
+      return { status: 'Sent', error: '', referenceId, creditsUsed, formattedNumber };
     }
 
     const apiError = typeof result.Message === 'object' ? JSON.stringify(result.Message) : (result.Message || 'Unknown error');
     writeToLog(`ITEXMO - Cannot send to customer ID: ${customerId} with mobile #: ${formattedNumber}. API Error: ${apiError}`);
-    return { status: 'Failed', error: apiError };
+    return { status: 'Failed', error: apiError, referenceId: null, creditsUsed: 0, formattedNumber };
   } catch (err) {
     const error = `ITEXMO - Cannot send to customer ID: ${customerId} with mobile #: ${formattedNumber}. ${err.message}`;
     writeToLog(error);
-    return { status: 'Failed', error };
+    return { status: 'Failed', error, referenceId: null, creditsUsed: 0, formattedNumber };
   }
 }
 

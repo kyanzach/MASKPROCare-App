@@ -1776,4 +1776,158 @@ router.post('/run-canary', authenticateToken, requireAdmin, async (req, res) => 
   }
 });
 
+// POST /api/admin/retry-maintenance-reminder — Re-validate updated mobile, mint magic link, and send maintenance SMS
+router.post('/retry-maintenance-reminder', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const reminderId = parseInt(req.body?.reminder_id, 10);
+    if (!Number.isInteger(reminderId) || reminderId <= 0) {
+      return res.status(400).json({ success: false, message: 'Valid reminder_id is required.' });
+    }
+
+    const {
+      sanitizeAndValidatePhMobile,
+      getOrCreateCareMagicLink,
+      buildSmartMaintenanceSmsText,
+    } = require('../services/magicLinkService');
+    const { sendSms } = require('../services/sms');
+
+    // 1. Fetch fresh customer, booking, vehicle, and SMS template data from DB
+    const [rows] = await pool.query(
+      `SELECT r.sms_periodic_reminders_id, r.booking_id, r.sms_this_template_code, r.sms_set_date_time, r.sms_status,
+              b.customer_id, b.customer_vehicle_id AS vehicle_id, b.booking_date, b.branch_id,
+              c.title, c.full_name, c.mobile_number,
+              v.make, v.model,
+              (SELECT t.sms_text FROM sms_templates t
+               WHERE t.sms_template_code = r.sms_this_template_code AND t.branch_id = b.branch_id
+               LIMIT 1) AS sms_text
+       FROM sms_periodic_reminders r
+       JOIN bookings b ON r.booking_id = b.booking_id
+       JOIN customers c ON b.customer_id = c.id
+       LEFT JOIN vehicles v ON b.customer_vehicle_id = v.id
+       WHERE r.sms_periodic_reminders_id = ?
+       LIMIT 1`,
+      [reminderId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, message: `Maintenance reminder #${reminderId} not found.` });
+    }
+
+    const reminder = rows[0];
+
+    if (reminder.sms_status === 'Sent') {
+      return res.status(409).json({
+        success: false,
+        message: `Reminder #${reminderId} for ${reminder.full_name} was already sent.`,
+      });
+    }
+
+    // 2. Sanitary Mobile Number Pre-Check BEFORE creating a magic link or calling iTexMo
+    const mobileCheck = sanitizeAndValidatePhMobile(reminder.mobile_number);
+    if (!mobileCheck.valid) {
+      const failLog = `SMS status for ${reminder.title || ''} ${reminder.full_name} (Mobile: ${reminder.mobile_number || 'None'}, Booking ID: ${reminder.booking_id}), Reminder ID: ${reminderId}: Failed to send SMS. Sanitary Pre-Check: ${mobileCheck.reason} (No magic link created).`.replace(/\s+/g, ' ').trim();
+      await pool.query(
+        "UPDATE sms_periodic_reminders SET sms_status = 'Failed', error_log = ? WHERE sms_periodic_reminders_id = ?",
+        [failLog, reminderId]
+      );
+      return res.status(400).json({
+        success: false,
+        message: `Mobile number is still invalid ("${reminder.mobile_number || 'empty'}") — ${mobileCheck.reason}. Update it in Unify first, then retry.`,
+      });
+    }
+
+    const cleanMobile = mobileCheck.mobile;
+
+    // 3. Mint or reuse device-bound maskpro.link Magic Link
+    const magicLink = await getOrCreateCareMagicLink(pool, {
+      customerId: Number(reminder.customer_id),
+      vehicleId: reminder.vehicle_id ? Number(reminder.vehicle_id) : null,
+      bookingId: Number(reminder.booking_id),
+      reminderId,
+      fullName: String(reminder.full_name || ''),
+      make: String(reminder.make || ''),
+      model: String(reminder.model || ''),
+    });
+
+    // 4. Build exact 6-Month Maintenance Reminder SMS text
+    const smsMessage = buildSmartMaintenanceSmsText({
+      templateText: reminder.sms_text || '',
+      title: reminder.title || '',
+      fullName: reminder.full_name || '',
+      make: reminder.make || '',
+      model: reminder.model || '',
+      bookingDate: reminder.booking_date,
+      bookingId: reminder.booking_id,
+      shortUrl: magicLink.short_url,
+    });
+
+    // 5. Send via iTexMo (Sender ID MASKPRO)
+    const smsResult = await sendSms(cleanMobile, smsMessage, reminder.customer_id);
+    const newStatus = smsResult.status === 'Sent' ? 'Sent' : 'Failed';
+
+    // 6. Log to sms_history so Ref ID, credits, and SMS preview appear immediately in tracker
+    try {
+      await pool.query(
+        `INSERT INTO sms_history (phone, message, provider, status, credits_used, reference_id, error_message, source, sms_type, customer_id)
+         VALUES (?, ?, 'ITEXMO', ?, ?, ?, ?, 'care_admin_retry', 'Maintenance Reminder', ?)`,
+        [
+          smsResult.formattedNumber || cleanMobile,
+          smsMessage,
+          newStatus,
+          smsResult.creditsUsed || 0,
+          smsResult.referenceId || null,
+          newStatus === 'Failed' ? String(smsResult.error || 'Unknown error').slice(0, 500) : null,
+          reminder.customer_id,
+        ]
+      );
+    } catch (histErr) {
+      console.error('[Admin] sms_history insert warning:', histErr.message);
+    }
+
+    // 7. Update sms_periodic_reminders status & error_log
+    const titlePrefix = reminder.title ? `${reminder.title} ` : '';
+    const logBase = `SMS status for ${titlePrefix}${reminder.full_name} (Mobile: ${cleanMobile}, Booking ID: ${reminder.booking_id}), Reminder ID: ${reminderId}: `;
+    const logMessage =
+      newStatus === 'Sent'
+        ? `${logBase}SMS sent successfully (Admin Retry).`
+        : `${logBase}Failed to send SMS. ITEXMO Error: ${smsResult.error || 'Unknown error'}`;
+
+    await pool.query(
+      'UPDATE sms_periodic_reminders SET sms_status = ?, error_log = ?, short_link = ? WHERE sms_periodic_reminders_id = ?',
+      [newStatus, logMessage, magicLink.short_url, reminderId]
+    );
+
+    if (newStatus !== 'Sent') {
+      return res.status(502).json({
+        success: false,
+        message: `Magic link created (${magicLink.short_url}), but iTexMo failed to send to ${cleanMobile}: ${smsResult.error || 'Unknown error'}`,
+        data: {
+          reminder_id: reminderId,
+          mobile: cleanMobile,
+          short_url: magicLink.short_url,
+          status: 'Failed',
+        },
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: `Sent maintenance reminder to ${reminder.full_name} (${cleanMobile}) with ${magicLink.short_url}`,
+      data: {
+        reminder_id: reminderId,
+        customer_id: reminder.customer_id,
+        customer_name: reminder.full_name,
+        mobile: cleanMobile,
+        short_url: magicLink.short_url,
+        reference_id: smsResult.referenceId || null,
+        credits_used: smsResult.creditsUsed || 0,
+        status: 'Sent',
+      },
+    });
+  } catch (err) {
+    console.error('[Admin] Retry maintenance reminder error:', err.message);
+    return res.status(500).json({ success: false, message: 'Failed to retry maintenance reminder.' });
+  }
+});
+
 module.exports = router;

@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.21.0] — 2026-11-24
+### Added
+- **Clickable Unify Customer Profile Links & One-Click Retry for Failed Maintenance Reminder SMS (`frontend/src/pages/AdminPanel.jsx`, `server/routes/admin.js`, `server/services/magicLinkService.js`, `server/services/sms.js`, `package.json`)**:
+  - **Clickable/Tappable Customer Names → Unify Profile (New Tab)**: Made customer names in the Admin Panel's Maintenance Reminder SMS & Magic Link Delivery Tracker (as well as Wallet Cards and Magic Link Security Logs) open the customer's profile directly in sister app Unify (`https://unify.maskpro.ph/customers_view_details.php?id=<customer_id>`) in a new tab (`target="_blank" rel="noopener noreferrer"`) so admins can quickly fix invalid/missing mobile numbers.
+  - **One-Click `Retry` Button Beside `Failed (Invalid #)`**: Added a `Retry` action button beside failed reminder rows in `AdminPanel.jsx` backed by `POST /api/admin/retry-maintenance-reminder`. On click, it re-reads the customer's updated mobile number from `unify_maskpro.customers`, runs the exact PH mobile sanitary pre-check, mints (or reuses) the device-bound `maskpro.link` Magic Link via JotURL (`server/services/magicLinkService.js`), sends the formatted 6-Month Maintenance Reminder SMS via iTexMo (`SenderId: MASKPRO`), logs to `sms_history` (`ReferenceId` + `TotalCreditUsed`), updates `sms_periodic_reminders`, and refreshes the tracker table.
+
 ## [v1.20.0] — 2026-11-23
 ### Added
 - **Instant HTTP 500 Admin Alerting, Daily 6:55 AM Pre-Batch Canary & Admin Health Monitor Pill (`server/services/healthMonitor.js`, `server/index.js`, `server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`, `package.json`)**:
