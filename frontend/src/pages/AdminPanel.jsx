@@ -63,7 +63,7 @@ export default function AdminPanel() {
   const [secPage, setSecPage] = useState(1);
   const [secLimit, setSecLimit] = useState(10); // Prefetch 2 pages (5 per page = 10 items) initially
   const manilaTodayInit = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
-  const [smsFilter, setSmsFilter] = useState('all'); // 'all' | 'engaged' | 'sent' | 'opened' | 'unopened' | 'failed'
+  const [smsFilter, setSmsFilter] = useState('all'); // 'all' | 'engaged' | 'booked_app' | 'booked_call' | 'sent' | 'opened' | 'unopened' | 'failed'
   const [smsDatePreset, setSmsDatePreset] = useState('today'); // 'today' | 'yesterday' | 'last_7_days' | 'last_30_days' | 'this_month' | 'last_month' | 'all_time' | 'custom'
   const [smsDateFrom, setSmsDateFrom] = useState(manilaTodayInit);
   const [smsDateTo, setSmsDateTo] = useState(manilaTodayInit);
@@ -645,8 +645,8 @@ export default function AdminPanel() {
       return {
         status: 'booked',
         source: isDirectOnly ? 'branch' : 'app',
-        label: isDirectOnly ? 'Booked • Branch' : 'Booked',
-        channelLabel: isDirectOnly ? 'Booked via Branch / Call' : 'Booked via MASKPROCare App',
+        label: isDirectOnly ? 'Booked via Call' : 'Booked via App',
+        channelLabel: isDirectOnly ? 'Booked via Call / Branch' : 'Booked via MASKPROCare App',
         channelNote: isDirectOnly
           ? (isOpened ? 'Opened link, then booked via branch staff' : 'Saw SMS reminder & called/messaged branch')
           : 'Submitted directly inside MASKPROCare App',
@@ -2577,9 +2577,14 @@ export default function AdminPanel() {
             const isRowEngaged = (r) =>
               Number(r.access_count || 0) > 0 && Number(r.app_sessions || 0) > 0;
 
-            const isRowBooked = (r) => {
+            const isRowBookedViaApp = (r) => {
               const conv = getRowBookingConversion(r);
-              return conv.status === 'booked' || conv.status === 'cancelled';
+              return (conv.status === 'booked' || conv.status === 'cancelled') && conv.source === 'app';
+            };
+
+            const isRowBookedViaCall = (r) => {
+              const conv = getRowBookingConversion(r);
+              return (conv.status === 'booked' || conv.status === 'cancelled') && conv.source === 'branch';
             };
 
             const matchesDateRange = (r) => {
@@ -2600,7 +2605,8 @@ export default function AdminPanel() {
             const scopedSentCount = dateScopedRows.filter((r) => r.sms_status === 'Sent').length;
             const scopedOpenedCount = dateScopedRows.filter((r) => Number(r.access_count || 0) > 0).length;
             const scopedEngagedCount = dateScopedRows.filter((r) => isRowEngaged(r)).length;
-            const scopedBookedCount = dateScopedRows.filter((r) => isRowBooked(r)).length;
+            const scopedBookedAppCount = dateScopedRows.filter((r) => isRowBookedViaApp(r)).length;
+            const scopedBookedCallCount = dateScopedRows.filter((r) => isRowBookedViaCall(r)).length;
             const scopedUnopenedCount = dateScopedRows.filter((r) => Number(r.access_count || 0) <= 0 && r.sms_status === 'Sent').length;
             const scopedFailedCount = dateScopedRows.filter((r) => r.sms_status === 'Failed').length;
 
@@ -2614,7 +2620,8 @@ export default function AdminPanel() {
                 if (!matchesSearchRow(r)) return false;
                 if (!smsQuery && !matchesDateRange(r)) return false;
                 if (smsFilter === 'engaged') return isRowEngaged(r);
-                if (smsFilter === 'booked') return isRowBooked(r);
+                if (smsFilter === 'booked_app') return isRowBookedViaApp(r);
+                if (smsFilter === 'booked_call') return isRowBookedViaCall(r);
                 if (smsFilter === 'sent') return r.sms_status === 'Sent';
                 if (smsFilter === 'failed') return r.sms_status === 'Failed';
                 if (smsFilter === 'opened') return Number(r.access_count || 0) > 0;
@@ -2657,7 +2664,8 @@ export default function AdminPanel() {
             const activeRowsForBadges = smsQuery || smsFilter !== 'all' ? filteredSmsRows : dateScopedRows;
             const badgeDeliveredCount = activeRowsForBadges.filter((r) => r.sms_status === 'Sent').length;
             const badgeEngagedCount = activeRowsForBadges.filter((r) => isRowEngaged(r)).length;
-            const badgeBookedCount = activeRowsForBadges.filter((r) => isRowBooked(r)).length;
+            const badgeBookedAppCount = activeRowsForBadges.filter((r) => isRowBookedViaApp(r)).length;
+            const badgeBookedCallCount = activeRowsForBadges.filter((r) => isRowBookedViaCall(r)).length;
             const badgeOpenedCount = activeRowsForBadges.filter((r) => Number(r.access_count || 0) > 0).length;
             const badgeFailedCount = activeRowsForBadges.filter((r) => r.sms_status === 'Failed').length;
 
@@ -2773,15 +2781,27 @@ export default function AdminPanel() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleSmsFilterChange(smsFilter === 'booked' ? 'all' : 'booked')}
-                        title="Click to filter by clients who submitted a booking via the app"
+                        onClick={() => handleSmsFilterChange(smsFilter === 'booked_app' ? 'all' : 'booked_app')}
+                        title="Click to filter by clients who submitted a booking via the MASKPROCare App"
                         style={{
-                          background: '#f0fdf4', border: smsFilter === 'booked' ? '2px solid #15803d' : '1px solid #86efac', color: '#15803d',
+                          background: '#f0fdf4', border: smsFilter === 'booked_app' ? '2px solid #15803d' : '1px solid #86efac', color: '#15803d',
                           fontSize: '12px', fontWeight: 700, padding: '5px 11px', borderRadius: '20px', whiteSpace: 'nowrap',
                           cursor: 'pointer', fontFamily: 'inherit',
                         }}
                       >
-                        Booked: {badgeBookedCount}
+                        Booked via App: {badgeBookedAppCount}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSmsFilterChange(smsFilter === 'booked_call' ? 'all' : 'booked_call')}
+                        title="Click to filter by clients who booked via call or branch staff"
+                        style={{
+                          background: '#fffbeb', border: smsFilter === 'booked_call' ? '2px solid #b45309' : '1px solid #fcd34d', color: '#b45309',
+                          fontSize: '12px', fontWeight: 700, padding: '5px 11px', borderRadius: '20px', whiteSpace: 'nowrap',
+                          cursor: 'pointer', fontFamily: 'inherit',
+                        }}
+                      >
+                        Booked via Call: {badgeBookedCallCount}
                       </button>
                       <button
                         type="button"
@@ -2828,9 +2848,14 @@ export default function AdminPanel() {
                           icon: 'bi-person-check-fill',
                         },
                         {
-                          key: 'booked',
-                          label: `Booked (${scopedBookedCount})`,
+                          key: 'booked_app',
+                          label: `Booked via App (${scopedBookedAppCount})`,
                           icon: 'bi-calendar-check-fill',
+                        },
+                        {
+                          key: 'booked_call',
+                          label: `Booked via Call (${scopedBookedCallCount})`,
+                          icon: 'bi-telephone-inbound-fill',
                         },
                         { key: 'sent', label: `Sent (${scopedSentCount})` },
                         { key: 'opened', label: `Opened (${scopedOpenedCount})` },

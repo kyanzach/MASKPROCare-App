@@ -685,8 +685,12 @@ router.get('/dashboard', authenticateToken, requireAdmin, async (req, res) => {
         smsWhereSql += ' AND tr.access_count > 0';
       } else if (smsFilter === 'engaged') {
         smsWhereSql += ' AND (tr.access_count > 0 OR EXISTS (SELECT 1 FROM care_app_telemetry t WHERE t.customer_id = tr.customer_id AND t.session_count > 0))';
+      } else if (smsFilter === 'booked_app') {
+        smsWhereSql += " AND EXISTS (SELECT 1 FROM booking_requests br WHERE br.customer_id = tr.customer_id AND br.time_added >= DATE_SUB(tr.created_at, INTERVAL 15 MINUTE) AND LOWER(COALESCE(br.status, '')) IN ('pending', 'approved', 'negotiating', 'waitlisted', 'cancelled'))";
+      } else if (smsFilter === 'booked_call') {
+        smsWhereSql += " AND EXISTS (SELECT 1 FROM bookings b WHERE b.customer_id = tr.customer_id AND b.booking_id > COALESCE(tr.booking_id, 0) AND b.time_added >= DATE_SUB(tr.created_at, INTERVAL 15 MINUTE) AND (b.notes IS NULL OR b.notes NOT LIKE '%CANCELLED:%')) AND NOT EXISTS (SELECT 1 FROM booking_requests br WHERE br.customer_id = tr.customer_id AND br.time_added >= DATE_SUB(tr.created_at, INTERVAL 15 MINUTE) AND LOWER(COALESCE(br.status, '')) IN ('pending', 'approved', 'negotiating', 'waitlisted'))";
       } else if (smsFilter === 'booked') {
-        smsWhereSql += " AND (EXISTS (SELECT 1 FROM booking_requests br WHERE br.customer_id = tr.customer_id AND br.time_added >= DATE_SUB(tr.created_at, INTERVAL 15 MINUTE)) OR EXISTS (SELECT 1 FROM bookings b WHERE b.customer_id = tr.customer_id AND b.time_added >= DATE_SUB(tr.created_at, INTERVAL 15 MINUTE) AND (b.notes IS NULL OR b.notes NOT LIKE '%CANCELLED:%')))";
+        smsWhereSql += " AND (EXISTS (SELECT 1 FROM booking_requests br WHERE br.customer_id = tr.customer_id AND br.time_added >= DATE_SUB(tr.created_at, INTERVAL 15 MINUTE)) OR EXISTS (SELECT 1 FROM bookings b WHERE b.customer_id = tr.customer_id AND b.booking_id > COALESCE(tr.booking_id, 0) AND b.time_added >= DATE_SUB(tr.created_at, INTERVAL 15 MINUTE) AND (b.notes IS NULL OR b.notes NOT LIKE '%CANCELLED:%')))";
       } else if (smsFilter === 'unopened') {
         smsWhereSql += " AND tr.access_count = 0 AND tr.sms_status = 'Sent'";
       }

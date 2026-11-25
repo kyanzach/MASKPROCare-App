@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.21.2] — 2026-11-25
+### Changed
+- **Split "Booked" into "Booked via App" and "Booked via Call" in Maintenance Reminder SMS Tracker (`frontend/src/pages/AdminPanel.jsx`, `server/routes/admin.js`, `package.json`)**:
+  - Replaced the single `Booked` summary badge and filter pill in the Maintenance Reminder SMS & Magic Link Delivery Tracker with separate `Booked via App` (`booking_requests` / Care App bookings) and `Booked via Call` (direct Unify branch/call bookings) badges and filter tabs.
+  - Added `sms_filter=booked_app` and `sms_filter=booked_call` server-side SQL filtering in `GET /api/admin/dashboard` (while keeping `booked` as a backward-compatible alias) and updated row conversion badge labels to `Booked via App` and `Booked via Call`.
+
 ## [v1.21.1] — 2026-11-24
 ### Added
 - **Gensan Branch Origin Badge in Maintenance Reminder SMS Tracker (`server/routes/admin.js`, `frontend/src/pages/AdminPanel.jsx`, `package.json`)**:
