@@ -58,8 +58,8 @@ ssh_cmd() {
 }
 
 rsync_safe() {
-  SSHPASS="$SSH_PASS" sshpass -e rsync -avz --progress \
-    -e "ssh $SSH_OPTS" "$1" "${REMOTE_USER}@${DROPLET_IP}:$2"
+  SSHPASS="$SSH_PASS" rsync -avz --progress \
+    -e "sshpass -e ssh $SSH_OPTS" "$1" "${REMOTE_USER}@${DROPLET_IP}:$2"
 }
 
 # ─── Pre-flight ─────────────────────────────────────────────────────────
@@ -162,10 +162,10 @@ deploy_backend() {
   ssh_cmd "mkdir -p $APP_DIR/server $APP_DIR/uploads"
 
   # Upload server code (NOT node_modules, NOT .env*)
-  SSHPASS="$SSH_PASS" sshpass -e rsync -avz --progress \
+  SSHPASS="$SSH_PASS" rsync -avz --progress \
     --exclude 'node_modules' \
     --exclude '.env*' \
-    -e "ssh $SSH_OPTS" \
+    -e "sshpass -e ssh $SSH_OPTS" \
     "${PROJECT_DIR}/server/" "${REMOTE_USER}@${DROPLET_IP}:$APP_DIR/server/"
 
   # Upload package files & changelog
