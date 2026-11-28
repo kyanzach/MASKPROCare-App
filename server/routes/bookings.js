@@ -398,7 +398,7 @@ router.post('/create', async (req, res) => {
     }
 
     // Gate 6-Month NanoFix Maintenance from non-motorized items (helmets, mechanical bicycles, small items)
-    const normalizedService = SERVICE_CAPACITY_MAP[String(service_type).trim()] || String(service_type).trim();
+    const normalizedService = normalizeServiceName(String(service_type).trim());
     if (
       (normalizedService === 'Nano Fix (Maintenance)' || /nanofix|maintenance/i.test(normalizedService))
       && isNonMotorizedOrSmallItem({ make: vehicles[0].make, model: vehicles[0].model })

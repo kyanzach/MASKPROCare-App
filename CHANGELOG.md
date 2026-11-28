@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.21.3] — 2026-11-28
+### Fixed
+- **Critical `POST /api/bookings/create` HTTP 500 (`ReferenceError: SERVICE_CAPACITY_MAP is not defined`) (`server/routes/bookings.js`, `package.json`)**:
+  - **Root Cause**: Line 401 of `server/routes/bookings.js` (added in `v1.18.9` for the non-motorized item maintenance gate) referenced an undefined constant `SERVICE_CAPACITY_MAP` instead of the file's `normalizeServiceName()` helper (`SERVICE_NAME_MAP`), throwing a `ReferenceError` and returning `HTTP 500` on every booking request submission (caught by the `v1.20.0` API Alert monitor on customer `#452` Hermie Vilo).
+  - **Fix**: Replaced `SERVICE_CAPACITY_MAP[String(service_type).trim()] || String(service_type).trim()` with `normalizeServiceName(String(service_type).trim())`.
+
 ## [v1.21.2] — 2026-11-25
 ### Changed
 - **Split "Booked" into "Booked via App" and "Booked via Call" in Maintenance Reminder SMS Tracker (`frontend/src/pages/AdminPanel.jsx`, `server/routes/admin.js`, `package.json`)**:
